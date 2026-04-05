@@ -74,8 +74,10 @@ BATCH_NORMALIZED_DIR="$RUN_ROOT/batches/batch_0001/normalized"
 MERGED_DIR="$RUN_ROOT/merged/acquisition"
 DETECTION_DIR="$RUN_ROOT/merged/calls"
 CODON_DIR="$RUN_ROOT/merged/calls_with_codons"
+SQLITE_DIR="$RUN_ROOT/merged/sqlite"
+REPORTS_DIR="$RUN_ROOT/merged/reports"
 
-mkdir -p "$TAXONOMY_CHECK_DIR" "$PLANNING_DIR" "$BATCH_RAW_DIR" "$BATCH_NORMALIZED_DIR" "$MERGED_DIR" "$DETECTION_DIR" "$CODON_DIR"
+mkdir -p "$TAXONOMY_CHECK_DIR" "$PLANNING_DIR" "$BATCH_RAW_DIR" "$BATCH_NORMALIZED_DIR" "$MERGED_DIR" "$DETECTION_DIR" "$CODON_DIR" "$SQLITE_DIR" "$REPORTS_DIR"
 
 cat > "$TAXONOMY_CHECK_DIR/requested_taxa.tsv" <<EOF
 request_id	input_value	input_type	provided_rank	selection_policy	notes
@@ -243,6 +245,54 @@ for row in rows:
             raise SystemExit("codon extraction length mismatch in smoke output")
 if success_count < 1:
     raise SystemExit("expected at least one successful codon extraction in smoke output")
+PY
+
+echo "smoke: building sqlite artifact"
+run_py "$ROOT_DIR/bin/build_sqlite.py" \
+  --taxonomy-tsv "$MERGED_DIR/taxonomy.tsv" \
+  --genomes-tsv "$MERGED_DIR/genomes.tsv" \
+  --sequences-tsv "$MERGED_DIR/sequences.tsv" \
+  --proteins-tsv "$MERGED_DIR/proteins.tsv" \
+  --call-tsv "$CODON_DIR/pure_calls.tsv" \
+  --run-params-tsv "$DETECTION_DIR/run_params.tsv" \
+  --outdir "$SQLITE_DIR"
+
+assert_nonempty_file "$SQLITE_DIR/homorepeat.sqlite"
+assert_nonempty_file "$SQLITE_DIR/sqlite_validation.json"
+
+run_py - <<'PY' "$SQLITE_DIR/sqlite_validation.json"
+import json, sys
+payload = json.loads(open(sys.argv[1], encoding="utf-8").read())
+if payload.get("status") != "pass":
+    raise SystemExit(f"unexpected sqlite validation status: {payload.get('status')}")
+if not all(payload.get("checks", {}).values()):
+    raise SystemExit("sqlite validation contains failed checks")
+PY
+
+echo "smoke: exporting summary tables"
+run_py "$ROOT_DIR/bin/export_summary_tables.py" \
+  --taxonomy-tsv "$MERGED_DIR/taxonomy.tsv" \
+  --proteins-tsv "$MERGED_DIR/proteins.tsv" \
+  --call-tsv "$CODON_DIR/pure_calls.tsv" \
+  --outdir "$REPORTS_DIR"
+
+assert_tsv_has_data_rows "$REPORTS_DIR/summary_by_taxon.tsv"
+assert_tsv_has_data_rows "$REPORTS_DIR/regression_input.tsv"
+
+echo "smoke: preparing report tables"
+run_py "$ROOT_DIR/bin/prepare_report_tables.py" \
+  --summary-tsv "$REPORTS_DIR/summary_by_taxon.tsv" \
+  --regression-tsv "$REPORTS_DIR/regression_input.tsv" \
+  --outdir "$REPORTS_DIR"
+
+assert_nonempty_file "$REPORTS_DIR/echarts_options.json"
+
+run_py - <<'PY' "$REPORTS_DIR/echarts_options.json"
+import json, sys
+payload = json.loads(open(sys.argv[1], encoding="utf-8").read())
+for key in ["taxon_method_overview", "repeat_length_distribution"]:
+    if key not in payload:
+        raise SystemExit(f"missing ECharts option block: {key}")
 PY
 
 echo "smoke: completed successfully"

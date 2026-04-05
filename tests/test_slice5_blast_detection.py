@@ -265,8 +265,8 @@ class SliceFiveBlastDetectionTest(unittest.TestCase):
                     out_path.write_text(
                         "\\n".join(
                             [
-                                "A10\\tprot_blast_1\\t30.0\\t1\\t10\\t2\\t13\\t58.3\\t12\\t1e-03",
-                                "A10\\tprot_blast_1\\t42.0\\t1\\t10\\t2\\t13\\t70.0\\t12\\t1e-05",
+                                "prot_blast_1\\tA10\\t30.0\\t2\\t13\\t1\\t10\\t58.3\\t12\\t1e-03",
+                                "prot_blast_1\\tA10\\t42.0\\t2\\t13\\t1\\t10\\t70.0\\t12\\t1e-05",
                             ]
                         )
                         + "\\n",

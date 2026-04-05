@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the opt-in live acquisition and codon-enrichment smoke check for the current standalone Phase 3 implementation.
+This document defines the opt-in live acquisition, codon-enrichment, SQLite, and summary/report-prep smoke check for the current standalone Phase 3 implementation.
 
 It exists because:
 - routine tests should stay deterministic and offline
@@ -28,7 +28,11 @@ The current live smoke check verifies:
 3. one real residue can pass through:
    - `detect_pure.py`
    - `extract_repeat_codons.py`
-4. canonical acquisition outputs and codon-enriched call outputs are non-empty and structurally sane
+4. the same finalized smoke artifacts can pass through:
+   - `build_sqlite.py`
+   - `export_summary_tables.py`
+   - `prepare_report_tables.py`
+5. canonical acquisition, codon-enriched call, SQLite, and reporting artifacts are non-empty and structurally sane
 
 It does not currently test:
 - large taxon enumeration
@@ -137,6 +141,10 @@ The smoke check passes only if:
 - at least one smoke call has a non-empty `codon_sequence`
 - every non-empty smoke `codon_sequence` has length `3 * length`
 - `codon_metric_name` and `codon_metric_value` remain empty in the smoke output
+- `homorepeat.sqlite` is created
+- `sqlite_validation.json` has status `pass`
+- `summary_by_taxon.tsv` and `regression_input.tsv` are non-empty
+- `echarts_options.json` is valid JSON and contains the expected chart blocks
 
 Warnings are allowed.
 Structural failure is not.
