@@ -8,41 +8,183 @@
   <div class="landing-band-shell">
     <div class="landing-copy">
       <span class="section-kicker mb-3">Imports</span>
-      <h1 class="landing-title mb-3">Published run ingestion built around the same stable contracts.</h1>
+      <h1 class="landing-title mb-3">Staff-only published run imports over the existing TSV contract.</h1>
       <p class="landing-lead mb-0">
-        The imports area stays focused on published pipeline artifacts: validate
-        a run, ingest it transactionally, and preserve a clear import history.
+        Choose a detected publish root from the local <code>runs/</code> directory
+        or enter one manually, then import through the same transactional backend
+        used by the management command.
       </p>
     </div>
     <aside class="landing-aside">
-      <p class="sheet-label">Contract</p>
-      <p class="mb-0">The website imports canonical TSV artifacts plus the published run manifest. SQLite is not part of the web ingest path.</p>
+      <p class="sheet-label">Detected root</p>
+      <p class="mb-3"><code>{{ runs_root }}</code></p>
+      <a class="btn btn-outline-dark w-100" href="{{ history_url }}">Open import history</a>
     </aside>
   </div>
 </section>
 
-<section class="row g-4">
-  <div class="col-lg-6">
-    <article class="surface-card info-sheet info-sheet-warm h-100">
-        <p class="eyebrow">Import contract</p>
-        <h2>TSV + manifest only</h2>
-        <p class="text-secondary mb-0">
-          The website ingests canonical TSV artifacts plus the published run
-          manifest. SQLite remains a workflow artifact and is not part of the web
-          import path.
-        </p>
+{% if messages %}
+  <section class="mb-4">
+    {% for message in messages %}
+      <div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-success{% endif %} mb-2">
+        {{ message }}
+      </div>
+    {% endfor %}
+  </section>
+{% endif %}
+
+<section class="row g-4 mb-4">
+  <div class="col-xl-5">
+    <article class="filter-card h-100">
+      <div class="section-header mb-3">
+        <div>
+          <p class="section-kicker mb-2">Import action</p>
+          <h2>Import one published run</h2>
+        </div>
+      </div>
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger">
+            {% for error in form.non_field_errors %}
+              <div>{{ error }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        <div class="mb-3">
+          <label class="form-label" for="{{ form.detected_publish_root.id_for_label }}">{{ form.detected_publish_root.label }}</label>
+          {{ form.detected_publish_root }}
+          {% if form.detected_publish_root.errors %}
+            <div class="text-danger small mt-1">
+              {% for error in form.detected_publish_root.errors %}
+                <div>{{ error }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" for="{{ form.publish_root.id_for_label }}">{{ form.publish_root.label }}</label>
+          {{ form.publish_root }}
+          <div class="form-text">Use this when the publish root is outside the detected <code>runs/</code> directory.</div>
+          {% if form.publish_root.errors %}
+            <div class="text-danger small mt-1">
+              {% for error in form.publish_root.errors %}
+                <div>{{ error }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+
+        <div class="form-check mb-4">
+          {{ form.replace_existing }}
+          <label class="form-check-label" for="{{ form.replace_existing.id_for_label }}">Replace an existing imported run with the same <code>run_id</code>.</label>
+        </div>
+
+        <div class="filter-actions">
+          <button class="btn btn-primary" type="submit">Import run</button>
+          <a class="btn btn-outline-secondary" href="{% url 'imports:home' %}">Reset</a>
+        </div>
+      </form>
     </article>
   </div>
 
-  <div class="col-lg-6">
-    <article class="surface-card info-sheet info-sheet-cool h-100">
-        <p class="eyebrow">Why this matters</p>
-        <h2>Stable inputs, app-specific schema</h2>
-        <p class="text-secondary mb-0">
-          That split keeps the pipeline contracts stable while letting the Django
-          browser grow a lineage-aware relational model and later graph views.
-        </p>
+  <div class="col-xl-7">
+    <article class="surface-card surface-card-wide h-100">
+      <div class="section-header">
+        <div>
+          <p class="section-kicker mb-2">Detected runs</p>
+          <h2>{{ detected_publish_runs|length }} published run{{ detected_publish_runs|length|pluralize }}</h2>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table align-middle mb-0 data-table">
+          <thead>
+            <tr>
+              <th>Run</th>
+              <th>Status</th>
+              <th>Finished</th>
+              <th>Publish root</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for detected_run in detected_publish_runs %}
+              <tr>
+                <td>
+                  <a href="{% url 'imports:home' %}?publish_root={{ detected_run.publish_root|urlencode }}">
+                    {{ detected_run.run_id }}
+                  </a>
+                  <div class="small text-secondary">{{ detected_run.label }}</div>
+                </td>
+                <td>{{ detected_run.status|default:"-" }}</td>
+                <td>{{ detected_run.finished_at_utc|default:"-" }}</td>
+                <td><code>{{ detected_run.display_path }}</code></td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="4" class="empty-cell">No published runs were detected under <code>{{ runs_root }}</code>.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </article>
+  </div>
+</section>
+
+<section class="surface-card surface-card-wide">
+  <div class="section-header">
+    <div>
+      <p class="section-kicker mb-2">Recent imports</p>
+      <h2>Latest import batches</h2>
+    </div>
+    <a class="btn btn-outline-dark" href="{{ history_url }}">Full history</a>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table align-middle mb-0 data-table">
+      <thead>
+        <tr>
+          <th>Run</th>
+          <th>Status</th>
+          <th>Started</th>
+          <th>Rows</th>
+          <th>Source</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for batch in recent_batches %}
+          <tr>
+            <td>
+              {% if batch.pipeline_run %}
+                <a href="{% url 'browser:run-detail' batch.pipeline_run.pk %}">{{ batch.pipeline_run.run_id }}</a>
+              {% else %}
+                -
+              {% endif %}
+            </td>
+            <td>{{ batch.status }}</td>
+            <td>{{ batch.started_at|date:"Y-m-d H:i:s" }}</td>
+            <td>
+              {% if batch.row_counts %}
+                {% for label, count in batch.row_counts.items %}
+                  <span class="badge rounded-pill text-bg-light border status-badge">{{ label }}: {{ count }}</span>
+                {% endfor %}
+              {% else %}
+                -
+              {% endif %}
+            </td>
+            <td><code>{{ batch.source_path }}</code></td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="5" class="empty-cell">No import batches have been recorded yet.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 </section>
 {% endblock %}

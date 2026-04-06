@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Import History{% endblock %}
+{% block body_class %}imports-history-page{% endblock %}
+
+{% block content %}
+<section class="landing-band mb-4">
+  <div class="landing-band-shell">
+    <div class="landing-copy">
+      <span class="section-kicker mb-3">Import history</span>
+      <h1 class="landing-title mb-3">Operator-facing import provenance for the Django browser.</h1>
+      <p class="landing-lead mb-0">
+        Review every import attempt, including status, row counts, timestamps,
+        source path, and any captured error message.
+      </p>
+    </div>
+    <aside class="landing-aside">
+      <p class="sheet-label">Navigation</p>
+      <a class="btn btn-outline-dark w-100" href="{% url 'imports:home' %}">Back to imports</a>
+    </aside>
+  </div>
+</section>
+
+<section class="surface-card surface-card-wide">
+  <div class="section-header">
+    <div>
+      <p class="section-kicker mb-2">Batch history</p>
+      <h2>{{ page_obj.paginator.count }} import batch{{ page_obj.paginator.count|pluralize }}</h2>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table align-middle mb-0 data-table">
+      <thead>
+        <tr>
+          <th>Run</th>
+          <th>Status</th>
+          <th>Started</th>
+          <th>Finished</th>
+          <th>Rows</th>
+          <th>Source</th>
+          <th>Error</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for batch in import_batches %}
+          <tr>
+            <td>
+              {% if batch.pipeline_run %}
+                <a href="{% url 'browser:run-detail' batch.pipeline_run.pk %}">{{ batch.pipeline_run.run_id }}</a>
+              {% else %}
+                -
+              {% endif %}
+            </td>
+            <td>{{ batch.status }}</td>
+            <td>{{ batch.started_at|date:"Y-m-d H:i:s" }}</td>
+            <td>{{ batch.finished_at|date:"Y-m-d H:i:s"|default:"-" }}</td>
+            <td>
+              {% if batch.row_counts %}
+                {% for label, count in batch.row_counts.items %}
+                  <div><strong>{{ label }}</strong>: {{ count }}</div>
+                {% endfor %}
+              {% else %}
+                -
+              {% endif %}
+            </td>
+            <td><code>{{ batch.source_path }}</code></td>
+            <td>{{ batch.error_message|default:"-" }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="7" class="empty-cell">No import batches have been recorded yet.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% include "browser/includes/pagination.html" %}
+</section>
+{% endblock %}

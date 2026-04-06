@@ -20,12 +20,11 @@ class RouteSmokeTests(TestCase):
         self.assertTemplateUsed(response, "browser/home.html")
         self.assertContains(response, "Run-first database browser")
 
-    def test_imports_placeholder_renders(self):
+    def test_imports_home_redirects_anonymous_users_to_login(self):
         response = self.client.get(reverse("imports:home"))
 
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, "imports/home.html")
-        self.assertContains(response, "Published run ingestion")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("admin:login"), response["Location"])
 
     def test_healthcheck_returns_json(self):
         response = self.client.get(reverse("core:healthcheck"))
