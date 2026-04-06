@@ -289,11 +289,14 @@ Optional columns:
 - `regression_input.tsv`
 - `echarts_report.html`
 - `echarts_options.json`
+- `echarts.min.js`
 
 Rules:
 - all report outputs must be derivable from finalized tables or SQLite, not raw detection code
 - `echarts_options.json` must be a valid JSON object keyed by chart name
 - `echarts_report.html` must be reproducible from the JSON payload and analysis-ready tables
+- `echarts_report.html` must render the required chart blocks present in `echarts_options.json`
+- `echarts.min.js` must be shipped locally with the report bundle so the HTML report works without a CDN
 
 ---
 

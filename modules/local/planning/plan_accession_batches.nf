@@ -8,7 +8,9 @@ process PLAN_ACCESSION_BATCHES {
     path(accessions_file)
 
     output:
-    path("planning_artifacts"), emit: planning_artifacts
+    path("planning_artifacts/accession_batches.tsv"), emit: batch_table
+    path("planning_artifacts/selected_accessions.txt"), emit: selected_accessions
+    path("planning_artifacts/batch_manifests"), emit: batch_manifests_dir
 
     script:
     """

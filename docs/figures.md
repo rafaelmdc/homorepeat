@@ -49,18 +49,7 @@ The first reporting rebuild is expected to cover these core outputs:
    - histogram or other explicit binned distribution view
    - accompanying inspectable ECharts options JSON
 
-3. Repeat residue composition across taxa and methods
-   Purpose:
-   provide a residue-neutral view of repeat composition across taxa and methods
-
-   Planned inputs:
-   - `summary_by_taxon.tsv`
-
-   Planned output forms:
-   - grouped bar, stacked bar, or heatmap-style chart of residue composition or frequency
-   - accompanying inspectable ECharts options JSON
-
-4. Reproducible report bundle
+3. Reproducible report bundle
    Purpose:
    provide one portable reporting artifact for review and sharing
 
@@ -79,6 +68,7 @@ These figure families are valuable, but they do not block the first scientifical
 - large supplementary panel grids
 - publication-polish layouts for every figure variant
 - annotation/domain-context visualizations
+- repeat residue composition charts beyond the current overview and length-distribution blocks
 
 These remain Phase 6 or later unless they are promoted explicitly.
 

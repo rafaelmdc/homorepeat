@@ -78,6 +78,14 @@ So the practical model is:
 
 ## Build
 
+Fast path from the repo root:
+
+```bash
+bash scripts/build_dev_containers.sh
+```
+
+Equivalent manual commands:
+
 Build the acquisition image from the repo root:
 
 ```bash

@@ -45,14 +45,14 @@ results/phase4/<run_id>/
   results/
     nextflow/
       trace.txt
-      report.html
-      timeline.html
-      dag.html
     planning/
       accession_batches.tsv
       selected_accessions.txt
     sqlite/
     reports/
+      nextflow_report.html
+      nextflow_timeline.html
+      nextflow_dag.html
     report_prep/
     acquisition/
     calls/
@@ -94,6 +94,7 @@ Current isolated process chain:
 - build SQLite
 - export summary tables
 - prepare report tables
+- render ECharts HTML report
 
 Current validated behavior:
 - the Phase 4 workflow was run successfully end to end under the `docker` profile from a one-accession input list
@@ -115,6 +116,7 @@ Expected outputs from a successful run:
 - `results/phase4_run/reports/summary_by_taxon.tsv`
 - `results/phase4_run/reports/regression_input.tsv`
 - `results/phase4_run/report_prep/echarts_options.json`
+- `results/phase4_run/report_prep/echarts_report.html`
 
 Next slice:
 - replace manual accession lists with a future taxon-weaver-driven accession generator once that feature exists

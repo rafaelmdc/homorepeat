@@ -28,4 +28,5 @@ workflow {
   summary_by_taxon = reporting.summary_by_taxon
   regression_input = reporting.regression_input
   report_prep = reporting.report_prep
+  echarts_report = reporting.echarts_report
 }

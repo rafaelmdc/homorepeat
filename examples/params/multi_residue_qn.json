@@ -1,0 +1,6 @@
+{
+  "repeat_residues": "Q,N",
+  "run_pure": true,
+  "run_threshold": true,
+  "batch_size": 100
+}

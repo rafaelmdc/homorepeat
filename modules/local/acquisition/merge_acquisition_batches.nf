@@ -8,7 +8,15 @@ process MERGE_ACQUISITION_BATCHES {
     path(translated_batch_dirs)
 
     output:
-    path("acquisition_artifacts"), emit: acquisition_artifacts
+    path("acquisition_artifacts/genomes.tsv"), emit: genomes_tsv
+    path("acquisition_artifacts/taxonomy.tsv"), emit: taxonomy_tsv
+    path("acquisition_artifacts/sequences.tsv"), emit: sequences_tsv
+    path("acquisition_artifacts/proteins.tsv"), emit: proteins_tsv
+    path("acquisition_artifacts/cds.fna"), emit: cds_fasta
+    path("acquisition_artifacts/proteins.faa"), emit: proteins_fasta
+    path("acquisition_artifacts/download_manifest.tsv"), emit: download_manifest_tsv
+    path("acquisition_artifacts/normalization_warnings.tsv"), emit: normalization_warnings_tsv
+    path("acquisition_artifacts/acquisition_validation.json"), emit: acquisition_validation
 
     script:
     def batchInputs = translated_batch_dirs instanceof List ? translated_batch_dirs : [translated_batch_dirs]
