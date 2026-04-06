@@ -26,6 +26,8 @@ The current development runtime is also split into two operator-facing surfaces:
 - a Nextflow pipeline app under `apps/pipeline/`
 - a Docker Compose development stack at the repo root for Django plus PostgreSQL
 
+For the intended long-term production structure, see `docs/production_architecture.md`.
+
 ---
 
 ## Scientific Scope

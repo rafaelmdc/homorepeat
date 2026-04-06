@@ -29,3 +29,13 @@ Defer until the app data model is stable:
 - launch or orchestration features from the web side
 - richer frontend exploration workflows
 - broader reporting and downstream analytical views
+
+## Strategic direction
+
+The intended long-term structure is:
+- a dedicated pipeline repository
+- a dedicated web repository
+- Kubernetes-native workflow execution
+- Django as control plane plus browser, not as workflow runtime
+
+See `docs/production_architecture.md`.
