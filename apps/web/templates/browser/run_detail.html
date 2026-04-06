@@ -34,7 +34,7 @@
           <p class="text-uppercase text-secondary small mb-3">At a glance</p>
           <ul class="stack-list mb-0">
             <li>{{ pipeline_run.genomes_count }} genome{{ pipeline_run.genomes_count|pluralize }}</li>
-            <li>{{ pipeline_run.proteins_count }} protein{{ pipeline_run.proteins_count|pluralize }}</li>
+            <li>{{ pipeline_run.proteins_count }} repeat-bearing protein{{ pipeline_run.proteins_count|pluralize }}</li>
             <li>{{ pipeline_run.repeat_calls_count }} repeat call{{ pipeline_run.repeat_calls_count|pluralize }}</li>
             <li>{{ distinct_taxa_count }} distinct taxa referenced</li>
           </ul>
@@ -68,7 +68,7 @@
       <div class="card-body">
         <p class="text-uppercase text-secondary small mb-2">Sequences</p>
         <p class="display-5 fw-semibold mb-3">{{ pipeline_run.sequences_count }}</p>
-        <p class="text-secondary mb-0">Retained translated sequence records linked to imported genomes.</p>
+        <p class="text-secondary mb-0">Retained repeat-linked sequence records imported for browser navigation.</p>
       </div>
     </article>
   </div>
@@ -77,7 +77,7 @@
       <div class="card-body">
         <p class="text-uppercase text-secondary small mb-2">Proteins</p>
         <p class="display-5 fw-semibold mb-3">{{ pipeline_run.proteins_count }}</p>
-        <p class="text-secondary mb-0">Imported protein records available for run-scoped browsing.</p>
+        <p class="text-secondary mb-0">Imported repeat-bearing protein records available for run-scoped browsing.</p>
       </div>
     </article>
   </div>

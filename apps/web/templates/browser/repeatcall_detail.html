@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}{{ repeat_call.call_id }}{% endblock %}
+{% block body_class %}repeatcall-detail-page{% endblock %}
+
+{% block content %}
+<section class="landing-band mb-4">
+  <div class="landing-band-shell">
+    <div class="landing-copy">
+      <span class="section-kicker mb-3">Repeat call</span>
+      <h1 class="landing-title mb-3">{{ repeat_call.call_id }}</h1>
+      <p class="landing-lead mb-3">
+        {{ repeat_call.method }} detection for residue <strong>{{ repeat_call.repeat_residue }}</strong>
+        on protein <strong>{{ repeat_call.protein.protein_name }}</strong>, imported in run <strong>{{ repeat_call.pipeline_run.run_id }}</strong>.
+      </p>
+      <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-dark" href="{{ repeatcall_list_url }}">Back to repeat calls</a>
+        <a class="btn btn-outline-dark" href="{% url 'browser:protein-detail' repeat_call.protein.pk %}">Open protein</a>
+        <a class="btn btn-brand" href="{% url 'browser:genome-detail' repeat_call.genome.pk %}">Open genome</a>
+      </div>
+    </div>
+    <aside class="landing-aside">
+      <p class="sheet-label">At a glance</p>
+      <p class="mb-2">Coordinates {{ repeat_call.start }}-{{ repeat_call.end }}</p>
+      <p class="mb-2">Length {{ repeat_call.length }}</p>
+      <p class="mb-2">Purity {{ repeat_call.purity }}</p>
+      <p class="mb-0">Residue {{ repeat_call.repeat_residue }}</p>
+    </aside>
+  </div>
+</section>
+
+<section class="row g-4 mb-4">
+  <div class="col-lg-6">
+    <div class="surface-card info-sheet h-100">
+      <p class="sheet-label">Call metadata</p>
+      <dl class="info-grid">
+        <dt>Method</dt>
+        <dd>{{ repeat_call.method }}</dd>
+        <dt>Residue</dt>
+        <dd>{{ repeat_call.repeat_residue }}</dd>
+        <dt>Start</dt>
+        <dd>{{ repeat_call.start }}</dd>
+        <dt>End</dt>
+        <dd>{{ repeat_call.end }}</dd>
+        <dt>Length</dt>
+        <dd>{{ repeat_call.length }}</dd>
+        <dt>Purity</dt>
+        <dd>{{ repeat_call.purity }}</dd>
+        <dt>Repeat count</dt>
+        <dd>{{ repeat_call.repeat_count }}</dd>
+        <dt>Non-repeat count</dt>
+        <dd>{{ repeat_call.non_repeat_count }}</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="surface-card info-sheet h-100">
+      <p class="sheet-label">Linked parents</p>
+      <dl class="info-grid">
+        <dt>Protein</dt>
+        <dd><a href="{% url 'browser:protein-detail' repeat_call.protein.pk %}">{{ repeat_call.protein.protein_name }}</a></dd>
+        <dt>Genome</dt>
+        <dd><a href="{% url 'browser:genome-detail' repeat_call.genome.pk %}">{{ repeat_call.genome.accession }}</a></dd>
+        <dt>Taxon</dt>
+        <dd><a href="{{ taxon_detail_url }}">{{ repeat_call.taxon.taxon_name }}</a></dd>
+        <dt>Run</dt>
+        <dd><a href="{% url 'browser:run-detail' repeat_call.pipeline_run.pk %}">{{ repeat_call.pipeline_run.run_id }}</a></dd>
+        <dt>Sequence</dt>
+        <dd>{{ repeat_call.sequence.sequence_name }}</dd>
+        <dt>Gene symbol</dt>
+        <dd>{{ repeat_call.protein.gene_symbol|default:"-" }}</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<section class="row g-4">
+  <div class="col-lg-6">
+    <div class="surface-card info-sheet h-100">
+      <p class="sheet-label">Tract sequence</p>
+      <p class="mb-3"><code>{{ repeat_call.aa_sequence }}</code></p>
+      {% if repeat_call.codon_sequence %}
+        <p class="sheet-label">Codon sequence</p>
+        <p class="mb-0"><code>{{ repeat_call.codon_sequence }}</code></p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="surface-card info-sheet h-100">
+      <p class="sheet-label">Optional fields</p>
+      <dl class="info-grid">
+        <dt>Window definition</dt>
+        <dd>{{ repeat_call.window_definition|default:"-" }}</dd>
+        <dt>Template</dt>
+        <dd>{{ repeat_call.template_name|default:"-" }}</dd>
+        <dt>Merge rule</dt>
+        <dd>{{ repeat_call.merge_rule|default:"-" }}</dd>
+        <dt>Score</dt>
+        <dd>{{ repeat_call.score|default:"-" }}</dd>
+        <dt>Source file</dt>
+        <dd>{{ repeat_call.source_file|default:"-" }}</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+{% endblock %}

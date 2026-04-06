@@ -147,6 +147,8 @@ Out of scope:
 
 Exit criteria:
 - tests cover success and failure for missing files, missing columns, and malformed manifests
+- parser preserves the full published sequence and protein inventories for validation while allowing later import filtering
+- parser can compact raw taxonomy to principal ranks plus referenced taxa for web import
 - parser works against `runs/latest/publish/`
 
 ### Slice 2.2: Transactional import command
@@ -166,17 +168,20 @@ Scope:
 Import order:
 1. manifest and import batch
 2. pipeline run
-3. taxon
+3. compact taxon
 4. taxon closure
-5. genome
-6. sequence
-7. protein
+5. genome plus derived analyzed-protein count metadata
+6. repeat-linked sequence
+7. repeat-bearing protein
 8. run parameter
 9. repeat call
 
 Required behavior:
 - fail if the run already exists and `--replace-existing` is absent
 - replace that run’s scoped rows when `--replace-existing` is passed
+- compact imported taxonomy to principal ranks plus any directly referenced taxa
+- persist only sequences and proteins referenced by imported repeat calls
+- derive per-genome analyzed protein counts from the full published protein inventory
 - never partially commit a broken import
 
 Exit criteria:
@@ -219,9 +224,11 @@ Scope:
 - lineage breadcrumb on taxon detail
 - descendant summaries on taxon detail
 - genome detail links to proteins and calls
+- genome detail shows analyzed protein count metadata
 
 Required behavior:
 - branch filters include descendants through `TaxonClosure`
+- taxon lineage is presented from the compacted principal-rank web taxonomy
 - genome pages show run provenance and accession explicitly
 
 Exit criteria:
@@ -237,6 +244,7 @@ Goal:
 Scope:
 - protein list/detail views
 - repeat call list/detail views
+- protein pages cover only imported repeat-bearing proteins
 - filters for run, branch taxon, method, residue, gene symbol, tract length, and purity
 - navigation links among taxon, genome, protein, and call records
 

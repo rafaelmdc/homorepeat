@@ -111,6 +111,7 @@ class Genome(TimestampedModel):
     assembly_level = models.CharField(max_length=128, blank=True)
     species_name = models.CharField(max_length=255, blank=True)
     download_path = models.CharField(max_length=500, blank=True)
+    analyzed_protein_count = models.PositiveIntegerField(default=0)
     notes = models.TextField(blank=True)
 
     class Meta:

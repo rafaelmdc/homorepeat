@@ -27,6 +27,7 @@ class ImportBatch(models.Model):
     finished_at = models.DateTimeField(blank=True, null=True)
     success_count = models.PositiveIntegerField(default=0)
     error_count = models.PositiveIntegerField(default=0)
+    row_counts = models.JSONField(default=dict, blank=True)
     error_message = models.TextField(blank=True)
 
     class Meta:

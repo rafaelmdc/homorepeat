@@ -2,12 +2,16 @@ from django.urls import path
 
 from .views import (
     BrowserHomeView,
-    GenomeListPlaceholderView,
-    ProteinListPlaceholderView,
-    RepeatCallListPlaceholderView,
+    GenomeDetailView,
+    GenomeListView,
+    ProteinDetailView,
+    ProteinListView,
+    RepeatCallDetailView,
+    RepeatCallListView,
     RunDetailView,
     RunListView,
-    TaxonListPlaceholderView,
+    TaxonDetailView,
+    TaxonListView,
 )
 
 
@@ -17,8 +21,12 @@ urlpatterns = [
     path("", BrowserHomeView.as_view(), name="home"),
     path("runs/", RunListView.as_view(), name="run-list"),
     path("runs/<int:pk>/", RunDetailView.as_view(), name="run-detail"),
-    path("taxa/", TaxonListPlaceholderView.as_view(), name="taxon-list"),
-    path("genomes/", GenomeListPlaceholderView.as_view(), name="genome-list"),
-    path("proteins/", ProteinListPlaceholderView.as_view(), name="protein-list"),
-    path("calls/", RepeatCallListPlaceholderView.as_view(), name="repeatcall-list"),
+    path("taxa/", TaxonListView.as_view(), name="taxon-list"),
+    path("taxa/<int:pk>/", TaxonDetailView.as_view(), name="taxon-detail"),
+    path("genomes/", GenomeListView.as_view(), name="genome-list"),
+    path("genomes/<int:pk>/", GenomeDetailView.as_view(), name="genome-detail"),
+    path("proteins/", ProteinListView.as_view(), name="protein-list"),
+    path("proteins/<int:pk>/", ProteinDetailView.as_view(), name="protein-detail"),
+    path("calls/", RepeatCallListView.as_view(), name="repeatcall-list"),
+    path("calls/<int:pk>/", RepeatCallDetailView.as_view(), name="repeatcall-detail"),
 ]

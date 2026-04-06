@@ -60,8 +60,9 @@ def import_published_run(publish_root: Path | str, *, replace_existing: bool = F
         batch.status = ImportBatch.Status.FAILED
         batch.finished_at = timezone.now()
         batch.error_count = 1
+        batch.row_counts = {}
         batch.error_message = str(exc)
-        batch.save(update_fields=["status", "finished_at", "error_count", "error_message"])
+        batch.save(update_fields=["status", "finished_at", "error_count", "row_counts", "error_message"])
         raise
 
     batch.pipeline_run = pipeline_run
@@ -69,6 +70,7 @@ def import_published_run(publish_root: Path | str, *, replace_existing: bool = F
     batch.finished_at = timezone.now()
     batch.success_count = sum(counts.values())
     batch.error_count = 0
+    batch.row_counts = counts
     batch.error_message = ""
     batch.save(
         update_fields=[
@@ -77,6 +79,7 @@ def import_published_run(publish_root: Path | str, *, replace_existing: bool = F
             "finished_at",
             "success_count",
             "error_count",
+            "row_counts",
             "error_message",
         ]
     )
@@ -108,16 +111,29 @@ def _import_parsed_run(
     taxon_by_taxon_id = _upsert_taxa(parsed.taxonomy_rows)
     _rebuild_taxon_closure()
 
-    genome_by_genome_id = _create_genomes(pipeline_run, parsed.genome_rows, taxon_by_taxon_id)
+    retained_sequence_rows, retained_protein_rows = _select_repeat_linked_rows(
+        parsed.genome_rows,
+        parsed.sequence_rows,
+        parsed.protein_rows,
+        parsed.repeat_call_rows,
+    )
+    analyzed_protein_counts = _count_rows_by_key(parsed.protein_rows, "genome_id")
+
+    genome_by_genome_id = _create_genomes(
+        pipeline_run,
+        parsed.genome_rows,
+        taxon_by_taxon_id,
+        analyzed_protein_counts,
+    )
     sequence_by_sequence_id = _create_sequences(
         pipeline_run,
-        parsed.sequence_rows,
+        retained_sequence_rows,
         genome_by_genome_id,
         taxon_by_taxon_id,
     )
     protein_by_protein_id = _create_proteins(
         pipeline_run,
-        parsed.protein_rows,
+        retained_protein_rows,
         genome_by_genome_id,
         sequence_by_sequence_id,
         taxon_by_taxon_id,
@@ -135,8 +151,8 @@ def _import_parsed_run(
     counts = {
         "taxonomy": len(parsed.taxonomy_rows),
         "genomes": len(parsed.genome_rows),
-        "sequences": len(parsed.sequence_rows),
-        "proteins": len(parsed.protein_rows),
+        "sequences": len(retained_sequence_rows),
+        "proteins": len(retained_protein_rows),
         "run_parameters": len(parsed.run_parameter_rows),
         "repeat_calls": len(parsed.repeat_call_rows),
     }
@@ -228,14 +244,16 @@ def _create_genomes(
     pipeline_run: PipelineRun,
     rows: list[dict[str, object]],
     taxon_by_taxon_id: dict[int, Taxon],
+    analyzed_protein_counts: dict[str, int],
 ) -> dict[str, Genome]:
     genome_objects: list[Genome] = []
     for row in rows:
+        genome_id = str(row["genome_id"])
         taxon = _require_taxon(row.get("taxon_id"), taxon_by_taxon_id, "genome")
         genome_objects.append(
             Genome(
                 pipeline_run=pipeline_run,
-                genome_id=str(row["genome_id"]),
+                genome_id=genome_id,
                 source=str(row["source"]),
                 accession=str(row["accession"]),
                 genome_name=str(row["genome_name"]),
@@ -244,6 +262,7 @@ def _create_genomes(
                 assembly_level=str(row.get("assembly_level", "")),
                 species_name=str(row.get("species_name", "")),
                 download_path=str(row.get("download_path", "")),
+                analyzed_protein_count=analyzed_protein_counts.get(genome_id, 0),
                 notes=str(row.get("notes", "")),
             )
         )
@@ -450,3 +469,84 @@ def _resolve_optional_taxon_pk(
     if natural_taxon_id is None:
         return fallback_taxon_pk
     return _require_taxon(natural_taxon_id, taxon_by_taxon_id, label).pk
+
+
+def _select_repeat_linked_rows(
+    genome_rows: list[dict[str, object]],
+    sequence_rows: list[dict[str, object]],
+    protein_rows: list[dict[str, object]],
+    repeat_call_rows: list[dict[str, object]],
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    genome_ids = {str(row["genome_id"]) for row in genome_rows}
+    sequence_rows_by_id = {str(row["sequence_id"]): row for row in sequence_rows}
+    protein_rows_by_id = {str(row["protein_id"]): row for row in protein_rows}
+
+    for row in sequence_rows:
+        genome_id = str(row["genome_id"])
+        if genome_id not in genome_ids:
+            raise ImportContractError(f"Sequence row references missing genome_id {row['genome_id']!r}")
+
+    for row in protein_rows:
+        genome_id = str(row["genome_id"])
+        sequence_id = str(row["sequence_id"])
+        if genome_id not in genome_ids:
+            raise ImportContractError(f"Protein row references missing genome_id {row['genome_id']!r}")
+        if sequence_id not in sequence_rows_by_id:
+            raise ImportContractError(f"Protein row references missing sequence_id {row['sequence_id']!r}")
+
+    retained_sequence_ids: set[str] = set()
+    retained_protein_ids: set[str] = set()
+
+    for row in repeat_call_rows:
+        genome_id = str(row["genome_id"])
+        sequence_id = str(row["sequence_id"])
+        protein_id = str(row["protein_id"])
+
+        if genome_id not in genome_ids:
+            raise ImportContractError(
+                f"Repeat call row references missing genome_id {row['genome_id']!r}"
+            )
+
+        sequence_row = sequence_rows_by_id.get(sequence_id)
+        if sequence_row is None:
+            raise ImportContractError(
+                f"Repeat call row references missing sequence_id {row['sequence_id']!r}"
+            )
+
+        protein_row = protein_rows_by_id.get(protein_id)
+        if protein_row is None:
+            raise ImportContractError(
+                f"Repeat call row references missing protein_id {row['protein_id']!r}"
+            )
+
+        if str(sequence_row["genome_id"]) != genome_id:
+            raise ImportContractError(
+                f"Repeat call row references sequence_id {row['sequence_id']!r} outside genome_id {row['genome_id']!r}"
+            )
+        if str(protein_row["genome_id"]) != genome_id:
+            raise ImportContractError(
+                f"Repeat call row references protein_id {row['protein_id']!r} outside genome_id {row['genome_id']!r}"
+            )
+        if str(protein_row["sequence_id"]) != sequence_id:
+            raise ImportContractError(
+                f"Repeat call row references protein_id {row['protein_id']!r} with mismatched sequence_id {row['sequence_id']!r}"
+            )
+
+        retained_sequence_ids.add(sequence_id)
+        retained_protein_ids.add(protein_id)
+
+    retained_sequence_rows = [
+        row for row in sequence_rows if str(row["sequence_id"]) in retained_sequence_ids
+    ]
+    retained_protein_rows = [
+        row for row in protein_rows if str(row["protein_id"]) in retained_protein_ids
+    ]
+    return retained_sequence_rows, retained_protein_rows
+
+
+def _count_rows_by_key(rows: list[dict[str, object]], key_name: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        key = str(row[key_name])
+        counts[key] = counts.get(key, 0) + 1
+    return counts

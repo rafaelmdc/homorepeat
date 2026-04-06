@@ -70,6 +70,16 @@ MANIFEST_REQUIRED_KEYS = [
     "artifacts",
 ]
 VALID_METHODS = {"pure", "threshold"}
+COMPACT_TAXONOMY_RANKS = {
+    "superkingdom",
+    "kingdom",
+    "phylum",
+    "class",
+    "order",
+    "family",
+    "genus",
+    "species",
+}
 
 
 class ImportContractError(ValueError):
@@ -127,17 +137,31 @@ def resolve_required_artifacts(publish_root: Path | str) -> RequiredArtifactPath
 def load_published_run(publish_root: Path | str) -> ParsedPublishedRun:
     artifact_paths = resolve_required_artifacts(publish_root)
     manifest = _read_manifest(artifact_paths.manifest)
+    raw_taxonomy_rows = _read_taxonomy_rows(artifact_paths.taxonomy_tsv)
+    genome_rows = _read_genome_rows(artifact_paths.genomes_tsv)
+    sequence_rows = _read_sequence_rows(artifact_paths.sequences_tsv)
+    protein_rows = _read_protein_rows(artifact_paths.proteins_tsv)
+    run_parameter_rows = _read_run_parameter_rows(artifact_paths.run_params_tsv)
+    repeat_call_rows = _read_repeat_call_rows(artifact_paths.repeat_calls_tsv)
 
     return ParsedPublishedRun(
         artifact_paths=artifact_paths,
         manifest=manifest,
         pipeline_run=_normalize_pipeline_run(manifest, artifact_paths),
-        taxonomy_rows=_read_taxonomy_rows(artifact_paths.taxonomy_tsv),
-        genome_rows=_read_genome_rows(artifact_paths.genomes_tsv),
-        sequence_rows=_read_sequence_rows(artifact_paths.sequences_tsv),
-        protein_rows=_read_protein_rows(artifact_paths.proteins_tsv),
-        run_parameter_rows=_read_run_parameter_rows(artifact_paths.run_params_tsv),
-        repeat_call_rows=_read_repeat_call_rows(artifact_paths.repeat_calls_tsv),
+        taxonomy_rows=_compact_taxonomy_rows(
+            raw_taxonomy_rows,
+            referenced_taxon_ids=_referenced_taxon_ids(
+                genome_rows,
+                sequence_rows,
+                protein_rows,
+                repeat_call_rows,
+            ),
+        ),
+        genome_rows=genome_rows,
+        sequence_rows=sequence_rows,
+        protein_rows=protein_rows,
+        run_parameter_rows=run_parameter_rows,
+        repeat_call_rows=repeat_call_rows,
     )
 
 
@@ -323,6 +347,89 @@ def _read_repeat_call_rows(path: Path) -> list[dict[str, Any]]:
             }
         )
     return normalized
+
+
+def _referenced_taxon_ids(
+    genome_rows: list[dict[str, Any]],
+    sequence_rows: list[dict[str, Any]],
+    protein_rows: list[dict[str, Any]],
+    repeat_call_rows: list[dict[str, Any]],
+) -> set[int]:
+    referenced_sequence_ids = {str(row["sequence_id"]) for row in repeat_call_rows}
+    referenced_protein_ids = {str(row["protein_id"]) for row in repeat_call_rows}
+
+    taxon_ids = {int(row["taxon_id"]) for row in genome_rows}
+    taxon_ids.update(int(row["taxon_id"]) for row in repeat_call_rows)
+    taxon_ids.update(
+        int(row["taxon_id"])
+        for row in sequence_rows
+        if row.get("taxon_id") is not None and str(row["sequence_id"]) in referenced_sequence_ids
+    )
+    taxon_ids.update(
+        int(row["taxon_id"])
+        for row in protein_rows
+        if row.get("taxon_id") is not None and str(row["protein_id"]) in referenced_protein_ids
+    )
+    return taxon_ids
+
+
+def _compact_taxonomy_rows(
+    rows: list[dict[str, Any]],
+    *,
+    referenced_taxon_ids: set[int],
+) -> list[dict[str, Any]]:
+    rows_by_taxon_id = {int(row["taxon_id"]): row for row in rows}
+    retained_taxon_ids: set[int] = set()
+
+    for row in rows:
+        taxon_id = int(row["taxon_id"])
+        rank = str(row.get("rank", "")).strip().lower()
+        if row.get("parent_taxon_id") is None or rank in COMPACT_TAXONOMY_RANKS or taxon_id in referenced_taxon_ids:
+            retained_taxon_ids.add(taxon_id)
+
+    compacted_rows: list[dict[str, Any]] = []
+    for row in rows:
+        taxon_id = int(row["taxon_id"])
+        if taxon_id not in retained_taxon_ids:
+            continue
+        compacted_rows.append(
+            {
+                **row,
+                "parent_taxon_id": _nearest_retained_parent_taxon_id(
+                    taxon_id,
+                    rows_by_taxon_id,
+                    retained_taxon_ids,
+                ),
+            }
+        )
+    return compacted_rows
+
+
+def _nearest_retained_parent_taxon_id(
+    taxon_id: int,
+    rows_by_taxon_id: dict[int, dict[str, Any]],
+    retained_taxon_ids: set[int],
+) -> int | None:
+    row = rows_by_taxon_id.get(taxon_id)
+    if row is None:
+        raise ImportContractError(f"Taxonomy is missing taxon_id {taxon_id!r}")
+
+    current_parent_taxon_id = row.get("parent_taxon_id")
+    seen: set[int] = set()
+    while current_parent_taxon_id is not None:
+        parent_taxon_id = int(current_parent_taxon_id)
+        if parent_taxon_id in seen:
+            raise ImportContractError("Taxonomy contains a parent cycle and cannot be compacted")
+        seen.add(parent_taxon_id)
+        if parent_taxon_id in retained_taxon_ids:
+            return parent_taxon_id
+        parent_row = rows_by_taxon_id.get(parent_taxon_id)
+        if parent_row is None:
+            raise ImportContractError(
+                f"Taxonomy references missing parent taxon_id {parent_taxon_id!r}"
+            )
+        current_parent_taxon_id = parent_row.get("parent_taxon_id")
+    return None
 
 
 def _read_tsv(path: Path, required_columns: list[str]) -> list[dict[str, str]]:

@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}{{ protein.protein_name }}{% endblock %}
+{% block body_class %}protein-detail-page{% endblock %}
+
+{% block content %}
+<section class="landing-band mb-4">
+  <div class="landing-band-shell">
+    <div class="landing-copy">
+      <span class="section-kicker mb-3">Protein</span>
+      <h1 class="landing-title mb-3">{{ protein.protein_name }}</h1>
+      <p class="landing-lead mb-3">
+        {% if protein.gene_symbol %}<strong>{{ protein.gene_symbol }}</strong>{% else %}Imported protein{% endif %}
+        from genome <strong>{{ protein.genome.accession }}</strong>, scoped to run <strong>{{ protein.pipeline_run.run_id }}</strong>.
+      </p>
+      <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-dark" href="{{ protein_list_url }}">Back to proteins</a>
+        <a class="btn btn-outline-dark" href="{% url 'browser:genome-detail' protein.genome.pk %}">Open genome</a>
+        <a class="btn btn-brand" href="{{ repeatcall_browser_url }}">Open repeat calls</a>
+      </div>
+    </div>
+    <aside class="landing-aside">
+      <p class="sheet-label">At a glance</p>
+      <p class="mb-2">{{ protein.protein_length }} aa</p>
+      <p class="mb-2">{{ repeat_calls_count }} linked call{{ repeat_calls_count|pluralize }}</p>
+      <p class="mb-0">{{ protein.sequence.sequence_name }}</p>
+    </aside>
+  </div>
+</section>
+
+<section class="row g-4 mb-4">
+  <div class="col-lg-6">
+    <div class="surface-card info-sheet h-100">
+      <p class="sheet-label">Metadata</p>
+      <dl class="info-grid">
+        <dt>Protein ID</dt>
+        <dd>{{ protein.protein_id }}</dd>
+        <dt>Gene symbol</dt>
+        <dd>{{ protein.gene_symbol|default:"-" }}</dd>
+        <dt>Length</dt>
+        <dd>{{ protein.protein_length }}</dd>
+        <dt>Translation method</dt>
+        <dd>{{ protein.translation_method|default:"-" }}</dd>
+        <dt>Translation status</dt>
+        <dd>{{ protein.translation_status|default:"-" }}</dd>
+        <dt>Sequence</dt>
+        <dd>{{ protein.sequence.sequence_name }}</dd>
+        <dt>Protein path</dt>
+        <dd>{{ protein.protein_path }}</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="surface-card info-sheet h-100">
+      <p class="sheet-label">Linked parents</p>
+      <dl class="info-grid">
+        <dt>Genome</dt>
+        <dd><a href="{% url 'browser:genome-detail' protein.genome.pk %}">{{ protein.genome.accession }}</a></dd>
+        <dt>Taxon</dt>
+        <dd><a href="{{ taxon_detail_url }}">{{ protein.taxon.taxon_name }}</a></dd>
+        <dt>Run</dt>
+        <dd><a href="{% url 'browser:run-detail' protein.pipeline_run.pk %}">{{ protein.pipeline_run.run_id }}</a></dd>
+        <dt>Assembly accession</dt>
+        <dd>{{ protein.assembly_accession|default:"-" }}</dd>
+        <dt>External ID</dt>
+        <dd>{{ protein.protein_external_id|default:"-" }}</dd>
+        <dt>Gene group</dt>
+        <dd>{{ protein.gene_group|default:"-" }}</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<section class="row g-4">
+  <div class="col-lg-5">
+    <div class="surface-card surface-card-wide h-100">
+      <div class="section-header">
+        <div>
+          <p class="section-kicker mb-2">Call summary</p>
+          <h2>By method and residue</h2>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table align-middle mb-0 data-table">
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Residue</th>
+              <th>Calls</th>
+              <th>Length span</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for summary in call_summaries %}
+              <tr>
+                <td>{{ summary.method }}</td>
+                <td>{{ summary.repeat_residue }}</td>
+                <td>{{ summary.total }}</td>
+                <td>
+                  {% if summary.min_length == summary.max_length %}
+                    {{ summary.min_length }}
+                  {% else %}
+                    {{ summary.min_length }}-{{ summary.max_length }}
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="4" class="empty-cell">No repeat calls were linked to this protein.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="surface-card surface-card-wide h-100">
+      <div class="section-header">
+        <div>
+          <p class="section-kicker mb-2">Linked repeat calls</p>
+          <h2>Call records</h2>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table align-middle mb-0 data-table">
+          <thead>
+            <tr>
+              <th>Call</th>
+              <th>Method</th>
+              <th>Residue</th>
+              <th>Coordinates</th>
+              <th>Purity</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for repeat_call in repeat_call_preview %}
+              <tr>
+                <td><a href="{% url 'browser:repeatcall-detail' repeat_call.pk %}">{{ repeat_call.call_id }}</a></td>
+                <td>{{ repeat_call.method }}</td>
+                <td>{{ repeat_call.repeat_residue }}</td>
+                <td>{{ repeat_call.start }}-{{ repeat_call.end }}</td>
+                <td>{{ repeat_call.purity }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="5" class="empty-cell">No repeat calls were linked to this protein.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

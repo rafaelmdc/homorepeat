@@ -40,12 +40,14 @@ def build_minimal_publish_root(base_dir: Path, *, run_id: str = "run-alpha") -> 
     )
     (publish_root / "acquisition" / "sequences.tsv").write_text(
         "sequence_id\tgenome_id\tsequence_name\tsequence_length\tsequence_path\tgene_symbol\ttranscript_id\tisoform_id\tassembly_accession\ttaxon_id\tsource_record_id\tprotein_external_id\ttranslation_table\tgene_group\tlinkage_status\tpartial_status\n"
-        "seq_1\tgenome_1\tNM_000001.1\t900\t/tmp/cds.fna\tGENE1\tNM_000001.1\tNP_000001.1\tGCF_000001405.40\t9606\tcds-1\tNP_000001.1\t1\tGENE1\tgff\t\n",
+        "seq_1\tgenome_1\tNM_000001.1\t900\t/tmp/cds.fna\tGENE1\tNM_000001.1\tNP_000001.1\tGCF_000001405.40\t9606\tcds-1\tNP_000001.1\t1\tGENE1\tgff\t\n"
+        "seq_2\tgenome_1\tNM_000002.1\t840\t/tmp/cds_extra.fna\tGENE2\tNM_000002.1\tNP_000002.1\tGCF_000001405.40\t9606\tcds-2\tNP_000002.1\t1\tGENE2\tgff\t\n",
         encoding="utf-8",
     )
     (publish_root / "acquisition" / "proteins.tsv").write_text(
         "protein_id\tsequence_id\tgenome_id\tprotein_name\tprotein_length\tprotein_path\tgene_symbol\ttranslation_method\ttranslation_status\tassembly_accession\ttaxon_id\tgene_group\tprotein_external_id\n"
-        "prot_1\tseq_1\tgenome_1\tNP_000001.1\t300\t/tmp/proteins.faa\tGENE1\ttranslated\ttranslated\tGCF_000001405.40\t9606\tGENE1\tNP_000001.1\n",
+        "prot_1\tseq_1\tgenome_1\tNP_000001.1\t300\t/tmp/proteins.faa\tGENE1\ttranslated\ttranslated\tGCF_000001405.40\t9606\tGENE1\tNP_000001.1\n"
+        "prot_2\tseq_2\tgenome_1\tNP_000002.1\t280\t/tmp/proteins_extra.faa\tGENE2\ttranslated\ttranslated\tGCF_000001405.40\t9606\tGENE2\tNP_000002.1\n",
         encoding="utf-8",
     )
     (publish_root / "calls" / "run_params.tsv").write_text(
@@ -69,20 +71,13 @@ def create_imported_run_fixture(
     protein_id: str,
     call_id: str,
     accession: str,
+    taxon_key: str = "human",
+    genome_name: str | None = None,
 ):
-    from apps.browser.models import Genome, PipelineRun, Protein, RepeatCall, RunParameter, Sequence, Taxon
+    from apps.browser.models import Genome, PipelineRun, Protein, RepeatCall, RunParameter, Sequence
 
-    root, _ = Taxon.objects.get_or_create(
-        taxon_id=1,
-        defaults={"taxon_name": "root", "rank": "no rank"},
-    )
-    species, _ = Taxon.objects.get_or_create(
-        taxon_id=9606,
-        defaults={"taxon_name": "Homo sapiens", "rank": "species", "parent_taxon": root},
-    )
-    if species.parent_taxon_id != root.pk:
-        species.parent_taxon = root
-        species.save(update_fields=["parent_taxon", "updated_at"])
+    taxa = ensure_test_taxonomy()
+    selected_taxon = taxa[taxon_key]
 
     pipeline_run = PipelineRun.objects.create(
         run_id=run_id,
@@ -98,16 +93,17 @@ def create_imported_run_fixture(
         genome_id=genome_id,
         source="ncbi_datasets",
         accession=accession,
-        genome_name=f"Genome for {run_id}",
+        genome_name=genome_name or f"Genome for {run_id}",
         assembly_type="haploid",
-        taxon=species,
+        taxon=selected_taxon,
         assembly_level="Chromosome",
-        species_name="Homo sapiens",
+        species_name=selected_taxon.taxon_name,
+        analyzed_protein_count=1,
     )
     sequence = Sequence.objects.create(
         pipeline_run=pipeline_run,
         genome=genome,
-        taxon=species,
+        taxon=selected_taxon,
         sequence_id=sequence_id,
         sequence_name=f"NM_{run_id}",
         sequence_length=900,
@@ -118,7 +114,7 @@ def create_imported_run_fixture(
         pipeline_run=pipeline_run,
         genome=genome,
         sequence=sequence,
-        taxon=species,
+        taxon=selected_taxon,
         protein_id=protein_id,
         protein_name=f"NP_{run_id}",
         protein_length=300,
@@ -136,7 +132,7 @@ def create_imported_run_fixture(
         genome=genome,
         sequence=sequence,
         protein=protein,
-        taxon=species,
+        taxon=selected_taxon,
         call_id=call_id,
         method=RepeatCall.Method.PURE,
         start=10,
@@ -155,5 +151,59 @@ def create_imported_run_fixture(
         "protein": protein,
         "run_parameter": run_parameter,
         "repeat_call": repeat_call,
-        "taxon": species,
+        "taxon": selected_taxon,
+        "taxa": taxa,
     }
+
+
+def ensure_test_taxonomy():
+    from apps.browser.models import Taxon, TaxonClosure
+
+    definitions = {
+        "root": {"taxon_id": 1, "taxon_name": "root", "rank": "no rank", "parent": None},
+        "chordata": {"taxon_id": 7711, "taxon_name": "Chordata", "rank": "phylum", "parent": "root"},
+        "mammalia": {"taxon_id": 40674, "taxon_name": "Mammalia", "rank": "class", "parent": "chordata"},
+        "primates": {"taxon_id": 9443, "taxon_name": "Primates", "rank": "order", "parent": "mammalia"},
+        "human": {"taxon_id": 9606, "taxon_name": "Homo sapiens", "rank": "species", "parent": "primates"},
+        "mouse": {"taxon_id": 10090, "taxon_name": "Mus musculus", "rank": "species", "parent": "mammalia"},
+    }
+
+    taxa = {}
+    for key, definition in definitions.items():
+        parent_taxon = taxa.get(definition["parent"])
+        taxon, _ = Taxon.objects.get_or_create(
+            taxon_id=definition["taxon_id"],
+            defaults={
+                "taxon_name": definition["taxon_name"],
+                "rank": definition["rank"],
+                "parent_taxon": parent_taxon,
+            },
+        )
+        update_fields = []
+        if taxon.taxon_name != definition["taxon_name"]:
+            taxon.taxon_name = definition["taxon_name"]
+            update_fields.append("taxon_name")
+        if taxon.rank != definition["rank"]:
+            taxon.rank = definition["rank"]
+            update_fields.append("rank")
+        if taxon.parent_taxon_id != (parent_taxon.pk if parent_taxon else None):
+            taxon.parent_taxon = parent_taxon
+            update_fields.append("parent_taxon")
+        if update_fields:
+            update_fields.append("updated_at")
+            taxon.save(update_fields=update_fields)
+        taxa[key] = taxon
+
+    for taxon in taxa.values():
+        ancestor = taxon
+        depth = 0
+        while ancestor is not None:
+            TaxonClosure.objects.get_or_create(
+                ancestor=ancestor,
+                descendant=taxon,
+                defaults={"depth": depth},
+            )
+            ancestor = ancestor.parent_taxon
+            depth += 1
+
+    return taxa

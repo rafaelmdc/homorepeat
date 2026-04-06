@@ -56,6 +56,14 @@
   - publish/calls/repeat_calls.tsv
   - publish/calls/run_params.tsv
 
+  Import retention rule:
+
+  - Django may read the full sequence and protein inventories from the published TSVs for validation and summary counts
+  - Django may read the full taxonomy inventory from the published TSV for validation and lineage normalization
+  - Django should compact taxonomy to principal display ranks plus any directly referenced taxa before storing it in Postgres
+  - Django should persist only the sequence and protein rows referenced by imported repeat calls
+  - total analyzed protein inventory should be retained only as genome-level metadata, not as a full relational browser inventory
+
   Optional published reports can be linked later, but not used as the primary import contract.
 
   ## Data Model
@@ -94,12 +102,15 @@
       - first-class biological entity
       - belongs to one PipelineRun
       - stores canonical genome_id plus accession metadata
+      - stores total analyzed protein count for that genome
       - references one Taxon
   - Sequence
       - belongs to one PipelineRun
+      - imported only when linked to an imported repeat call
       - references one Genome and one Taxon
   - Protein
       - belongs to one PipelineRun
+      - imported only when linked to an imported repeat call
       - references one Sequence, one Genome, and one Taxon
   - RepeatCall
       - belongs to one PipelineRun
@@ -133,6 +144,7 @@
   - assembly_level
   - species_name
   - taxon
+  - analyzed_protein_count
   - source
   - notes
 
@@ -204,7 +216,7 @@
 
   Taxon pages:
 
-  - lineage breadcrumb
+  - lineage breadcrumb over the compacted principal-rank lineage
   - descendants
   - linked genomes/proteins/calls within the selected run
   - branch-aware summary counts using closure rows
@@ -213,14 +225,16 @@
 
   - accession-centered details
   - linked taxon
-  - linked sequences
-  - linked proteins
+  - analyzed protein count metadata
+  - linked repeat-bearing sequences
+  - linked repeat-bearing proteins
   - linked repeat calls
   - run provenance
   - later-ready field for merged accession navigation
 
   Protein pages:
 
+  - imported subset only: proteins with at least one repeat call
   - linked genome and taxon
   - gene symbol and protein metadata when present
   - call summaries by method and residue
@@ -264,6 +278,7 @@
 
   - built during taxonomy import
   - full reflexive closure rows included
+  - built over the compacted web-side taxonomy, not necessarily every raw upstream lineage node
   - imported taxonomy must remain a tree or tree-like parent chain for v1
 
   ## Imports and Pipeline Integration
@@ -293,10 +308,10 @@
   1. read manifest and create ImportBatch
   2. create or validate PipelineRun
   3. import Taxon
-  4. rebuild TaxonClosure
-  5. import Genome
-  6. import Sequence
-  7. import Protein
+  4. compact raw taxonomy to principal ranks plus referenced taxa, then rebuild TaxonClosure
+  5. import Genome and derive genome-level analyzed protein counts from the full protein inventory
+  6. import only repeat-linked Sequence rows
+  7. import only repeat-bearing Protein rows
   8. import RunParameter
   9. import RepeatCall
   10. finalize counts and mark import success
@@ -306,6 +321,7 @@
   - required files must exist
   - required columns must match contracts
   - manifest run_id and import target must agree
+  - compacted taxonomy must still preserve referenced taxon IDs and a valid parent chain
   - foreign-key integrity must be enforced in Django/Postgres
   - same-run duplicates must fail
   - failed imports must roll back cleanly
@@ -419,4 +435,3 @@
   - Cross-run merging will be accession-centered and non-destructive.
   - Closure tables are required from the initial schema, not deferred.
   - Compose at the repo root remains the standard development runtime.
-

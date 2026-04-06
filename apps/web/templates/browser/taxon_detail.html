@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}{{ taxon.taxon_name }}{% endblock %}
+{% block body_class %}taxon-detail-page{% endblock %}
+
+{% block content %}
+<section class="landing-band mb-4">
+  <div class="landing-band-shell">
+    <div class="landing-copy">
+      <span class="section-kicker mb-3">Taxon</span>
+      <h1 class="landing-title mb-3">{{ taxon.taxon_name }}</h1>
+      <p class="landing-lead mb-3">
+        Taxonomy ID {{ taxon.taxon_id }}{% if taxon.rank %}, rank <strong>{{ taxon.rank }}</strong>{% endif %}.
+        {% if current_run %}Scoped to run <strong>{{ current_run.run_id }}</strong>.{% endif %}
+      </p>
+      <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-dark" href="{% url 'browser:taxon-list' %}{% if current_run_id %}?run={{ current_run_id|urlencode }}{% endif %}">Back to taxa</a>
+        <a class="btn btn-brand" href="{{ genome_branch_url }}">Open branch genomes</a>
+        <a class="btn btn-outline-dark" href="{{ protein_branch_url }}">Open branch proteins</a>
+        <a class="btn btn-outline-dark" href="{{ repeatcall_branch_url }}">Open branch calls</a>
+      </div>
+    </div>
+    <aside class="landing-aside">
+      <p class="sheet-label">Branch summary</p>
+      <p class="mb-2">{{ descendant_count }} descendant taxon{{ descendant_count|pluralize }}</p>
+      <p class="mb-2">{{ branch_genomes_count }} genome{{ branch_genomes_count|pluralize }}</p>
+      <p class="mb-2">{{ branch_proteins_count }} protein{{ branch_proteins_count|pluralize }}</p>
+      <p class="mb-0">{{ branch_repeat_calls_count }} repeat call{{ branch_repeat_calls_count|pluralize }}</p>
+    </aside>
+  </div>
+</section>
+
+<section class="row g-4 mb-4">
+  <div class="col-lg-6">
+    <div class="surface-card info-sheet h-100">
+      <p class="sheet-label">Lineage</p>
+      <div class="d-flex flex-wrap gap-2">
+        {% for node in lineage %}
+          {% if node.ancestor.pk == taxon.pk %}
+            <span class="badge rounded-pill status-badge">{{ node.ancestor.taxon_name }}</span>
+          {% else %}
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:taxon-detail' node.ancestor.pk %}{% if current_run_id %}?run={{ current_run_id|urlencode }}{% endif %}">
+              {{ node.ancestor.taxon_name }}
+            </a>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="surface-card info-sheet h-100">
+      <p class="sheet-label">Immediate descendants</p>
+      {% if child_taxa %}
+        <div class="d-flex flex-wrap gap-2">
+          {% for child_taxon in child_taxa %}
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:taxon-detail' child_taxon.pk %}{% if current_run_id %}?run={{ current_run_id|urlencode }}{% endif %}">
+              {{ child_taxon.taxon_name }}
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="mb-0">This taxon has no direct child taxa in the imported taxonomy.</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<section class="surface-card surface-card-wide">
+  <div class="section-header">
+    <div>
+      <p class="section-kicker mb-2">Linked genomes</p>
+      <h2>Genomes in this branch</h2>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table align-middle mb-0 data-table">
+      <thead>
+        <tr>
+          <th>Accession</th>
+          <th>Genome</th>
+          <th>Taxon</th>
+          <th>Run</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for genome in linked_genomes %}
+          <tr>
+            <td><a href="{% url 'browser:genome-detail' genome.pk %}">{{ genome.accession }}</a></td>
+            <td>{{ genome.genome_name }}</td>
+            <td>{{ genome.taxon.taxon_name }}</td>
+            <td><a href="{% url 'browser:run-detail' genome.pipeline_run.pk %}">{{ genome.pipeline_run.run_id }}</a></td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="4" class="empty-cell">No genomes were linked to this branch under the current scope.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

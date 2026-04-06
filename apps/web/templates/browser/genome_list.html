@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}Genomes{% endblock %}
+{% block body_class %}genome-list-page{% endblock %}
+
+{% block content %}
+<section class="landing-band mb-4">
+  <div class="landing-band-shell">
+    <div class="landing-copy">
+      <span class="section-kicker mb-3">Genomes</span>
+      <h1 class="landing-title mb-3">Accession-aware genome browsing across imported runs.</h1>
+      <p class="landing-lead mb-0">
+        Filter genomes by run, branch, accession, or genome name and keep the
+        taxonomic lineage and run provenance explicit.
+      </p>
+    </div>
+    <aside class="landing-aside">
+      <p class="sheet-label">Current scope</p>
+      <p class="mb-0">
+        {% if current_run %}
+          Run <strong>{{ current_run.run_id }}</strong>{% if selected_branch_taxon %}, branch <strong>{{ selected_branch_taxon.taxon_name }}</strong>{% endif %}.
+        {% elif selected_branch_taxon %}
+          Branch <strong>{{ selected_branch_taxon.taxon_name }}</strong> across imported genomes.
+        {% else %}
+          Browsing all imported genome records.
+        {% endif %}
+      </p>
+    </aside>
+  </div>
+</section>
+
+<section class="filter-card mb-4">
+  <form class="row g-3 align-items-end" method="get">
+    <div class="col-md-4 col-lg-3">
+      <label class="form-label" for="id_run">Run</label>
+      <select class="form-select" id="id_run" name="run">
+        <option value="">All runs</option>
+        {% for pipeline_run in run_choices %}
+          <option value="{{ pipeline_run.run_id }}" {% if current_run_id == pipeline_run.run_id %}selected{% endif %}>{{ pipeline_run.run_id }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4 col-lg-3">
+      <label class="form-label" for="id_branch">Branch taxon</label>
+      <select class="form-select" id="id_branch" name="branch">
+        <option value="">All branches</option>
+        {% for branch_taxon in branch_choices %}
+          <option value="{{ branch_taxon.pk }}" {% if current_branch == branch_taxon.pk|stringformat:"s" %}selected{% endif %}>{{ branch_taxon.taxon_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4 col-lg-2">
+      <label class="form-label" for="id_accession">Accession</label>
+      <input class="form-control" id="id_accession" type="text" name="accession" value="{{ current_accession }}" placeholder="GCF_">
+    </div>
+    <div class="col-md-6 col-lg-2">
+      <label class="form-label" for="id_genome_name">Genome name</label>
+      <input class="form-control" id="id_genome_name" type="text" name="genome_name" value="{{ current_genome_name }}" placeholder="Genome name">
+    </div>
+    <div class="col-md-6 col-lg-2">
+      <label class="form-label" for="id_order_by">Sort</label>
+      <select class="form-select" id="id_order_by" name="order_by">
+        <option value="">Default</option>
+        {% for option in ordering_options %}
+          <option value="{{ option.value }}" {% if current_order_by == option.value %}selected{% endif %}>{{ option.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12">
+      <div class="filter-actions">
+        <button class="btn btn-primary" type="submit">Apply</button>
+        <a class="btn btn-outline-secondary" href="{% url 'browser:genome-list' %}">Reset</a>
+      </div>
+    </div>
+  </form>
+</section>
+
+<section class="surface-card surface-card-wide">
+  <div class="section-header">
+    <div>
+      <p class="section-kicker mb-2">Genome inventory</p>
+      <h2>{{ page_obj.paginator.count }} genome{{ page_obj.paginator.count|pluralize }}</h2>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table align-middle mb-0 data-table">
+      <thead>
+        <tr>
+          <th>Accession</th>
+          <th>Genome</th>
+          <th>Taxon</th>
+          <th>Run</th>
+          <th>Proteins</th>
+          <th>Repeat calls</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for genome in genomes %}
+          <tr>
+            <td><a href="{% url 'browser:genome-detail' genome.pk %}">{{ genome.accession }}</a></td>
+            <td>{{ genome.genome_name }}</td>
+            <td>
+              <a href="{% url 'browser:taxon-detail' genome.taxon.pk %}?run={{ genome.pipeline_run.run_id|urlencode }}">
+                {{ genome.taxon.taxon_name }}
+              </a>
+            </td>
+            <td><a href="{% url 'browser:run-detail' genome.pipeline_run.pk %}">{{ genome.pipeline_run.run_id }}</a></td>
+            <td>{{ genome.proteins_count }}</td>
+            <td>{{ genome.repeat_calls_count }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" class="empty-cell">No genomes matched these filters.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% include "browser/includes/pagination.html" %}
+</section>
+{% endblock %}
