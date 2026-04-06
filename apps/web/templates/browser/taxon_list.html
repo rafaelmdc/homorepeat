@@ -17,7 +17,15 @@
     <aside class="landing-aside">
       <p class="sheet-label">Current scope</p>
       <p class="mb-0">
-        {% if current_run %}
+        {% if current_mode == "merged" %}
+          {% if current_run %}
+            Run <strong>{{ current_run.run_id }}</strong>{% if selected_branch_taxon %}, branch <strong>{{ selected_branch_taxon.taxon_name }}</strong>{% endif %}, with merged branch summaries.
+          {% elif selected_branch_taxon %}
+            Branch <strong>{{ selected_branch_taxon.taxon_name }}</strong> across merged browser summaries.
+          {% else %}
+            Browsing the imported taxonomy tree with merged browser summaries.
+          {% endif %}
+        {% elif current_run %}
           Run <strong>{{ current_run.run_id }}</strong>{% if selected_branch_taxon %}, branch <strong>{{ selected_branch_taxon.taxon_name }}</strong>{% endif %}.
         {% elif selected_branch_taxon %}
           Branch <strong>{{ selected_branch_taxon.taxon_name }}</strong> across imported taxonomy.
@@ -31,6 +39,7 @@
 
 <section class="filter-card mb-4">
   <form class="row g-3 align-items-end" method="get">
+    <input type="hidden" name="mode" value="{{ current_mode }}">
     <div class="col-lg-3">
       <label class="form-label" for="id_q">Search</label>
       <input class="form-control" id="id_q" type="text" name="q" value="{{ current_query }}" placeholder="Taxon name or taxonomy id">
@@ -72,9 +81,16 @@
       </select>
     </div>
     <div class="col-12">
-      <div class="filter-actions">
-        <button class="btn btn-primary" type="submit">Apply</button>
-        <a class="btn btn-outline-secondary" href="{% url 'browser:taxon-list' %}">Reset</a>
+      <div class="filter-toolbar">
+        <div class="mode-switch">
+          <span class="mode-switch-label">Mode</span>
+          <button class="btn {% if current_mode == 'run' %}btn-primary{% else %}btn-outline-secondary{% endif %}" type="submit" name="mode" value="run">Run</button>
+          <button class="btn {% if current_mode == 'merged' %}btn-primary{% else %}btn-outline-secondary{% endif %}" type="submit" name="mode" value="merged">Merged</button>
+        </div>
+        <div class="filter-actions">
+          <button class="btn btn-primary" type="submit">Apply</button>
+          <a class="btn btn-outline-secondary" href="{% url 'browser:taxon-list' %}{% if current_mode == 'merged' %}?mode=merged{% endif %}">Reset</a>
+        </div>
       </div>
     </div>
   </form>
@@ -102,7 +118,7 @@
         {% for taxon in taxa %}
           <tr>
             <td>
-              <a href="{% url 'browser:taxon-detail' taxon.pk %}{% if current_run_id %}?run={{ current_run_id|urlencode }}{% endif %}">
+              <a href="{% url 'browser:taxon-detail' taxon.pk %}{% if current_run_id or current_mode == 'merged' %}?{% if current_run_id %}run={{ current_run_id|urlencode }}{% if current_mode == 'merged' %}&amp;{% endif %}{% endif %}{% if current_mode == 'merged' %}mode=merged{% endif %}{% endif %}">
                 {{ taxon.taxon_name }}
               </a>
             </td>
@@ -110,7 +126,7 @@
             <td>{{ taxon.rank|default:"-" }}</td>
             <td>
               {% if taxon.parent_taxon %}
-                <a href="{% url 'browser:taxon-detail' taxon.parent_taxon.pk %}{% if current_run_id %}?run={{ current_run_id|urlencode }}{% endif %}">
+                <a href="{% url 'browser:taxon-detail' taxon.parent_taxon.pk %}{% if current_run_id or current_mode == 'merged' %}?{% if current_run_id %}run={{ current_run_id|urlencode }}{% if current_mode == 'merged' %}&amp;{% endif %}{% endif %}{% if current_mode == 'merged' %}mode=merged{% endif %}{% endif %}">
                   {{ taxon.parent_taxon.taxon_name }}
                 </a>
               {% else %}

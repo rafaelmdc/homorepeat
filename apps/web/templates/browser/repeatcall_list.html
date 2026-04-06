@@ -17,7 +17,15 @@
     <aside class="landing-aside">
       <p class="sheet-label">Current scope</p>
       <p class="mb-2">
-        {% if current_run %}
+        {% if current_mode == "merged" %}
+          {% if current_run %}
+            Run <strong>{{ current_run.run_id }}</strong>{% if selected_branch_taxon %}, branch <strong>{{ selected_branch_taxon.taxon_name }}</strong>{% endif %}, using merged call groups.
+          {% elif selected_branch_taxon %}
+            Branch <strong>{{ selected_branch_taxon.taxon_name }}</strong> across merged call groups.
+          {% else %}
+            Browsing merged repeat-call groups across imported runs.
+          {% endif %}
+        {% elif current_run %}
           Run <strong>{{ current_run.run_id }}</strong>{% if selected_branch_taxon %}, branch <strong>{{ selected_branch_taxon.taxon_name }}</strong>{% endif %}.
         {% elif selected_branch_taxon %}
           Branch <strong>{{ selected_branch_taxon.taxon_name }}</strong> across imported repeat calls.
@@ -47,6 +55,7 @@
     {% if current_protein %}
       <input type="hidden" name="protein" value="{{ current_protein }}">
     {% endif %}
+    <input type="hidden" name="mode" value="{{ current_mode }}">
     <div class="col-lg-3">
       <label class="form-label" for="id_q">Search</label>
       <input class="form-control" id="id_q" type="text" name="q" value="{{ current_query }}" placeholder="Call ID, protein, or accession">
@@ -117,9 +126,16 @@
       </select>
     </div>
     <div class="col-12">
-      <div class="filter-actions">
-        <button class="btn btn-primary" type="submit">Apply</button>
-        <a class="btn btn-outline-secondary" href="{% url 'browser:repeatcall-list' %}">Reset</a>
+      <div class="filter-toolbar">
+        <div class="mode-switch">
+          <span class="mode-switch-label">Mode</span>
+          <button class="btn {% if current_mode == 'run' %}btn-primary{% else %}btn-outline-secondary{% endif %}" type="submit" name="mode" value="run">Run</button>
+          <button class="btn {% if current_mode == 'merged' %}btn-primary{% else %}btn-outline-secondary{% endif %}" type="submit" name="mode" value="merged">Merged</button>
+        </div>
+        <div class="filter-actions">
+          <button class="btn btn-primary" type="submit">Apply</button>
+          <a class="btn btn-outline-secondary" href="{% url 'browser:repeatcall-list' %}{% if current_mode == 'merged' %}?mode=merged{% endif %}">Reset</a>
+        </div>
       </div>
     </div>
   </form>
@@ -128,48 +144,87 @@
 <section class="surface-card surface-card-wide">
   <div class="section-header">
     <div>
-      <p class="section-kicker mb-2">Repeat-call inventory</p>
-      <h2>{{ page_obj.paginator.count }} repeat call{{ page_obj.paginator.count|pluralize }}</h2>
+      <p class="section-kicker mb-2">{% if current_mode == "merged" %}Merged repeat-call inventory{% else %}Repeat-call inventory{% endif %}</p>
+      <h2>
+        {{ page_obj.paginator.count }}
+        {% if current_mode == "merged" %}collapsed call group{{ page_obj.paginator.count|pluralize }}{% else %}repeat call{{ page_obj.paginator.count|pluralize }}{% endif %}
+      </h2>
     </div>
   </div>
 
   <div class="table-responsive">
     <table class="table align-middle mb-0 data-table">
       <thead>
-        <tr>
-          <th>Call</th>
-          <th>Protein</th>
-          <th>Gene</th>
-          <th>Genome</th>
-          <th>Taxon</th>
-          <th>Method</th>
-          <th>Residue</th>
-          <th>Length</th>
-          <th>Purity</th>
-          <th>Run</th>
-        </tr>
+        {% if current_mode == "merged" %}
+          <tr>
+            <th>Accession</th>
+            <th>Protein</th>
+            <th>Gene</th>
+            <th>Method</th>
+            <th>Coordinates</th>
+            <th>Residue</th>
+            <th>Length</th>
+            <th>Purity</th>
+            <th>Source rows</th>
+            <th>Source runs</th>
+          </tr>
+        {% else %}
+          <tr>
+            <th>Call</th>
+            <th>Protein</th>
+            <th>Gene</th>
+            <th>Genome</th>
+            <th>Taxon</th>
+            <th>Method</th>
+            <th>Residue</th>
+            <th>Length</th>
+            <th>Purity</th>
+            <th>Run</th>
+          </tr>
+        {% endif %}
       </thead>
       <tbody>
         {% for repeat_call in repeat_calls %}
-          <tr>
-            <td><a href="{% url 'browser:repeatcall-detail' repeat_call.pk %}">{{ repeat_call.call_id }}</a></td>
-            <td><a href="{% url 'browser:protein-detail' repeat_call.protein.pk %}">{{ repeat_call.protein.protein_name }}</a></td>
-            <td>{{ repeat_call.protein.gene_symbol|default:"-" }}</td>
-            <td><a href="{% url 'browser:genome-detail' repeat_call.genome.pk %}">{{ repeat_call.genome.accession }}</a></td>
-            <td>
-              <a href="{% url 'browser:taxon-detail' repeat_call.taxon.pk %}?run={{ repeat_call.pipeline_run.run_id|urlencode }}">
-                {{ repeat_call.taxon.taxon_name }}
-              </a>
-            </td>
-            <td>{{ repeat_call.method }}</td>
-            <td>{{ repeat_call.repeat_residue }}</td>
-            <td>{{ repeat_call.length }}</td>
-            <td>{{ repeat_call.purity }}</td>
-            <td><a href="{% url 'browser:run-detail' repeat_call.pipeline_run.pk %}">{{ repeat_call.pipeline_run.run_id }}</a></td>
-          </tr>
+          {% if current_mode == "merged" %}
+            <tr>
+              <td><a href="{% url 'browser:accession-detail' repeat_call.accession %}">{{ repeat_call.accession }}</a></td>
+              <td>{{ repeat_call.protein_name }}</td>
+              <td>{{ repeat_call.gene_symbol_label }}</td>
+              <td>{{ repeat_call.method }}</td>
+              <td>{{ repeat_call.start }}-{{ repeat_call.end }}</td>
+              <td>{{ repeat_call.repeat_residue }}</td>
+              <td>{{ repeat_call.length }}</td>
+              <td>{{ repeat_call.normalized_purity }}</td>
+              <td>{{ repeat_call.source_count }}</td>
+              <td>{{ repeat_call.source_runs|join:", " }}</td>
+            </tr>
+          {% else %}
+            <tr>
+              <td><a href="{% url 'browser:repeatcall-detail' repeat_call.pk %}">{{ repeat_call.call_id }}</a></td>
+              <td><a href="{% url 'browser:protein-detail' repeat_call.protein.pk %}">{{ repeat_call.protein.protein_name }}</a></td>
+              <td>{{ repeat_call.protein.gene_symbol|default:"-" }}</td>
+              <td><a href="{% url 'browser:genome-detail' repeat_call.genome.pk %}">{{ repeat_call.genome.accession }}</a></td>
+              <td>
+                <a href="{% url 'browser:taxon-detail' repeat_call.taxon.pk %}?run={{ repeat_call.pipeline_run.run_id|urlencode }}">
+                  {{ repeat_call.taxon.taxon_name }}
+                </a>
+              </td>
+              <td>{{ repeat_call.method }}</td>
+              <td>{{ repeat_call.repeat_residue }}</td>
+              <td>{{ repeat_call.length }}</td>
+              <td>{{ repeat_call.purity }}</td>
+              <td><a href="{% url 'browser:run-detail' repeat_call.pipeline_run.pk %}">{{ repeat_call.pipeline_run.run_id }}</a></td>
+            </tr>
+          {% endif %}
         {% empty %}
           <tr>
-            <td colspan="10" class="empty-cell">No repeat calls matched these filters.</td>
+            <td colspan="10" class="empty-cell">
+              {% if current_mode == "merged" %}
+                No merged repeat-call groups matched these filters.
+              {% else %}
+                No repeat calls matched these filters.
+              {% endif %}
+            </td>
           </tr>
         {% endfor %}
       </tbody>

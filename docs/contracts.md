@@ -264,6 +264,81 @@ Rules:
 
 ---
 
+## Cross-run merged view contract
+
+### Purpose
+
+This contract defines how multiple imported runs may be collapsed for merged browser
+views and merged summaries.
+
+It applies to the Django/Postgres web layer only.
+
+It does not change the canonical published TSV artifacts.
+
+### Core rules
+
+- imported biological rows remain run-scoped and immutable after import
+- cross-run merge logic must be derived and read-only
+- never upsert one run’s `Genome`, `Sequence`, `Protein`, or `RepeatCall` rows into another run
+- merged results must be deterministic: the same source rows must produce the same merged rows regardless of import order
+- every merged row must retain links back to all contributing source rows and source runs
+
+### Genome merge contract
+
+Merged genome grouping unit:
+
+- one merged genome group per non-empty `accession`
+
+Rules:
+
+- all imported `Genome` rows with the same `accession` belong to the same merged genome group
+- `accession` is a grouping key, not a destructive upsert key
+- grouped genome rows must remain individually browsable by source run
+
+### Exact repeat-call collapse contract
+
+Merged repeat-call collapse is exact-match only.
+
+Exact merged call fingerprint:
+
+- `accession`
+- `protein_name`
+- `protein_length`
+- `method`
+- `start`
+- `end`
+- `repeat_residue`
+- `length`
+- normalized `purity`
+
+Rules:
+
+- source rows with identical exact-call fingerprints collapse to one merged call record
+- rows differing on any fingerprint field remain distinct merged call records
+- `normalized purity` means the published numeric value compared through one canonical decimal representation, not raw binary float identity
+- `aa_sequence` remains source provenance and may be displayed or inspected, but does not control cross-run collapse
+- non-fingerprint fields may be displayed from source rows, but must not control collapse unless added to this contract explicitly
+
+### Conflict handling
+
+Rules:
+
+- if grouped source rows disagree on fields outside the collapse fingerprint, the disagreement must remain attributable to the source rows
+- merged views may expose explicit conflict flags or source-side detail panels
+- merged views must not silently choose “last imported wins”
+
+### Percentage and denominator rules
+
+Rules:
+
+- run-scoped percentages are computed only from one run’s imported rows
+- cross-run percentages are computed only from the derived merged layer
+- raw rows from multiple runs must not be summed directly when the same `accession` may appear more than once
+- denominators such as analyzed protein count collapse once per merged genome group, not once per source row
+- if grouped genome rows disagree on denominator fields such as analyzed protein count, the merged layer must surface that disagreement explicitly rather than silently overwriting one value with another
+
+---
+
 ## Summary table contract
 
 ### Output: `summary_by_taxon.tsv`

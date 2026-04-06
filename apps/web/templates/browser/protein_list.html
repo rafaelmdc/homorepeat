@@ -17,7 +17,15 @@
     <aside class="landing-aside">
       <p class="sheet-label">Current scope</p>
       <p class="mb-2">
-        {% if current_run %}
+        {% if current_mode == "merged" %}
+          {% if current_run %}
+            Run <strong>{{ current_run.run_id }}</strong>{% if selected_branch_taxon %}, branch <strong>{{ selected_branch_taxon.taxon_name }}</strong>{% endif %}, using merged protein groups.
+          {% elif selected_branch_taxon %}
+            Branch <strong>{{ selected_branch_taxon.taxon_name }}</strong> across merged protein groups.
+          {% else %}
+            Browsing merged protein groups across imported runs.
+          {% endif %}
+        {% elif current_run %}
           Run <strong>{{ current_run.run_id }}</strong>{% if selected_branch_taxon %}, branch <strong>{{ selected_branch_taxon.taxon_name }}</strong>{% endif %}.
         {% elif selected_branch_taxon %}
           Branch <strong>{{ selected_branch_taxon.taxon_name }}</strong> across imported proteins.
@@ -39,6 +47,7 @@
     {% if current_genome %}
       <input type="hidden" name="genome" value="{{ current_genome }}">
     {% endif %}
+    <input type="hidden" name="mode" value="{{ current_mode }}">
     <div class="col-lg-3">
       <label class="form-label" for="id_q">Search</label>
       <input class="form-control" id="id_q" type="text" name="q" value="{{ current_query }}" placeholder="Protein name or ID">
@@ -109,9 +118,16 @@
       </select>
     </div>
     <div class="col-12">
-      <div class="filter-actions">
-        <button class="btn btn-primary" type="submit">Apply</button>
-        <a class="btn btn-outline-secondary" href="{% url 'browser:protein-list' %}">Reset</a>
+      <div class="filter-toolbar">
+        <div class="mode-switch">
+          <span class="mode-switch-label">Mode</span>
+          <button class="btn {% if current_mode == 'run' %}btn-primary{% else %}btn-outline-secondary{% endif %}" type="submit" name="mode" value="run">Run</button>
+          <button class="btn {% if current_mode == 'merged' %}btn-primary{% else %}btn-outline-secondary{% endif %}" type="submit" name="mode" value="merged">Merged</button>
+        </div>
+        <div class="filter-actions">
+          <button class="btn btn-primary" type="submit">Apply</button>
+          <a class="btn btn-outline-secondary" href="{% url 'browser:protein-list' %}{% if current_mode == 'merged' %}?mode=merged{% endif %}">Reset</a>
+        </div>
       </div>
     </div>
   </form>
@@ -120,44 +136,75 @@
 <section class="surface-card surface-card-wide">
   <div class="section-header">
     <div>
-      <p class="section-kicker mb-2">Protein inventory</p>
-      <h2>{{ page_obj.paginator.count }} protein{{ page_obj.paginator.count|pluralize }}</h2>
+      <p class="section-kicker mb-2">{% if current_mode == "merged" %}Merged protein inventory{% else %}Protein inventory{% endif %}</p>
+      <h2>
+        {{ page_obj.paginator.count }}
+        {% if current_mode == "merged" %}protein group{{ page_obj.paginator.count|pluralize }}{% else %}protein{{ page_obj.paginator.count|pluralize }}{% endif %}
+      </h2>
     </div>
   </div>
 
   <div class="table-responsive">
     <table class="table align-middle mb-0 data-table">
       <thead>
-        <tr>
-          <th>Protein</th>
-          <th>Gene</th>
-          <th>Genome</th>
-          <th>Taxon</th>
-          <th>Run</th>
-          <th>Repeat calls</th>
-        </tr>
+        {% if current_mode == "merged" %}
+          <tr>
+            <th>Protein</th>
+            <th>Gene</th>
+            <th>Accession</th>
+            <th>Source runs</th>
+            <th>Source proteins</th>
+            <th>Collapsed calls</th>
+          </tr>
+        {% else %}
+          <tr>
+            <th>Protein</th>
+            <th>Gene</th>
+            <th>Genome</th>
+            <th>Taxon</th>
+            <th>Run</th>
+            <th>Repeat calls</th>
+          </tr>
+        {% endif %}
       </thead>
       <tbody>
         {% for protein in proteins %}
-          <tr>
-            <td><a href="{% url 'browser:protein-detail' protein.pk %}">{{ protein.protein_name }}</a></td>
-            <td>{{ protein.gene_symbol|default:"-" }}</td>
-            <td><a href="{% url 'browser:genome-detail' protein.genome.pk %}">{{ protein.genome.accession }}</a></td>
-            <td>
-              <a href="{% url 'browser:taxon-detail' protein.taxon.pk %}?run={{ protein.pipeline_run.run_id|urlencode }}">
-                {{ protein.taxon.taxon_name }}
-              </a>
-            </td>
-            <td><a href="{% url 'browser:run-detail' protein.pipeline_run.pk %}">{{ protein.pipeline_run.run_id }}</a></td>
-            <td>
-              <a href="{% url 'browser:repeatcall-list' %}?run={{ protein.pipeline_run.run_id|urlencode }}&amp;protein={{ protein.protein_id|urlencode }}">
-                {{ protein.repeat_calls_count }}
-              </a>
-            </td>
-          </tr>
+          {% if current_mode == "merged" %}
+            <tr>
+              <td><a href="{% url 'browser:accession-detail' protein.accession %}">{{ protein.protein_name }}</a></td>
+              <td>{{ protein.gene_symbol_label }}</td>
+              <td><a href="{% url 'browser:accession-detail' protein.accession %}">{{ protein.accession }}</a></td>
+              <td>{{ protein.source_runs_count }}</td>
+              <td>{{ protein.source_proteins_count }}</td>
+              <td>{{ protein.collapsed_repeat_calls_count }}</td>
+            </tr>
+          {% else %}
+            <tr>
+              <td><a href="{% url 'browser:protein-detail' protein.pk %}">{{ protein.protein_name }}</a></td>
+              <td>{{ protein.gene_symbol|default:"-" }}</td>
+              <td><a href="{% url 'browser:genome-detail' protein.genome.pk %}">{{ protein.genome.accession }}</a></td>
+              <td>
+                <a href="{% url 'browser:taxon-detail' protein.taxon.pk %}?run={{ protein.pipeline_run.run_id|urlencode }}">
+                  {{ protein.taxon.taxon_name }}
+                </a>
+              </td>
+              <td><a href="{% url 'browser:run-detail' protein.pipeline_run.pk %}">{{ protein.pipeline_run.run_id }}</a></td>
+              <td>
+                <a href="{% url 'browser:repeatcall-list' %}?run={{ protein.pipeline_run.run_id|urlencode }}&amp;protein={{ protein.protein_id|urlencode }}">
+                  {{ protein.repeat_calls_count }}
+                </a>
+              </td>
+            </tr>
+          {% endif %}
         {% empty %}
           <tr>
-            <td colspan="6" class="empty-cell">No proteins matched these filters.</td>
+            <td colspan="{% if current_mode == 'merged' %}6{% else %}6{% endif %}" class="empty-cell">
+              {% if current_mode == "merged" %}
+                No merged protein groups matched these filters.
+              {% else %}
+                No proteins matched these filters.
+              {% endif %}
+            </td>
           </tr>
         {% endfor %}
       </tbody>

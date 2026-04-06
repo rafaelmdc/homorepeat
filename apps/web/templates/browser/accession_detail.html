@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}{{ accession }}{% endblock %}
+{% block body_class %}accession-detail-page{% endblock %}
+
+{% block content %}
+<section class="landing-band mb-4">
+  <div class="landing-band-shell">
+    <div class="landing-copy">
+      <span class="section-kicker mb-3">Merged accession</span>
+      <h1 class="landing-title mb-3">{{ accession }}</h1>
+      <p class="landing-lead mb-3">
+        Derived cross-run view over {{ source_genomes_count }} imported genome{{ source_genomes_count|pluralize }}
+        from {{ source_runs_count }} run{{ source_runs_count|pluralize }}, keeping all source rows intact.
+      </p>
+      <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-dark" href="{{ accession_list_url }}">Back to accession analytics</a>
+        <a class="btn btn-brand" href="{{ genome_list_url }}">Open source genomes</a>
+      </div>
+    </div>
+    <aside class="landing-aside">
+      <p class="sheet-label">Merged summary</p>
+      <p class="mb-2">{{ collapsed_repeat_calls_count }} collapsed repeat call{{ collapsed_repeat_calls_count|pluralize }}</p>
+      <p class="mb-2">{{ duplicate_source_repeat_calls_count }} duplicate source call{{ duplicate_source_repeat_calls_count|pluralize }} removed</p>
+      <p class="mb-2">{{ merged_repeat_bearing_proteins_count }} derived repeat-bearing protein{{ merged_repeat_bearing_proteins_count|pluralize }}</p>
+      {% if has_analyzed_protein_conflict %}
+        <p class="mb-0">Analyzed protein count conflict: {{ analyzed_protein_counts|join:", " }}</p>
+      {% else %}
+        <p class="mb-0">{{ merged_analyzed_protein_count }} analyzed protein{{ merged_analyzed_protein_count|pluralize }}</p>
+      {% endif %}
+    </aside>
+  </div>
+</section>
+
+<section class="row g-4 mb-4">
+  <div class="col-sm-6 col-xl-3">
+    <article class="card h-100 border-0 shadow-sm stat-card">
+      <div class="card-body">
+        <p class="text-uppercase text-secondary small mb-2">Source runs</p>
+        <p class="display-5 fw-semibold mb-3">{{ source_runs_count }}</p>
+        <p class="text-secondary mb-0">Imported runs contributing genome rows to this accession group.</p>
+      </div>
+    </article>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <article class="card h-100 border-0 shadow-sm stat-card">
+      <div class="card-body">
+        <p class="text-uppercase text-secondary small mb-2">Raw repeat calls</p>
+        <p class="display-5 fw-semibold mb-3">{{ source_repeat_calls_count }}</p>
+        <p class="text-secondary mb-0">Source repeat calls before any exact cross-run collapse.</p>
+      </div>
+    </article>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <article class="card h-100 border-0 shadow-sm stat-card">
+      <div class="card-body">
+        <p class="text-uppercase text-secondary small mb-2">Collapsed repeat calls</p>
+        <p class="display-5 fw-semibold mb-3">{{ collapsed_repeat_calls_count }}</p>
+        <p class="text-secondary mb-0">Exact-match calls after derived fingerprint collapse.</p>
+      </div>
+    </article>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <article class="card h-100 border-0 shadow-sm stat-card">
+      <div class="card-body">
+        <p class="text-uppercase text-secondary small mb-2">Repeat-bearing proteins</p>
+        <p class="display-5 fw-semibold mb-3">{{ merged_repeat_bearing_proteins_count }}</p>
+        <p class="text-secondary mb-0">
+          {% if repeat_bearing_protein_percentage is not None %}
+            {{ repeat_bearing_protein_percentage|floatformat:2 }}% of analyzed proteins after denominator-safe collapse.
+          {% else %}
+            Percentage withheld because the analyzed protein denominator conflicts across runs.
+          {% endif %}
+        </p>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section class="row g-4 mb-4">
+  <div class="col-lg-6">
+    <div class="surface-card info-sheet h-100">
+      <p class="sheet-label">Source runs</p>
+      <div class="d-flex flex-wrap gap-2 mt-3">
+        {% for pipeline_run in source_runs %}
+          <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:run-detail' pipeline_run.pk %}">{{ pipeline_run.run_id }}</a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="surface-card info-sheet h-100">
+      <p class="sheet-label">Source taxa</p>
+      <div class="d-flex flex-wrap gap-2 mt-3">
+        {% for taxon in source_taxa %}
+          <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:taxon-detail' taxon.pk %}">{{ taxon.taxon_name }}</a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="surface-card surface-card-wide mb-4">
+  <div class="section-header">
+    <div>
+      <p class="section-kicker mb-2">Source genomes</p>
+      <h2>Imported genome rows</h2>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table align-middle mb-0 data-table">
+      <thead>
+        <tr>
+          <th>Run</th>
+          <th>Genome</th>
+          <th>Taxon</th>
+          <th>Analyzed proteins</th>
+          <th>Repeat-linked proteins</th>
+          <th>Repeat calls</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for genome in source_genomes %}
+          <tr>
+            <td><a href="{% url 'browser:run-detail' genome.pipeline_run.pk %}">{{ genome.pipeline_run.run_id }}</a></td>
+            <td><a href="{% url 'browser:genome-detail' genome.pk %}">{{ genome.genome_name }}</a></td>
+            <td><a href="{% url 'browser:taxon-detail' genome.taxon.pk %}?run={{ genome.pipeline_run.run_id|urlencode }}">{{ genome.taxon.taxon_name }}</a></td>
+            <td>{{ genome.analyzed_protein_count }}</td>
+            <td>{{ genome.proteins_count }}</td>
+            <td>{{ genome.repeat_calls_count }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="surface-card surface-card-wide">
+  <div class="section-header">
+    <div>
+      <p class="section-kicker mb-2">Collapsed repeat calls</p>
+      <h2>Exact fingerprint groups</h2>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table align-middle mb-0 data-table">
+      <thead>
+        <tr>
+          <th>Protein</th>
+          <th>Method</th>
+          <th>Coordinates</th>
+          <th>Residue</th>
+          <th>Length</th>
+          <th>Purity</th>
+          <th>Source rows</th>
+          <th>Supporting calls</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for call_group in collapsed_call_groups %}
+          <tr>
+            <td>{{ call_group.protein_name }} <span class="small text-secondary">({{ call_group.protein_length }} aa)</span></td>
+            <td>{{ call_group.method }}</td>
+            <td>{{ call_group.start }}-{{ call_group.end }}</td>
+            <td>{{ call_group.repeat_residue }}</td>
+            <td>{{ call_group.length }}</td>
+            <td>{{ call_group.normalized_purity }}</td>
+            <td>{{ call_group.source_count }}</td>
+            <td>
+              <div class="d-flex flex-wrap gap-2">
+                {% for repeat_call in call_group.source_repeat_calls %}
+                  <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:repeatcall-detail' repeat_call.pk %}">
+                    {{ repeat_call.pipeline_run.run_id }}:{{ repeat_call.call_id }}
+                  </a>
+                {% endfor %}
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="8" class="empty-cell">No repeat calls were linked to this accession group.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

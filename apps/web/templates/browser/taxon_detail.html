@@ -12,9 +12,10 @@
       <p class="landing-lead mb-3">
         Taxonomy ID {{ taxon.taxon_id }}{% if taxon.rank %}, rank <strong>{{ taxon.rank }}</strong>{% endif %}.
         {% if current_run %}Scoped to run <strong>{{ current_run.run_id }}</strong>.{% endif %}
+        {% if current_mode == "merged" %}Using merged branch summaries and derived grouped views.{% endif %}
       </p>
       <div class="d-flex flex-wrap gap-2">
-        <a class="btn btn-outline-dark" href="{% url 'browser:taxon-list' %}{% if current_run_id %}?run={{ current_run_id|urlencode }}{% endif %}">Back to taxa</a>
+        <a class="btn btn-outline-dark" href="{% url 'browser:taxon-list' %}{% if current_run_id or current_mode == 'merged' %}?{% if current_run_id %}run={{ current_run_id|urlencode }}{% if current_mode == 'merged' %}&amp;{% endif %}{% endif %}{% if current_mode == 'merged' %}mode=merged{% endif %}{% endif %}">Back to taxa</a>
         <a class="btn btn-brand" href="{{ genome_branch_url }}">Open branch genomes</a>
         <a class="btn btn-outline-dark" href="{{ protein_branch_url }}">Open branch proteins</a>
         <a class="btn btn-outline-dark" href="{{ repeatcall_branch_url }}">Open branch calls</a>
@@ -23,9 +24,18 @@
     <aside class="landing-aside">
       <p class="sheet-label">Branch summary</p>
       <p class="mb-2">{{ descendant_count }} descendant taxon{{ descendant_count|pluralize }}</p>
-      <p class="mb-2">{{ branch_genomes_count }} genome{{ branch_genomes_count|pluralize }}</p>
-      <p class="mb-2">{{ branch_proteins_count }} protein{{ branch_proteins_count|pluralize }}</p>
-      <p class="mb-0">{{ branch_repeat_calls_count }} repeat call{{ branch_repeat_calls_count|pluralize }}</p>
+      <p class="mb-2">
+        {{ branch_genomes_count }}
+        {% if current_mode == "merged" %}accession group{{ branch_genomes_count|pluralize }}{% else %}genome{{ branch_genomes_count|pluralize }}{% endif %}
+      </p>
+      <p class="mb-2">
+        {{ branch_proteins_count }}
+        {% if current_mode == "merged" %}protein group{{ branch_proteins_count|pluralize }}{% else %}protein{{ branch_proteins_count|pluralize }}{% endif %}
+      </p>
+      <p class="mb-0">
+        {{ branch_repeat_calls_count }}
+        {% if current_mode == "merged" %}collapsed call group{{ branch_repeat_calls_count|pluralize }}{% else %}repeat call{{ branch_repeat_calls_count|pluralize }}{% endif %}
+      </p>
     </aside>
   </div>
 </section>
@@ -39,7 +49,7 @@
           {% if node.ancestor.pk == taxon.pk %}
             <span class="badge rounded-pill status-badge">{{ node.ancestor.taxon_name }}</span>
           {% else %}
-            <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:taxon-detail' node.ancestor.pk %}{% if current_run_id %}?run={{ current_run_id|urlencode }}{% endif %}">
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:taxon-detail' node.ancestor.pk %}{% if current_run_id or current_mode == 'merged' %}?{% if current_run_id %}run={{ current_run_id|urlencode }}{% if current_mode == 'merged' %}&amp;{% endif %}{% endif %}{% if current_mode == 'merged' %}mode=merged{% endif %}{% endif %}">
               {{ node.ancestor.taxon_name }}
             </a>
           {% endif %}
@@ -54,7 +64,7 @@
       {% if child_taxa %}
         <div class="d-flex flex-wrap gap-2">
           {% for child_taxon in child_taxa %}
-            <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:taxon-detail' child_taxon.pk %}{% if current_run_id %}?run={{ current_run_id|urlencode }}{% endif %}">
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:taxon-detail' child_taxon.pk %}{% if current_run_id or current_mode == 'merged' %}?{% if current_run_id %}run={{ current_run_id|urlencode }}{% if current_mode == 'merged' %}&amp;{% endif %}{% endif %}{% if current_mode == 'merged' %}mode=merged{% endif %}{% endif %}">
               {{ child_taxon.taxon_name }}
             </a>
           {% endfor %}
@@ -69,34 +79,58 @@
 <section class="surface-card surface-card-wide">
   <div class="section-header">
     <div>
-      <p class="section-kicker mb-2">Linked genomes</p>
-      <h2>Genomes in this branch</h2>
+      <p class="section-kicker mb-2">{% if current_mode == "merged" %}Linked accession groups{% else %}Linked genomes{% endif %}</p>
+      <h2>{% if current_mode == "merged" %}Merged accessions in this branch{% else %}Genomes in this branch{% endif %}</h2>
     </div>
   </div>
 
   <div class="table-responsive">
     <table class="table align-middle mb-0 data-table">
       <thead>
-        <tr>
-          <th>Accession</th>
-          <th>Genome</th>
-          <th>Taxon</th>
-          <th>Run</th>
-        </tr>
+        {% if current_mode == "merged" %}
+          <tr>
+            <th>Accession</th>
+            <th>Source genomes</th>
+            <th>Source runs</th>
+            <th>Raw repeat calls</th>
+          </tr>
+        {% else %}
+          <tr>
+            <th>Accession</th>
+            <th>Genome</th>
+            <th>Taxon</th>
+            <th>Run</th>
+          </tr>
+        {% endif %}
       </thead>
       <tbody>
-        {% for genome in linked_genomes %}
-          <tr>
-            <td><a href="{% url 'browser:genome-detail' genome.pk %}">{{ genome.accession }}</a></td>
-            <td>{{ genome.genome_name }}</td>
-            <td>{{ genome.taxon.taxon_name }}</td>
-            <td><a href="{% url 'browser:run-detail' genome.pipeline_run.pk %}">{{ genome.pipeline_run.run_id }}</a></td>
-          </tr>
-        {% empty %}
-          <tr>
-            <td colspan="4" class="empty-cell">No genomes were linked to this branch under the current scope.</td>
-          </tr>
-        {% endfor %}
+        {% if current_mode == "merged" %}
+          {% for accession_group in linked_accessions %}
+            <tr>
+              <td><a href="{% url 'browser:accession-detail' accession_group.accession %}">{{ accession_group.accession }}</a></td>
+              <td>{{ accession_group.source_genomes_count }}</td>
+              <td>{{ accession_group.source_runs_count }}</td>
+              <td>{{ accession_group.raw_repeat_calls_count }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="4" class="empty-cell">No merged accession groups were linked to this branch under the current scope.</td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          {% for genome in linked_genomes %}
+            <tr>
+              <td><a href="{% url 'browser:genome-detail' genome.pk %}">{{ genome.accession }}</a></td>
+              <td>{{ genome.genome_name }}</td>
+              <td>{{ genome.taxon.taxon_name }}</td>
+              <td><a href="{% url 'browser:run-detail' genome.pipeline_run.pk %}">{{ genome.pipeline_run.run_id }}</a></td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="4" class="empty-cell">No genomes were linked to this branch under the current scope.</td>
+            </tr>
+          {% endfor %}
+        {% endif %}
       </tbody>
     </table>
   </div>

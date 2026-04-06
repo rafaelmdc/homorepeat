@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}Merged Accession Analytics{% endblock %}
+{% block body_class %}accession-list-page{% endblock %}
+
+{% block content %}
+<section class="landing-band mb-4">
+  <div class="landing-band-shell">
+    <div class="landing-copy">
+      <span class="section-kicker mb-3">Merged accession analytics</span>
+      <h1 class="landing-title mb-3">Derived merged summaries over accession groups and collapsed repeat calls.</h1>
+      <p class="landing-lead mb-0">
+        This page summarizes the merged layer directly: accession groups are derived by shared accession,
+        repeat calls collapse on the documented fingerprint, and percentages use only conflict-safe analyzed-protein denominators.
+      </p>
+    </div>
+    <aside class="landing-aside">
+      <p class="sheet-label">Current scope</p>
+      <p class="mb-2">
+        {% if current_run %}
+          Run <strong>{{ current_run.run_id }}</strong>
+        {% else %}
+          All imported runs
+        {% endif %}
+      </p>
+      <p class="mb-0">
+        {% if selected_branch_taxon %}
+          Branch <strong>{{ selected_branch_taxon.taxon_name }}</strong>
+        {% else %}
+          All taxonomy branches
+        {% endif %}
+      </p>
+    </aside>
+  </div>
+</section>
+
+<section class="filter-card mb-4">
+  <form class="row g-3 align-items-end" method="get">
+    <div class="col-md-6 col-lg-3">
+      <label class="form-label" for="id_q">Search</label>
+      <input class="form-control" id="id_q" type="text" name="q" value="{{ current_query }}" placeholder="Accession or genome name">
+    </div>
+    <div class="col-md-6 col-lg-3">
+      <label class="form-label" for="id_run">Run</label>
+      <select class="form-select" id="id_run" name="run">
+        <option value="">All runs</option>
+        {% for run in run_choices %}
+          <option value="{{ run.run_id }}" {% if current_run_id == run.run_id %}selected{% endif %}>{{ run.run_id }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-6 col-lg-3">
+      <label class="form-label" for="id_branch">Branch taxon</label>
+      <select class="form-select" id="id_branch" name="branch">
+        <option value="">All branches</option>
+        {% for branch_taxon in branch_choices %}
+          <option value="{{ branch_taxon.pk }}" {% if current_branch == branch_taxon.pk|stringformat:"s" %}selected{% endif %}>{{ branch_taxon.taxon_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-6 col-lg-3">
+      <label class="form-label" for="id_order_by">Sort</label>
+      <select class="form-select" id="id_order_by" name="order_by">
+        <option value="">Default</option>
+        {% for option in ordering_options %}
+          <option value="{{ option.value }}" {% if current_order_by == option.value %}selected{% endif %}>{{ option.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12">
+      <div class="filter-actions">
+        <button class="btn btn-primary" type="submit">Apply</button>
+        <a class="btn btn-outline-secondary" href="{% url 'browser:accession-list' %}">Reset</a>
+      </div>
+    </div>
+  </form>
+</section>
+
+<section class="row g-4 mb-4">
+  <div class="col-sm-6 col-xl-3">
+    <article class="card h-100 border-0 shadow-sm stat-card">
+      <div class="card-body">
+        <p class="text-uppercase text-secondary small mb-2">Accession groups</p>
+        <p class="display-5 fw-semibold mb-3">{{ summary.accession_groups_count }}</p>
+        <p class="text-secondary mb-0">{{ summary.source_genomes_count }} source genome row{{ summary.source_genomes_count|pluralize }} across {{ summary.source_runs_count }} run{{ summary.source_runs_count|pluralize }}.</p>
+      </div>
+    </article>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <article class="card h-100 border-0 shadow-sm stat-card">
+      <div class="card-body">
+        <p class="text-uppercase text-secondary small mb-2">Collapsed repeat calls</p>
+        <p class="display-5 fw-semibold mb-3">{{ summary.collapsed_repeat_calls_count }}</p>
+        <p class="text-secondary mb-0">{{ summary.duplicate_source_repeat_calls_count }} duplicate source call{{ summary.duplicate_source_repeat_calls_count|pluralize }} removed from {{ summary.source_repeat_calls_count }} raw call{{ summary.source_repeat_calls_count|pluralize }}.</p>
+      </div>
+    </article>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <article class="card h-100 border-0 shadow-sm stat-card">
+      <div class="card-body">
+        <p class="text-uppercase text-secondary small mb-2">Repeat-bearing proteins</p>
+        <p class="display-5 fw-semibold mb-3">{{ summary.merged_repeat_bearing_proteins_count }}</p>
+        <p class="text-secondary mb-0">
+          {% if summary.repeat_bearing_protein_percentage is not None %}
+            {{ summary.safe_repeat_bearing_proteins_count }} / {{ summary.analyzed_proteins_total }} = {{ summary.repeat_bearing_protein_percentage|floatformat:2 }}% across conflict-safe accessions.
+          {% else %}
+            Percentage withheld because no conflict-safe analyzed-protein denominator is available.
+          {% endif %}
+        </p>
+      </div>
+    </article>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <article class="card h-100 border-0 shadow-sm stat-card">
+      <div class="card-body">
+        <p class="text-uppercase text-secondary small mb-2">Denominator conflicts</p>
+        <p class="display-5 fw-semibold mb-3">{{ summary.conflict_accessions_count }}</p>
+        <p class="text-secondary mb-0">{{ summary.safe_accessions_count }} accession group{{ summary.safe_accessions_count|pluralize }} currently contribute to merged percentages.</p>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section class="row g-4 mb-4">
+  <div class="col-lg-6">
+    <div class="surface-card surface-card-wide h-100">
+      <div class="section-header">
+        <div>
+          <p class="section-kicker mb-2">Collapsed calls</p>
+          <h2>By method</h2>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0 data-table">
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Collapsed calls</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in summary.method_summary %}
+              <tr>
+                <td>{{ row.label }}</td>
+                <td>{{ row.count }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="2" class="empty-cell">No collapsed repeat calls matched these filters.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="surface-card surface-card-wide h-100">
+      <div class="section-header">
+        <div>
+          <p class="section-kicker mb-2">Collapsed calls</p>
+          <h2>By residue</h2>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0 data-table">
+          <thead>
+            <tr>
+              <th>Residue</th>
+              <th>Collapsed calls</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in summary.residue_summary %}
+              <tr>
+                <td>{{ row.label }}</td>
+                <td>{{ row.count }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="2" class="empty-cell">No collapsed repeat calls matched these filters.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="surface-card surface-card-wide">
+  <div class="section-header">
+    <div>
+      <p class="section-kicker mb-2">Supporting accession table</p>
+      <h2>{{ page_obj.paginator.count }} accession group{{ page_obj.paginator.count|pluralize }}</h2>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table align-middle mb-0 data-table">
+      <thead>
+        <tr>
+          <th>Accession</th>
+          <th>Source genomes</th>
+          <th>Source runs</th>
+          <th>Raw calls</th>
+          <th>Collapsed calls</th>
+          <th>Derived proteins</th>
+          <th>Analyzed proteins</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for accession_group in accession_groups %}
+          <tr>
+            <td><a href="{% url 'browser:accession-detail' accession_group.accession %}">{{ accession_group.accession }}</a></td>
+            <td>{{ accession_group.source_genomes_count }}</td>
+            <td>{{ accession_group.source_runs_count }}</td>
+            <td>
+              {{ accession_group.raw_repeat_calls_count }}
+              {% if accession_group.duplicate_source_repeat_calls_count %}
+                <span class="small text-secondary">(-{{ accession_group.duplicate_source_repeat_calls_count }} duplicate{{ accession_group.duplicate_source_repeat_calls_count|pluralize }})</span>
+              {% endif %}
+            </td>
+            <td>{{ accession_group.collapsed_repeat_calls_count }}</td>
+            <td>
+              {{ accession_group.merged_repeat_bearing_proteins_count }}
+              {% if accession_group.repeat_bearing_protein_percentage is not None %}
+                <span class="small text-secondary">({{ accession_group.repeat_bearing_protein_percentage|floatformat:2 }}%)</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if accession_group.has_analyzed_protein_conflict %}
+                <span class="badge rounded-pill text-bg-light border status-badge">Conflict</span>
+                <span class="small text-secondary">{{ accession_group.analyzed_protein_min }}-{{ accession_group.analyzed_protein_max }}</span>
+              {% else %}
+                {{ accession_group.merged_analyzed_protein_count }}
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="7" class="empty-cell">No merged accession groups matched these filters.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% include "browser/includes/pagination.html" %}
+</section>
+{% endblock %}

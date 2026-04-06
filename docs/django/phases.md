@@ -327,79 +327,87 @@ Exit criteria:
 
 ## Phase 6: Merge-Ready Views
 
-### Slice 6.1: Cross-run accession browse support
+### Slice 6.1: Cross-run merge contract and grouped browse support
 
 Goal:
-- prove the schema supports non-destructive cross-run browsing without changing the import model
+- implement reproducible cross-run grouping without changing the import model
 
 Scope:
 - add accession-centered query helpers
 - add a simple accession search or grouped accession page
-- show all imported `Genome` rows that share an accession across runs
+- define merged genome groups by shared `accession`
+- show all imported `Genome` rows that contribute to one merged accession group
 - preserve links back to each source run
 
 Required behavior:
 - merged browsing is read-only and derived
-- no destructive deduplication
+- no destructive deduplication or cross-run upsert of imported biological rows
 - provenance remains visible on every grouped record
+- grouping is deterministic and independent of import order
 
 Exit criteria:
-- one accession present in multiple runs can be browsed as a grouped concept
+- one accession present in multiple runs can be browsed as one merged group with visible source rows
 - merge-readiness tests pass
 
-### Slice 6.2: Optional merged rollups
+### Slice 6.2: Derived collapsed summaries and percentages
 
 Goal:
-- add the first derived merged summaries once run-first browsing is stable
+- add the first reproducible merged summaries once accession grouping is stable
 
 Scope:
+- exact repeat-call collapse using the documented cross-run fingerprint
+- merged percentages and rollups computed from collapsed merged groups, not raw multi-run sums
 - accession-based summary queries
+- `/browser/accessions/` acts as the merged summary analytics page
 - optional materialized summaries if plain ORM queries are not enough
 - explicit distinction in the UI between:
   - run-scoped views
   - merged accession views
+  - merged collapsed summaries
 
 Out of scope:
 - no mutation of canonical imported rows
+- no “last imported wins” overwrite behavior
 
 Exit criteria:
 - merged views are additive and provenance-safe
+- merged percentages are computed from the derived collapsed layer
 - run-scoped and merged summaries can coexist without ambiguity
 
-## Phase 7: Pipeline-to-Web Integration
+## Phase 7: Launch Nextflow from Django
 
-### Slice 7.1: Supported post-run helper
+### Slice 7.1: Stable workflow submission contract
 
 Goal:
-- connect workflow completion to the Django import path without coupling Nextflow to direct DB writes
+- support launching the workflow for a specific set of accession IDs from outside Nextflow
 
 Scope:
-- add a helper script or documented command that imports a successful `publish/` root into Django
-- keep this outside Nextflow processes
-- document operator usage clearly
+- define the official input contract for accession-driven runs
+- define the command used to launch Nextflow
+- define run ID, output folder, and log behavior
+- keep workflow execution independent from Django internals
 
 Required behavior:
-- the helper uses the same Django import command
-- failure to import does not invalidate the workflow run itself
+- accession IDs can be submitted as supported workflow input
+- the workflow produces normal run outputs in a predictable location
+- Nextflow does not write directly to Django or Postgres
+- the existing import flow remains unchanged
 
 Exit criteria:
-- operators can run pipeline then import with one supported follow-up step
+- there is one documented and supported way to launch the workflow for selected accession IDs
 
-### Slice 7.2: Optional wrapper integration
+### Slice 7.2: Django execution wrapper
 
 Goal:
-- reduce manual steps after the browser and imports are already stable
+- let the website/backend trigger the workflow using the supported submission contract
 
 Scope:
-- optionally add a wrapper flag to trigger web import after a successful run
-- keep the feature opt-in
-- surface clear logging and failure handling
-
-Out of scope:
-- no direct Postgres writes from Nextflow
+- add a Django-side wrapper or management command that launches Nextflow with accession IDs
+- expose clear logging, run status, and failure reporting
+- keep the integration opt-in and loosely coupled
 
 Exit criteria:
-- workflow-to-web handoff is smoother, but still contract-first and loosely coupled
+- Django can trigger accession-based runs without changing the workflow-to-output contract
 
 ## Recommended Implementation Order
 

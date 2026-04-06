@@ -17,7 +17,15 @@
     <aside class="landing-aside">
       <p class="sheet-label">Current scope</p>
       <p class="mb-0">
-        {% if current_run %}
+        {% if current_mode == "merged" %}
+          {% if current_run %}
+            Run <strong>{{ current_run.run_id }}</strong>{% if selected_branch_taxon %}, branch <strong>{{ selected_branch_taxon.taxon_name }}</strong>{% endif %}, using merged accession groups.
+          {% elif selected_branch_taxon %}
+            Branch <strong>{{ selected_branch_taxon.taxon_name }}</strong> across merged accession groups.
+          {% else %}
+            Browsing merged accession groups across imported genomes.
+          {% endif %}
+        {% elif current_run %}
           Run <strong>{{ current_run.run_id }}</strong>{% if selected_branch_taxon %}, branch <strong>{{ selected_branch_taxon.taxon_name }}</strong>{% endif %}.
         {% elif selected_branch_taxon %}
           Branch <strong>{{ selected_branch_taxon.taxon_name }}</strong> across imported genomes.
@@ -31,6 +39,7 @@
 
 <section class="filter-card mb-4">
   <form class="row g-3 align-items-end" method="get">
+    <input type="hidden" name="mode" value="{{ current_mode }}">
     <div class="col-md-4 col-lg-3">
       <label class="form-label" for="id_run">Run</label>
       <select class="form-select" id="id_run" name="run">
@@ -67,9 +76,16 @@
       </select>
     </div>
     <div class="col-12">
-      <div class="filter-actions">
-        <button class="btn btn-primary" type="submit">Apply</button>
-        <a class="btn btn-outline-secondary" href="{% url 'browser:genome-list' %}">Reset</a>
+      <div class="filter-toolbar">
+        <div class="mode-switch">
+          <span class="mode-switch-label">Mode</span>
+          <button class="btn {% if current_mode == 'run' %}btn-primary{% else %}btn-outline-secondary{% endif %}" type="submit" name="mode" value="run">Run</button>
+          <button class="btn {% if current_mode == 'merged' %}btn-primary{% else %}btn-outline-secondary{% endif %}" type="submit" name="mode" value="merged">Merged</button>
+        </div>
+        <div class="filter-actions">
+          <button class="btn btn-primary" type="submit">Apply</button>
+          <a class="btn btn-outline-secondary" href="{% url 'browser:genome-list' %}{% if current_mode == 'merged' %}?mode=merged{% endif %}">Reset</a>
+        </div>
       </div>
     </div>
   </form>
@@ -78,40 +94,76 @@
 <section class="surface-card surface-card-wide">
   <div class="section-header">
     <div>
-      <p class="section-kicker mb-2">Genome inventory</p>
-      <h2>{{ page_obj.paginator.count }} genome{{ page_obj.paginator.count|pluralize }}</h2>
+      <p class="section-kicker mb-2">{% if current_mode == "merged" %}Merged accession inventory{% else %}Genome inventory{% endif %}</p>
+      <h2>
+        {{ page_obj.paginator.count }}
+        {% if current_mode == "merged" %}accession group{{ page_obj.paginator.count|pluralize }}{% else %}genome{{ page_obj.paginator.count|pluralize }}{% endif %}
+      </h2>
     </div>
   </div>
 
   <div class="table-responsive">
     <table class="table align-middle mb-0 data-table">
       <thead>
-        <tr>
-          <th>Accession</th>
-          <th>Genome</th>
-          <th>Taxon</th>
-          <th>Run</th>
-          <th>Proteins</th>
-          <th>Repeat calls</th>
-        </tr>
+        {% if current_mode == "merged" %}
+          <tr>
+            <th>Accession</th>
+            <th>Source genomes</th>
+            <th>Source runs</th>
+            <th>Raw repeat calls</th>
+            <th>Analyzed proteins</th>
+          </tr>
+        {% else %}
+          <tr>
+            <th>Accession</th>
+            <th>Genome</th>
+            <th>Taxon</th>
+            <th>Run</th>
+            <th>Proteins</th>
+            <th>Repeat calls</th>
+          </tr>
+        {% endif %}
       </thead>
       <tbody>
         {% for genome in genomes %}
-          <tr>
-            <td><a href="{% url 'browser:genome-detail' genome.pk %}">{{ genome.accession }}</a></td>
-            <td>{{ genome.genome_name }}</td>
-            <td>
-              <a href="{% url 'browser:taxon-detail' genome.taxon.pk %}?run={{ genome.pipeline_run.run_id|urlencode }}">
-                {{ genome.taxon.taxon_name }}
-              </a>
-            </td>
-            <td><a href="{% url 'browser:run-detail' genome.pipeline_run.pk %}">{{ genome.pipeline_run.run_id }}</a></td>
-            <td>{{ genome.proteins_count }}</td>
-            <td>{{ genome.repeat_calls_count }}</td>
-          </tr>
+          {% if current_mode == "merged" %}
+            <tr>
+              <td><a href="{% url 'browser:accession-detail' genome.accession %}">{{ genome.accession }}</a></td>
+              <td>{{ genome.source_genomes_count }}</td>
+              <td>{{ genome.source_runs_count }}</td>
+              <td>{{ genome.raw_repeat_calls_count }}</td>
+              <td>
+                {% if genome.analyzed_protein_min != genome.analyzed_protein_max %}
+                  <span class="badge rounded-pill text-bg-light border status-badge">Conflict</span>
+                  <span class="small text-secondary">{{ genome.analyzed_protein_min }}-{{ genome.analyzed_protein_max }}</span>
+                {% else %}
+                  {{ genome.analyzed_protein_min }}
+                {% endif %}
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td><a href="{% url 'browser:genome-detail' genome.pk %}">{{ genome.accession }}</a></td>
+              <td>{{ genome.genome_name }}</td>
+              <td>
+                <a href="{% url 'browser:taxon-detail' genome.taxon.pk %}?run={{ genome.pipeline_run.run_id|urlencode }}">
+                  {{ genome.taxon.taxon_name }}
+                </a>
+              </td>
+              <td><a href="{% url 'browser:run-detail' genome.pipeline_run.pk %}">{{ genome.pipeline_run.run_id }}</a></td>
+              <td>{{ genome.proteins_count }}</td>
+              <td>{{ genome.repeat_calls_count }}</td>
+            </tr>
+          {% endif %}
         {% empty %}
           <tr>
-            <td colspan="6" class="empty-cell">No genomes matched these filters.</td>
+            <td colspan="{% if current_mode == 'merged' %}5{% else %}6{% endif %}" class="empty-cell">
+              {% if current_mode == "merged" %}
+                No merged accession groups matched these filters.
+              {% else %}
+                No genomes matched these filters.
+              {% endif %}
+            </td>
           </tr>
         {% endfor %}
       </tbody>

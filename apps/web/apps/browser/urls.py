@@ -1,6 +1,8 @@
 from django.urls import path
 
 from .views import (
+    AccessionDetailView,
+    AccessionsListView,
     BrowserHomeView,
     GenomeDetailView,
     GenomeListView,
@@ -19,6 +21,8 @@ app_name = "browser"
 
 urlpatterns = [
     path("", BrowserHomeView.as_view(), name="home"),
+    path("accessions/", AccessionsListView.as_view(), name="accession-list"),
+    path("accessions/<path:accession>/", AccessionDetailView.as_view(), name="accession-detail"),
     path("runs/", RunListView.as_view(), name="run-list"),
     path("runs/<int:pk>/", RunDetailView.as_view(), name="run-detail"),
     path("taxa/", TaxonListView.as_view(), name="taxon-list"),

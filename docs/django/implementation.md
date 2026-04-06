@@ -164,13 +164,35 @@
   - this is not used to collapse imported rows
   - it is used later to build merged query views and rollups
 
+  Exact merged repeat-call fingerprint:
+
+  - accession
+  - protein_name
+  - protein_length
+  - method
+  - start
+  - end
+  - repeat_residue
+  - length
+  - normalized purity
+
+  Merge behavior:
+
+  - collapse across runs only in a derived merged layer
+  - only exact-match call fingerprints collapse
+  - import order must not affect merged results
+  - `aa_sequence` remains source provenance and is not part of the first merged collapse key
+  - if grouped rows disagree on denominator fields such as analyzed protein count, surface the conflict instead of overwriting one row with another
+
   Design decision:
 
-  - future merging is implemented as derived merged views or materialized summaries over accession
+  - future merging is implemented as derived merged views or materialized summaries over accession plus exact call fingerprints
   - imported run rows remain intact
   - browser can later offer both:
       - run view
       - merged accession view
+      - merged collapsed summaries
+  - `/browser/accessions/` is the summary entrypoint for the merged layer and links down into per-accession detail pages
 
   This avoids destructive deduplication and preserves reproducibility.
 
@@ -410,6 +432,8 @@
   - both rows remain queryable by run
   - accession filter can find both rows
   - provenance is preserved on all downstream entities
+  - exact repeat-call fingerprint collapse is deterministic for identical cross-run calls
+  - merged denominator conflicts are surfaced explicitly instead of overwritten silently
 
   ### 14. Acceptance smoke
 

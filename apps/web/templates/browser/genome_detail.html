@@ -16,6 +16,7 @@
       <div class="d-flex flex-wrap gap-2">
         <a class="btn btn-outline-dark" href="{% url 'browser:genome-list' %}?run={{ genome.pipeline_run.run_id|urlencode }}">Back to genomes</a>
         <a class="btn btn-brand" href="{{ taxon_detail_url }}">Open taxon branch</a>
+        <a class="btn btn-outline-secondary" href="{{ merged_accession_url }}">Open accession analytics</a>
       </div>
     </div>
     <aside class="landing-aside">
@@ -49,6 +50,10 @@
         <dd><a href="{{ taxon_detail_url }}">{{ genome.taxon.taxon_name }}</a></dd>
         <dt>Run</dt>
         <dd><a href="{% url 'browser:run-detail' genome.pipeline_run.pk %}">{{ genome.pipeline_run.run_id }}</a></dd>
+        <dt>Merged accession</dt>
+        <dd>
+          <a href="{{ merged_accession_url }}">{{ related_accession_genomes_count }} genome row{{ related_accession_genomes_count|pluralize }} across imported runs</a>
+        </dd>
       </dl>
     </div>
   </div>
