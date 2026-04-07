@@ -18,10 +18,10 @@ The sequencing rules are:
 ### Slice 0.1: Promote the scaffold into a real Django project
 
 Goal:
-- turn `web/` from a minimal healthcheck scaffold into a real Django project layout
+- turn the root-level scaffold into a real Django project layout
 
 Scope:
-- add Django app packages under `web/apps/`
+- add Django app packages under `apps/`
 - create `core`, `browser`, and `imports` apps
 - wire `INSTALLED_APPS`
 - expand root URL routing
@@ -46,7 +46,7 @@ Goal:
 
 Scope:
 - add Django test settings if needed
-- add a minimal web test package under `web/`
+- add a minimal web test package at the repo root
 - add smoke tests for root URLs and basic template rendering
 - document the minimal local commands for migrations, tests, and runserver
 

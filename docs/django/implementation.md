@@ -3,7 +3,7 @@
 
   ## Summary
 
-  Build the website as a Compose-managed Django + PostgreSQL app under web/, following the broad structure of ../innovhealth_microbiome:
+  Build the website as a Compose-managed Django + PostgreSQL app at the repo root, following the broad structure of ../innovhealth_microbiome:
 
   - core for home, shared layout, and graph pages
   - browser for the lineage-aware database browser
@@ -25,7 +25,7 @@
 
   ### 1. Project structure
 
-  Implement the Django project in web/ with this internal split:
+  Implement the Django project at the repo root with this internal split:
 
   - config/: settings, root URLs, WSGI/ASGI
   - apps/core/: home page, shared navigation, graph entrypoints, future staff utilities
@@ -34,7 +34,7 @@
   - templates/: base.html, plus core/, browser/, and imports/
   - static/: site CSS and minimal JS for charts/pages
 
-  Use `web/compose.yaml` as the local runtime entrypoint for Django + PostgreSQL.
+  Use the repo-root `compose.yaml` as the local runtime entrypoint for Django + PostgreSQL.
 
   ### 2. Source-of-truth and ingestion policy
 
@@ -438,7 +438,7 @@
 
   The first complete acceptance flow should be:
 
-  1. cd web && docker compose up web postgres
+  1. docker compose up web postgres
   2. run Django migrations
   3. import one explicit publish-root path
   4. verify browser pages for runs, taxa, genomes, proteins, and calls
