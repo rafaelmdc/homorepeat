@@ -1,4 +1,0 @@
-##gff-version 3
-chr2	RefSeq	gene	1	1000	.	+	.	ID=gene4;gene=BAD1;Name=BAD1
-chr2	RefSeq	mRNA	1	1000	.	+	.	ID=rna4;Parent=gene4;gene=BAD1;transcript_id=NM_222221.1
-chr2	RefSeq	CDS	1	13	.	+	0	ID=cds4;Parent=rna4;gene=BAD1;protein_id=XP_222221.1;transcript_id=NM_222221.1;transl_table=1

@@ -1,4 +1,0 @@
-##gff-version 3
-chr1	RefSeq	gene	1	1000	.	+	.	ID=gene5;gene=MOUSE1;Name=MOUSE1
-chr1	RefSeq	mRNA	1	1000	.	+	.	ID=rna5;Parent=gene5;gene=MOUSE1;transcript_id=NM_111111.1
-chr1	RefSeq	CDS	1	12	.	+	0	ID=cds5;Parent=rna5;gene=MOUSE1;protein_id=XP_111111.1;transcript_id=NM_111111.1;transl_table=1

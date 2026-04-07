@@ -18,10 +18,10 @@ The sequencing rules are:
 ### Slice 0.1: Promote the scaffold into a real Django project
 
 Goal:
-- turn `apps/web/` from a minimal healthcheck scaffold into a real Django project layout
+- turn `web/` from a minimal healthcheck scaffold into a real Django project layout
 
 Scope:
-- add Django app packages under `apps/web/apps/`
+- add Django app packages under `web/apps/`
 - create `core`, `browser`, and `imports` apps
 - wire `INSTALLED_APPS`
 - expand root URL routing
@@ -46,7 +46,7 @@ Goal:
 
 Scope:
 - add Django test settings if needed
-- add a minimal web test package under `apps/web`
+- add a minimal web test package under `web/`
 - add smoke tests for root URLs and basic template rendering
 - document the minimal local commands for migrations, tests, and runserver
 
@@ -149,7 +149,7 @@ Exit criteria:
 - tests cover success and failure for missing files, missing columns, and malformed manifests
 - parser preserves the full published sequence and protein inventories for validation while allowing later import filtering
 - parser can compact raw taxonomy to principal ranks plus referenced taxa for web import
-- parser works against `runs/latest/publish/`
+- parser works against `runs/latest/publish/` when that path exists locally, or any explicit publish-root path
 
 ### Slice 2.2: Transactional import command
 

@@ -1,4 +1,0 @@
-request_id	input_value	input_type	provided_rank	selection_policy	notes
-req_001	Homo sapiens	scientific_name	species	reference_preferred_representative_allowed	deterministic scientific name
-req_002	bass	common_name		reference_preferred_representative_allowed	ambiguous common name
-req_003	9606	taxid		reference_preferred_representative_allowed	direct taxid

@@ -2,9 +2,9 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: homorepeat
-      POSTGRES_USER: homorepeat
-      POSTGRES_PASSWORD: homorepeat
+      POSTGRES_DB: ${POSTGRES_DB:-homorepeat}
+      POSTGRES_USER: ${POSTGRES_USER:-homorepeat}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-homorepeat}
     ports:
       - "5432:5432"
     volumes:
@@ -20,20 +20,35 @@ services:
       context: .
       dockerfile: containers/web.Dockerfile
     image: homorepeat-web:dev
-    working_dir: /app/apps/web
+    working_dir: /app
     command: >
-      sh -c "python manage.py migrate &&
-             python manage.py runserver 0.0.0.0:8000"
+      sh -c "
+        attempts=0
+        until getent hosts $$DATABASE_HOST >/dev/null 2>&1; do
+          attempts=$$((attempts + 1))
+          if [ $$attempts -ge 30 ]; then
+            echo 'Could not resolve database host' $$DATABASE_HOST >&2
+            exit 1
+          fi
+          echo 'Waiting for database host' $$DATABASE_HOST 'to resolve...'
+          sleep 2
+        done
+        python manage.py migrate &&
+        python manage.py runserver 0.0.0.0:8000
+      "
     environment:
-      DJANGO_SECRET_KEY: dev-secret-key
-      DJANGO_DEBUG: "1"
-      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,0.0.0.0
-      DATABASE_ENGINE: django.db.backends.postgresql
-      DATABASE_NAME: homorepeat
-      DATABASE_USER: homorepeat
-      DATABASE_PASSWORD: homorepeat
-      DATABASE_HOST: postgres
-      DATABASE_PORT: "5432"
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-secret-key}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-1}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-}
+      DJANGO_TIME_ZONE: ${DJANGO_TIME_ZONE:-UTC}
+      DATABASE_ENGINE: ${DATABASE_ENGINE:-django.db.backends.postgresql}
+      DATABASE_NAME: ${DATABASE_NAME:-homorepeat}
+      DATABASE_USER: ${DATABASE_USER:-homorepeat}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-homorepeat}
+      DATABASE_HOST: ${DATABASE_HOST:-postgres}
+      DATABASE_PORT: ${DATABASE_PORT:-5432}
+      HOMOREPEAT_RUNS_ROOT: ${HOMOREPEAT_RUNS_ROOT:-}
     volumes:
       - .:/app
     ports:
@@ -41,22 +56,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-
-  pipeline-acquisition:
-    profiles: ["pipeline-images"]
-    build:
-      context: .
-      dockerfile: containers/acquisition.Dockerfile
-    image: homorepeat-acquisition:dev
-    command: ["python", "--version"]
-
-  pipeline-detection:
-    profiles: ["pipeline-images"]
-    build:
-      context: .
-      dockerfile: containers/detection.Dockerfile
-    image: homorepeat-detection:dev
-    command: ["python", "--version"]
 
 volumes:
   postgres_data:

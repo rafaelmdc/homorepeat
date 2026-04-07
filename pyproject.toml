@@ -3,20 +3,16 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "homorepeat"
+name = "homorepeat-web"
 version = "0.1.0"
-description = "Homorepeat workflow utilities and pipeline support code"
+description = "HomoRepeat Django browser and import app"
 readme = "README.md"
 requires-python = ">=3.11"
-
-[tool.setuptools]
-package-dir = {"" = "src"}
+dependencies = [
+  "Django>=5,<6",
+  "psycopg[binary]>=3.1,<4",
+]
 
 [tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.package-data]
-homorepeat = [
-  "resources/sql/sqlite/*.sql",
-  "resources/vendor/echarts/*.js",
-]
+where = ["."]
+include = ["apps*", "config*", "web_tests*"]

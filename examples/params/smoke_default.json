@@ -1,6 +1,0 @@
-{
-  "repeat_residues": "Q",
-  "run_pure": true,
-  "run_threshold": true,
-  "batch_size": 100
-}

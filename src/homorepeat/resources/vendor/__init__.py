@@ -1,1 +1,0 @@
-"""Packaged vendor assets."""

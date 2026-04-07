@@ -1,6 +1,0 @@
->lcl|cds1 [gene=ABC1] [protein_id=XP_000001.1] [transcript_id=NM_000001.1]
-ATGGCCGCCGCTTAA
->lcl|cds2 [gene=ABC1] [protein_id=XP_000002.1] [transcript_id=NM_000002.1]
-ATGGCCGCCGCTGCTTAA
->lcl|cds3 [gene=XYZ1] [protein_id=XP_000003.1] [transcript_id=NM_000003.1]
-ATGAAATTTTAA

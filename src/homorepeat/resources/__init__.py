@@ -1,1 +1,0 @@
-"""Packaged non-code resources."""

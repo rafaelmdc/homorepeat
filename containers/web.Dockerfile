@@ -17,13 +17,16 @@ RUN apt-get update \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml README.md /opt/homorepeat/
-COPY src /opt/homorepeat/src
-COPY apps/web /opt/homorepeat/apps/web
+COPY pyproject.toml README.md manage.py /opt/homorepeat/
+COPY apps /opt/homorepeat/apps
+COPY config /opt/homorepeat/config
+COPY static /opt/homorepeat/static
+COPY templates /opt/homorepeat/templates
+COPY web_tests /opt/homorepeat/web_tests
 
 RUN python -m pip install --upgrade pip setuptools wheel \
-    && python -m pip install /opt/homorepeat "Django>=5,<6" "psycopg[binary]>=3.1,<4"
+    && python -m pip install /opt/homorepeat
 
-WORKDIR /app/apps/web
+WORKDIR /app
 
 ENV DJANGO_SETTINGS_MODULE=config.settings

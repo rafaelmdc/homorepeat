@@ -1,9 +1,0 @@
-##gff-version 3
-chr1	RefSeq	gene	1	1000	.	+	.	ID=gene1;gene=ABC1;Name=ABC1
-chr1	RefSeq	mRNA	1	1000	.	+	.	ID=rna1;Parent=gene1;gene=ABC1;transcript_id=NM_000001.1
-chr1	RefSeq	CDS	1	15	.	+	0	ID=cds1;Parent=rna1;gene=ABC1;protein_id=XP_000001.1;transcript_id=NM_000001.1;transl_table=1
-chr1	RefSeq	mRNA	1	1000	.	+	.	ID=rna2;Parent=gene1;gene=ABC1;transcript_id=NM_000002.1
-chr1	RefSeq	CDS	1	18	.	+	0	ID=cds2;Parent=rna2;gene=ABC1;protein_id=XP_000002.1;transcript_id=NM_000002.1;transl_table=1
-chr1	RefSeq	gene	2000	3000	.	+	.	ID=gene2;gene=XYZ1;Name=XYZ1
-chr1	RefSeq	mRNA	2000	3000	.	+	.	ID=rna3;Parent=gene2;gene=XYZ1;transcript_id=NM_000003.1
-chr1	RefSeq	CDS	2000	2011	.	+	0	ID=cds3;Parent=rna3;gene=XYZ1;protein_id=XP_000003.1;transcript_id=NM_000003.1;transl_table=1
