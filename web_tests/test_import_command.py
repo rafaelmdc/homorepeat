@@ -23,7 +23,7 @@ from apps.browser.models import (
 )
 from apps.imports.models import ImportBatch
 
-from .support import build_minimal_publish_root
+from .support import build_minimal_publish_root, build_multibatch_publish_root
 
 
 class ImportRunCommandTests(TestCase):
@@ -65,6 +65,46 @@ class ImportRunCommandTests(TestCase):
             self.assertEqual(ImportBatch.objects.get().status, ImportBatch.Status.COMPLETED)
             self.assertEqual(ImportBatch.objects.get().phase, "completed")
             self.assertIsNotNone(ImportBatch.objects.get().heartbeat_at)
+
+    def test_import_run_keeps_matched_sequences_and_proteins_but_counts_all_batch_proteins(self):
+        with TemporaryDirectory() as tempdir:
+            publish_root = build_multibatch_publish_root(Path(tempdir), run_id="run-multi-batch-retained")
+            stdout = StringIO()
+            (publish_root / "calls" / "repeat_calls.tsv").write_text(
+                "call_id\tmethod\tgenome_id\ttaxon_id\tsequence_id\tprotein_id\tstart\tend\tlength\trepeat_residue\trepeat_count\tnon_repeat_count\tpurity\taa_sequence\tcodon_sequence\tcodon_metric_name\tcodon_metric_value\twindow_definition\ttemplate_name\tmerge_rule\tscore\n"
+                "call_1\tpure\tgenome_1\t9606\tseq_1\tprot_1\t10\t20\t11\tQ\t11\t0\t1.0\tQQQQQQQQQQQ\t\t\t\t\t\t\t\n",
+                encoding="utf-8",
+            )
+            (publish_root / "calls" / "run_params.tsv").write_text(
+                "method\trepeat_residue\tparam_name\tparam_value\n"
+                "pure\tQ\tmin_repeat_count\t6\n",
+                encoding="utf-8",
+            )
+            (publish_root / "status" / "accession_call_counts.tsv").write_text(
+                "assembly_accession\tbatch_id\tmethod\trepeat_residue\tdetect_status\tfinalize_status\tn_repeat_calls\n"
+                "GCF_000001405.40\tbatch_0001\tpure\tQ\tsuccess\tsuccess\t1\n",
+                encoding="utf-8",
+            )
+
+            call_command("import_run", publish_root=str(publish_root), stdout=stdout)
+
+            self.assertIn("Imported run run-multi-batch-retained", stdout.getvalue())
+            self.assertEqual(Genome.objects.count(), 2)
+            self.assertEqual(Sequence.objects.count(), 1)
+            self.assertEqual(Protein.objects.count(), 1)
+            self.assertEqual(RepeatCall.objects.count(), 1)
+            self.assertEqual(DownloadManifestEntry.objects.count(), 2)
+            self.assertEqual(NormalizationWarning.objects.count(), 1)
+            self.assertEqual(Genome.objects.get(genome_id="genome_1").analyzed_protein_count, 2)
+            self.assertEqual(Genome.objects.get(genome_id="genome_2").analyzed_protein_count, 1)
+            self.assertEqual(
+                set(Sequence.objects.values_list("genome__genome_id", flat=True)),
+                {"genome_1"},
+            )
+            self.assertEqual(
+                set(Protein.objects.values_list("genome__genome_id", flat=True)),
+                {"genome_1"},
+            )
 
     def test_import_run_fails_without_replace_for_existing_run(self):
         with TemporaryDirectory() as tempdir:

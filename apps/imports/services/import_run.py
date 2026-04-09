@@ -48,6 +48,7 @@ from .published_run import (
 
 
 BULK_CREATE_BATCH_SIZE = 5000
+COPY_FLUSH_ROW_COUNT = 10000
 HEARTBEAT_FLUSH_INTERVAL_SECONDS = 2.0
 
 
@@ -187,7 +188,7 @@ def _copy_rows_to_model(
             for row in rows:
                 writer.writerow(_serialize_copy_row(row))
                 count += 1
-                if count % BULK_CREATE_BATCH_SIZE == 0:
+                if count % COPY_FLUSH_ROW_COUNT == 0:
                     flush_buffer(copy)
                 if batch is not None and reporter is not None and count % BULK_CREATE_BATCH_SIZE == 0:
                     progress_payload = {progress_key: count}
@@ -509,6 +510,7 @@ def _import_inspected_run(
             prepared,
             genome_by_genome_id,
             taxon_by_taxon_id,
+            batch_by_batch_id,
             reporter=reporter,
         )
     )
@@ -851,6 +853,7 @@ def _create_genomes(
         for genome in Genome.objects.filter(pipeline_run=pipeline_run).only(
             "id",
             "genome_id",
+            "batch_id",
             "taxon_id",
             "accession",
             "analyzed_protein_count",
@@ -1261,6 +1264,7 @@ def _create_call_linked_entities_for_batches(
     prepared: PreparedStreamedImportData,
     genome_by_genome_id: dict[str, Genome],
     taxon_by_taxon_id: dict[int, Taxon],
+    batch_by_batch_id: dict[str, AcquisitionBatch],
     *,
     reporter: _ImportBatchStateReporter | None = None,
 ) -> tuple[int, dict[str, Sequence], int, dict[str, Protein], dict[str, int]]:
@@ -1269,8 +1273,19 @@ def _create_call_linked_entities_for_batches(
     sequence_by_sequence_id: dict[str, Sequence] = {}
     protein_by_protein_id: dict[str, Protein] = {}
     analyzed_protein_counts: dict[str, int] = {}
+    retained_batch_pks = {
+        genome_by_genome_id[genome_id].batch_id
+        for genome_id in prepared.retained_genome_ids
+        if genome_id in genome_by_genome_id
+    }
 
     for batch_paths in inspected.artifact_paths.acquisition_batches:
+        current_batch = batch_by_batch_id.get(batch_paths.batch_id)
+        if current_batch is None:
+            raise ImportContractError(
+                f"Acquisition batch {batch_paths.batch_id!r} was not created before row import"
+            )
+        batch_has_retained_rows = current_batch.pk in retained_batch_pks
         batch_sequence_ids: set[str] = set()
         retained_sequence_rows: list[dict[str, object]] = []
         for row in iter_sequence_rows(batch_paths.sequences_tsv, batch_id=batch_paths.batch_id):
@@ -1281,15 +1296,19 @@ def _create_call_linked_entities_for_batches(
                 )
             sequence_id = str(row["sequence_id"])
             batch_sequence_ids.add(sequence_id)
-            if sequence_id in prepared.retained_sequence_ids:
+            if batch_has_retained_rows and sequence_id in prepared.retained_sequence_ids:
                 retained_sequence_rows.append(row)
 
         retained_sequence_ids = {str(row["sequence_id"]) for row in retained_sequence_rows}
-        nucleotide_sequences_by_id = _read_fasta_subset(
-            batch_paths.cds_fna,
-            retained_sequence_ids,
-            existing_records={},
-            label="CDS",
+        nucleotide_sequences_by_id = (
+            _read_fasta_subset(
+                batch_paths.cds_fna,
+                retained_sequence_ids,
+                existing_records={},
+                label="CDS",
+            )
+            if retained_sequence_ids
+            else {}
         )
         missing_sequence_ids = sorted(retained_sequence_ids - set(nucleotide_sequences_by_id))
         if missing_sequence_ids:
@@ -1427,15 +1446,19 @@ def _create_call_linked_entities_for_batches(
                     f"Protein row references missing sequence_id {row['sequence_id']!r}"
                 )
             analyzed_protein_counts[genome_id] = analyzed_protein_counts.get(genome_id, 0) + 1
-            if str(row["protein_id"]) in prepared.retained_protein_ids:
+            if batch_has_retained_rows and str(row["protein_id"]) in prepared.retained_protein_ids:
                 retained_protein_rows.append(row)
 
         retained_protein_ids = {str(row["protein_id"]) for row in retained_protein_rows}
-        amino_acid_sequences_by_id = _read_fasta_subset(
-            batch_paths.proteins_faa,
-            retained_protein_ids,
-            existing_records={},
-            label="protein",
+        amino_acid_sequences_by_id = (
+            _read_fasta_subset(
+                batch_paths.proteins_faa,
+                retained_protein_ids,
+                existing_records={},
+                label="protein",
+            )
+            if retained_protein_ids
+            else {}
         )
         missing_protein_ids = sorted(retained_protein_ids - set(amino_acid_sequences_by_id))
         if missing_protein_ids:
