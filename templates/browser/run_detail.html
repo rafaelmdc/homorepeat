@@ -290,8 +290,13 @@
   <div class="col-lg-6">
     <article class="card h-100 border-0 shadow-sm detail-card">
       <div class="card-body">
-        <p class="eyebrow">Method coverage</p>
-        <h2>Methods and residues</h2>
+        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+          <div>
+            <p class="eyebrow mb-2">Method coverage</p>
+            <h2 class="mb-0">Methods and residues</h2>
+          </div>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ accession_call_count_browser_url }}">Browse call-count rows</a>
+        </div>
         <div class="table-responsive">
           <table class="table align-middle mb-0 data-table">
             <thead>
@@ -325,8 +330,13 @@
   <div class="col-lg-6">
     <article class="card h-100 border-0 shadow-sm detail-card">
       <div class="card-body">
-        <p class="eyebrow">Status ledger</p>
-        <h2>Operational summary</h2>
+        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+          <div>
+            <p class="eyebrow mb-2">Status ledger</p>
+            <h2 class="mb-0">Operational summary</h2>
+          </div>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ accession_status_browser_url }}">Browse status rows</a>
+        </div>
         <dl class="info-grid">
           {% for item in terminal_status_summary %}
             <dt>{{ item.terminal_status|default:"(blank)" }}</dt>

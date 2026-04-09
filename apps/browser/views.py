@@ -211,6 +211,16 @@ class RunDetailView(DetailView):
                 "url_name": "browser:repeatcall-list",
             },
             {
+                "title": "Accession status",
+                "description": "Accession-level operational status rows imported for this run.",
+                "url_name": "browser:accessionstatus-list",
+            },
+            {
+                "title": "Method/residue status",
+                "description": "Per-accession method and residue call-count rows imported for this run.",
+                "url_name": "browser:accessioncallcount-list",
+            },
+            {
                 "title": "Normalization warnings",
                 "description": "Operational warning rows imported from raw acquisition and normalization outputs.",
                 "url_name": "browser:normalizationwarning-list",
@@ -256,6 +266,14 @@ class RunDetailView(DetailView):
         )
         context["warning_browser_url"] = _url_with_query(
             reverse("browser:normalizationwarning-list"),
+            run=pipeline_run.run_id,
+        )
+        context["accession_status_browser_url"] = _url_with_query(
+            reverse("browser:accessionstatus-list"),
+            run=pipeline_run.run_id,
+        )
+        context["accession_call_count_browser_url"] = _url_with_query(
+            reverse("browser:accessioncallcount-list"),
             run=pipeline_run.run_id,
         )
         context["batch_preview"] = _annotated_batches(
@@ -321,7 +339,7 @@ class NormalizationWarningListView(BrowserListView):
             queryset = queryset.filter(pipeline_run=self.current_run)
 
         if self.current_batch:
-            queryset = queryset.filter(batch__batch_id=self.current_batch)
+            queryset = queryset.filter(batch__pk=self.current_batch)
 
         if self.current_accession:
             queryset = queryset.filter(assembly_accession__icontains=self.current_accession)
@@ -345,7 +363,7 @@ class NormalizationWarningListView(BrowserListView):
             filter_choices = filter_choices.filter(pipeline_run=current_run)
             batch_choices = batch_choices.filter(pipeline_run=current_run)
         if current_batch:
-            filter_choices = filter_choices.filter(batch__batch_id=current_batch)
+            filter_choices = filter_choices.filter(batch__pk=current_batch)
 
         context["current_run"] = current_run
         context["current_run_id"] = current_run.run_id if current_run else ""
@@ -364,6 +382,208 @@ class NormalizationWarningListView(BrowserListView):
             filter_choices.exclude(warning_scope="")
             .order_by("warning_scope")
             .values_list("warning_scope", flat=True)
+            .distinct()
+        )
+        return context
+
+
+class AccessionStatusListView(BrowserListView):
+    model = AccessionStatus
+    template_name = "browser/accessionstatus_list.html"
+    context_object_name = "status_rows"
+    search_fields = ("assembly_accession", "failure_stage", "failure_reason", "notes")
+    ordering_map = {
+        "accession": ("assembly_accession", "pipeline_run__run_id", "batch__batch_id"),
+        "-accession": ("-assembly_accession", "pipeline_run__run_id", "batch__batch_id"),
+        "batch": ("batch__batch_id", "assembly_accession"),
+        "-batch": ("-batch__batch_id", "assembly_accession"),
+        "run": ("pipeline_run__run_id", "batch__batch_id", "assembly_accession"),
+        "-run": ("-pipeline_run__run_id", "batch__batch_id", "assembly_accession"),
+        "terminal_status": ("terminal_status", "assembly_accession"),
+        "-terminal_status": ("-terminal_status", "assembly_accession"),
+        "repeat_calls": ("-n_repeat_calls", "assembly_accession"),
+        "-repeat_calls": ("n_repeat_calls", "assembly_accession"),
+    }
+    default_ordering = ("pipeline_run__run_id", "batch__batch_id", "assembly_accession")
+
+    def get_base_queryset(self):
+        return AccessionStatus.objects.select_related("pipeline_run", "batch")
+
+    def _load_filter_state(self):
+        self.current_run = _resolve_current_run(self.request)
+        self.current_batch = self.request.GET.get("batch", "").strip()
+        self.current_accession = self.request.GET.get("accession", "").strip()
+        self.current_terminal_status = self.request.GET.get("terminal_status", "").strip()
+        self.current_detect_status = self.request.GET.get("detect_status", "").strip()
+        self.current_finalize_status = self.request.GET.get("finalize_status", "").strip()
+
+    def apply_filters(self, queryset):
+        self._load_filter_state()
+
+        if self.current_run:
+            queryset = queryset.filter(pipeline_run=self.current_run)
+
+        if self.current_batch:
+            queryset = queryset.filter(batch__pk=self.current_batch)
+
+        if self.current_accession:
+            queryset = queryset.filter(assembly_accession__icontains=self.current_accession)
+
+        if self.current_terminal_status:
+            queryset = queryset.filter(terminal_status=self.current_terminal_status)
+
+        if self.current_detect_status:
+            queryset = queryset.filter(detect_status=self.current_detect_status)
+
+        if self.current_finalize_status:
+            queryset = queryset.filter(finalize_status=self.current_finalize_status)
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        current_run = getattr(self, "current_run", None)
+        current_batch = getattr(self, "current_batch", "")
+
+        filter_choices = AccessionStatus.objects.all()
+        batch_choices = AcquisitionBatch.objects.select_related("pipeline_run")
+        if current_run:
+            filter_choices = filter_choices.filter(pipeline_run=current_run)
+            batch_choices = batch_choices.filter(pipeline_run=current_run)
+        if current_batch:
+            filter_choices = filter_choices.filter(batch__pk=current_batch)
+
+        context["current_run"] = current_run
+        context["current_run_id"] = current_run.run_id if current_run else ""
+        context["selected_batch"] = _resolve_batch_filter(current_run, current_batch)
+        context["current_batch"] = current_batch
+        context["current_accession"] = getattr(self, "current_accession", "")
+        context["current_terminal_status"] = getattr(self, "current_terminal_status", "")
+        context["current_detect_status"] = getattr(self, "current_detect_status", "")
+        context["current_finalize_status"] = getattr(self, "current_finalize_status", "")
+        context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
+        context["batch_choices"] = batch_choices.order_by("pipeline_run__run_id", "batch_id")
+        context["terminal_status_choices"] = (
+            filter_choices.exclude(terminal_status="")
+            .order_by("terminal_status")
+            .values_list("terminal_status", flat=True)
+            .distinct()
+        )
+        context["detect_status_choices"] = (
+            filter_choices.exclude(detect_status="")
+            .order_by("detect_status")
+            .values_list("detect_status", flat=True)
+            .distinct()
+        )
+        context["finalize_status_choices"] = (
+            filter_choices.exclude(finalize_status="")
+            .order_by("finalize_status")
+            .values_list("finalize_status", flat=True)
+            .distinct()
+        )
+        return context
+
+
+class AccessionCallCountListView(BrowserListView):
+    model = AccessionCallCount
+    template_name = "browser/accessioncallcount_list.html"
+    context_object_name = "call_count_rows"
+    search_fields = ("assembly_accession",)
+    ordering_map = {
+        "accession": ("assembly_accession", "method", "repeat_residue"),
+        "-accession": ("-assembly_accession", "method", "repeat_residue"),
+        "batch": ("batch__batch_id", "assembly_accession", "method", "repeat_residue"),
+        "-batch": ("-batch__batch_id", "assembly_accession", "method", "repeat_residue"),
+        "run": ("pipeline_run__run_id", "batch__batch_id", "assembly_accession"),
+        "-run": ("-pipeline_run__run_id", "batch__batch_id", "assembly_accession"),
+        "method": ("method", "repeat_residue", "assembly_accession"),
+        "-method": ("-method", "repeat_residue", "assembly_accession"),
+        "residue": ("repeat_residue", "method", "assembly_accession"),
+        "-residue": ("-repeat_residue", "method", "assembly_accession"),
+        "repeat_calls": ("-n_repeat_calls", "assembly_accession", "method", "repeat_residue"),
+        "-repeat_calls": ("n_repeat_calls", "assembly_accession", "method", "repeat_residue"),
+    }
+    default_ordering = ("pipeline_run__run_id", "batch__batch_id", "assembly_accession", "method", "repeat_residue")
+
+    def get_base_queryset(self):
+        return AccessionCallCount.objects.select_related("pipeline_run", "batch")
+
+    def _load_filter_state(self):
+        self.current_run = _resolve_current_run(self.request)
+        self.current_batch = self.request.GET.get("batch", "").strip()
+        self.current_accession = self.request.GET.get("accession", "").strip()
+        self.current_method = self.request.GET.get("method", "").strip()
+        self.current_residue = self.request.GET.get("residue", "").strip().upper()
+        self.current_detect_status = self.request.GET.get("detect_status", "").strip()
+        self.current_finalize_status = self.request.GET.get("finalize_status", "").strip()
+
+    def apply_filters(self, queryset):
+        self._load_filter_state()
+
+        if self.current_run:
+            queryset = queryset.filter(pipeline_run=self.current_run)
+
+        if self.current_batch:
+            queryset = queryset.filter(batch__pk=self.current_batch)
+
+        if self.current_accession:
+            queryset = queryset.filter(assembly_accession__icontains=self.current_accession)
+
+        if self.current_method:
+            queryset = queryset.filter(method=self.current_method)
+
+        if self.current_residue:
+            queryset = queryset.filter(repeat_residue=self.current_residue)
+
+        if self.current_detect_status:
+            queryset = queryset.filter(detect_status=self.current_detect_status)
+
+        if self.current_finalize_status:
+            queryset = queryset.filter(finalize_status=self.current_finalize_status)
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        current_run = getattr(self, "current_run", None)
+        current_batch = getattr(self, "current_batch", "")
+
+        filter_choices = AccessionCallCount.objects.all()
+        batch_choices = AcquisitionBatch.objects.select_related("pipeline_run")
+        if current_run:
+            filter_choices = filter_choices.filter(pipeline_run=current_run)
+            batch_choices = batch_choices.filter(pipeline_run=current_run)
+        if current_batch:
+            filter_choices = filter_choices.filter(batch__pk=current_batch)
+
+        context["current_run"] = current_run
+        context["current_run_id"] = current_run.run_id if current_run else ""
+        context["selected_batch"] = _resolve_batch_filter(current_run, current_batch)
+        context["current_batch"] = current_batch
+        context["current_accession"] = getattr(self, "current_accession", "")
+        context["current_method"] = getattr(self, "current_method", "")
+        context["current_residue"] = getattr(self, "current_residue", "")
+        context["current_detect_status"] = getattr(self, "current_detect_status", "")
+        context["current_finalize_status"] = getattr(self, "current_finalize_status", "")
+        context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
+        context["batch_choices"] = batch_choices.order_by("pipeline_run__run_id", "batch_id")
+        context["method_choices"] = filter_choices.order_by("method").values_list("method", flat=True).distinct()
+        context["residue_choices"] = (
+            filter_choices.exclude(repeat_residue="")
+            .order_by("repeat_residue")
+            .values_list("repeat_residue", flat=True)
+            .distinct()
+        )
+        context["detect_status_choices"] = (
+            filter_choices.exclude(detect_status="")
+            .order_by("detect_status")
+            .values_list("detect_status", flat=True)
+            .distinct()
+        )
+        context["finalize_status_choices"] = (
+            filter_choices.exclude(finalize_status="")
+            .order_by("finalize_status")
+            .values_list("finalize_status", flat=True)
             .distinct()
         )
         return context
@@ -1194,10 +1414,10 @@ def _resolve_branch_taxon(request):
     return Taxon.objects.filter(pk=branch).first()
 
 
-def _resolve_batch_filter(current_run, batch_id):
-    if not batch_id:
+def _resolve_batch_filter(current_run, batch_pk):
+    if not batch_pk:
         return None
-    queryset = AcquisitionBatch.objects.select_related("pipeline_run").filter(batch_id=batch_id)
+    queryset = AcquisitionBatch.objects.select_related("pipeline_run").filter(pk=batch_pk)
     if current_run:
         queryset = queryset.filter(pipeline_run=current_run)
     return queryset.first()

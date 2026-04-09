@@ -140,6 +140,8 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, "run-alpha")
         self.assertContains(response, "Distinct taxa referenced")
         self.assertContains(response, "?run=run-alpha")
+        self.assertContains(response, reverse("browser:accessionstatus-list"))
+        self.assertContains(response, reverse("browser:accessioncallcount-list"))
         self.assertContains(response, reverse("browser:normalizationwarning-list"))
         self.assertContains(response, "Method: pure")
         self.assertContains(response, "Acquisition batches")
@@ -232,6 +234,103 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, "Latest completed counts")
         self.assertContains(response, "failed")
 
+    def test_accession_status_list_filters_by_run_batch_and_status(self):
+        pipeline_run = self.alpha["pipeline_run"]
+        extra_batch = AcquisitionBatch.objects.create(
+            pipeline_run=pipeline_run,
+            batch_id="batch_0002",
+        )
+        AccessionStatus.objects.create(
+            pipeline_run=pipeline_run,
+            batch=extra_batch,
+            assembly_accession="GCF_ALPHA_ALT",
+            download_status="success",
+            normalize_status="warning",
+            translate_status="success",
+            detect_status="failed",
+            finalize_status="skipped",
+            terminal_status="failed",
+            failure_stage="detect",
+            failure_reason="missing translated sequence",
+            n_genomes=1,
+            n_proteins=0,
+            n_repeat_calls=0,
+        )
+        AccessionStatus.objects.create(
+            pipeline_run=self.beta["pipeline_run"],
+            batch=self.beta["batch"],
+            assembly_accession="GCF_BETA_ALT",
+            download_status="success",
+            normalize_status="success",
+            translate_status="success",
+            detect_status="success",
+            finalize_status="success",
+            terminal_status="completed",
+            n_genomes=1,
+            n_proteins=1,
+            n_repeat_calls=2,
+        )
+
+        response = self.client.get(
+            reverse("browser:accessionstatus-list"),
+            {
+                "run": "run-alpha",
+                "batch": str(extra_batch.pk),
+                "terminal_status": "failed",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "GCF_ALPHA_ALT")
+        self.assertContains(response, "missing translated sequence")
+        self.assertContains(response, "failed")
+        self.assertNotContains(response, "completed")
+        self.assertNotContains(response, "GCF_BETA_ALT")
+
+    def test_accession_call_count_list_filters_by_run_batch_method_and_residue(self):
+        pipeline_run = self.alpha["pipeline_run"]
+        extra_batch = AcquisitionBatch.objects.create(
+            pipeline_run=pipeline_run,
+            batch_id="batch_0002",
+        )
+        AccessionCallCount.objects.create(
+            pipeline_run=pipeline_run,
+            batch=extra_batch,
+            assembly_accession="GCF_ALPHA_ALT",
+            method=RunParameter.Method.THRESHOLD,
+            repeat_residue="A",
+            detect_status="failed",
+            finalize_status="skipped",
+            n_repeat_calls=0,
+        )
+        AccessionCallCount.objects.create(
+            pipeline_run=self.beta["pipeline_run"],
+            batch=self.beta["batch"],
+            assembly_accession="GCF_BETA_ALT",
+            method=RunParameter.Method.SEED_EXTEND,
+            repeat_residue="Q",
+            detect_status="success",
+            finalize_status="success",
+            n_repeat_calls=3,
+        )
+
+        response = self.client.get(
+            reverse("browser:accessioncallcount-list"),
+            {
+                "run": "run-alpha",
+                "batch": str(extra_batch.pk),
+                "method": RunParameter.Method.THRESHOLD,
+                "residue": "A",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "GCF_ALPHA_ALT")
+        self.assertContains(response, "threshold")
+        self.assertContains(response, "A")
+        self.assertNotContains(response, "seed_extend")
+        self.assertNotContains(response, "GCF_BETA_ALT")
+
     def test_normalization_warning_list_filters_by_run_batch_and_accession(self):
         pipeline_run = self.alpha["pipeline_run"]
         extra_batch = AcquisitionBatch.objects.create(
@@ -274,7 +373,7 @@ class BrowserViewTests(TestCase):
             reverse("browser:normalizationwarning-list"),
             {
                 "run": "run-alpha",
-                "batch": "batch_0002",
+                "batch": str(extra_batch.pk),
                 "accession": "GCF_ALPHA_ALT",
             },
         )

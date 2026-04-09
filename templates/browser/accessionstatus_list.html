@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Accession Status{% endblock %}
+{% block body_class %}accessionstatus-list-page{% endblock %}
+
+{% block content %}
+<section class="landing-band mb-4">
+  <div class="landing-band-shell">
+    <div class="landing-copy">
+      <span class="section-kicker mb-3">Accession status</span>
+      <h1 class="landing-title mb-3">Run-aware browsing over accession-level operational status rows.</h1>
+      <p class="landing-lead mb-0">
+        Filter imported accession status rows by run, batch, accession, and operational
+        status fields to inspect raw pipeline outcomes from the database.
+      </p>
+    </div>
+    <aside class="landing-aside">
+      <p class="sheet-label">Current scope</p>
+      <p class="mb-2">
+        {% if current_run %}
+          Run <strong>{{ current_run.run_id }}</strong>{% if selected_batch %}, batch <strong>{{ selected_batch.batch_id }}</strong>{% endif %}.
+        {% elif selected_batch %}
+          Batch <strong>{{ selected_batch.batch_id }}</strong> across imported runs.
+        {% else %}
+          Browsing imported accession status rows across all runs.
+        {% endif %}
+      </p>
+      {% if current_terminal_status %}
+        <p class="mb-2">Terminal status: <strong>{{ current_terminal_status }}</strong>.</p>
+      {% endif %}
+      {% if current_detect_status %}
+        <p class="mb-2">Detect status: <strong>{{ current_detect_status }}</strong>.</p>
+      {% endif %}
+      {% if current_finalize_status %}
+        <p class="mb-0">Finalize status: <strong>{{ current_finalize_status }}</strong>.</p>
+      {% endif %}
+    </aside>
+  </div>
+</section>
+
+<section class="filter-card mb-4">
+  <form class="row g-3 align-items-end" method="get">
+    <div class="col-lg-3">
+      <label class="form-label" for="id_q">Search</label>
+      <input class="form-control" id="id_q" type="text" name="q" value="{{ current_query }}" placeholder="Accession or failure details">
+    </div>
+    <div class="col-md-4 col-lg-2">
+      <label class="form-label" for="id_run">Run</label>
+      <select class="form-select" id="id_run" name="run">
+        <option value="">All runs</option>
+        {% for pipeline_run in run_choices %}
+          <option value="{{ pipeline_run.run_id }}" {% if current_run_id == pipeline_run.run_id %}selected{% endif %}>{{ pipeline_run.run_id }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4 col-lg-2">
+      <label class="form-label" for="id_batch">Batch</label>
+      <select class="form-select" id="id_batch" name="batch">
+        <option value="">All batches</option>
+        {% for batch in batch_choices %}
+          <option value="{{ batch.pk }}" {% if current_batch == batch.pk|stringformat:"s" %}selected{% endif %}>
+            {{ batch.batch_id }}{% if not current_run %} [{{ batch.pipeline_run.run_id }}]{% endif %}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4 col-lg-2">
+      <label class="form-label" for="id_accession">Accession</label>
+      <input class="form-control" id="id_accession" type="text" name="accession" value="{{ current_accession }}" placeholder="GCF_...">
+    </div>
+    <div class="col-md-4 col-lg-1">
+      <label class="form-label" for="id_terminal_status">Terminal</label>
+      <select class="form-select" id="id_terminal_status" name="terminal_status">
+        <option value="">All</option>
+        {% for terminal_status in terminal_status_choices %}
+          <option value="{{ terminal_status }}" {% if current_terminal_status == terminal_status %}selected{% endif %}>{{ terminal_status }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4 col-lg-1">
+      <label class="form-label" for="id_detect_status">Detect</label>
+      <select class="form-select" id="id_detect_status" name="detect_status">
+        <option value="">All</option>
+        {% for detect_status in detect_status_choices %}
+          <option value="{{ detect_status }}" {% if current_detect_status == detect_status %}selected{% endif %}>{{ detect_status }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4 col-lg-1">
+      <label class="form-label" for="id_finalize_status">Finalize</label>
+      <select class="form-select" id="id_finalize_status" name="finalize_status">
+        <option value="">All</option>
+        {% for finalize_status in finalize_status_choices %}
+          <option value="{{ finalize_status }}" {% if current_finalize_status == finalize_status %}selected{% endif %}>{{ finalize_status }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4 col-lg-2">
+      <label class="form-label" for="id_order_by">Sort</label>
+      <select class="form-select" id="id_order_by" name="order_by">
+        <option value="">Default</option>
+        {% for option in ordering_options %}
+          <option value="{{ option.value }}" {% if current_order_by == option.value %}selected{% endif %}>{{ option.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12">
+      <div class="filter-actions">
+        <button class="btn btn-primary" type="submit">Apply</button>
+        <a class="btn btn-outline-secondary" href="{% url 'browser:accessionstatus-list' %}">Reset</a>
+      </div>
+    </div>
+  </form>
+</section>
+
+<section class="surface-card surface-card-wide">
+  <div class="section-header">
+    <div>
+      <p class="section-kicker mb-2">Status inventory</p>
+      <h2>{{ page_obj.paginator.count }} accession status row{{ page_obj.paginator.count|pluralize }}</h2>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table align-middle mb-0 data-table">
+      <thead>
+        <tr>
+          <th>Accession</th>
+          <th>Batch</th>
+          <th>Download</th>
+          <th>Normalize</th>
+          <th>Translate</th>
+          <th>Detect</th>
+          <th>Finalize</th>
+          <th>Terminal</th>
+          <th>Repeat calls</th>
+          <th>Run</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for status_row in status_rows %}
+          <tr>
+            <td>
+              <strong>{{ status_row.assembly_accession }}</strong>
+              {% if status_row.failure_stage or status_row.failure_reason %}
+                <div class="small text-secondary">
+                  {{ status_row.failure_stage|default:"-" }}{% if status_row.failure_reason %}: {{ status_row.failure_reason }}{% endif %}
+                </div>
+              {% endif %}
+            </td>
+            <td>
+              {% if status_row.batch %}
+                <a href="{% url 'browser:accessionstatus-list' %}?run={{ status_row.pipeline_run.run_id|urlencode }}&amp;batch={{ status_row.batch.pk|urlencode }}">{{ status_row.batch.batch_id }}</a>
+              {% else %}
+                -
+              {% endif %}
+            </td>
+            <td>{{ status_row.download_status|default:"-" }}</td>
+            <td>{{ status_row.normalize_status|default:"-" }}</td>
+            <td>{{ status_row.translate_status|default:"-" }}</td>
+            <td>{{ status_row.detect_status|default:"-" }}</td>
+            <td>{{ status_row.finalize_status|default:"-" }}</td>
+            <td>{{ status_row.terminal_status|default:"-" }}</td>
+            <td>{{ status_row.n_repeat_calls }}</td>
+            <td><a href="{% url 'browser:run-detail' status_row.pipeline_run.pk %}">{{ status_row.pipeline_run.run_id }}</a></td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="10" class="empty-cell">No accession status rows matched these filters.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% include "browser/includes/pagination.html" %}
+</section>
+{% endblock %}

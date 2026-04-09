@@ -2,6 +2,8 @@ from django.urls import path
 
 from .views import (
     AccessionDetailView,
+    AccessionCallCountListView,
+    AccessionStatusListView,
     AccessionsListView,
     BrowserHomeView,
     GenomeDetailView,
@@ -24,6 +26,8 @@ urlpatterns = [
     path("", BrowserHomeView.as_view(), name="home"),
     path("accessions/", AccessionsListView.as_view(), name="accession-list"),
     path("accessions/<path:accession>/", AccessionDetailView.as_view(), name="accession-detail"),
+    path("accession-call-counts/", AccessionCallCountListView.as_view(), name="accessioncallcount-list"),
+    path("accession-status/", AccessionStatusListView.as_view(), name="accessionstatus-list"),
     path("runs/", RunListView.as_view(), name="run-list"),
     path("runs/<int:pk>/", RunDetailView.as_view(), name="run-detail"),
     path("taxa/", TaxonListView.as_view(), name="taxon-list"),
