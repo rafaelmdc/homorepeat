@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}Download Manifest{% endblock %}
+{% block body_class %}downloadmanifest-list-page{% endblock %}
+
+{% block content %}
+<section class="landing-band mb-4">
+  <div class="landing-band-shell">
+    <div class="landing-copy">
+      <span class="section-kicker mb-3">Download manifest</span>
+      <h1 class="landing-title mb-3">Batch-scoped download provenance over imported manifest rows.</h1>
+      <p class="landing-lead mb-0">
+        Filter imported download-manifest rows by run, batch, accession, download
+        status, and package mode to inspect acquisition provenance from the database.
+      </p>
+    </div>
+    <aside class="landing-aside">
+      <p class="sheet-label">Current scope</p>
+      <p class="mb-2">
+        {% if current_run %}
+          Run <strong>{{ current_run.run_id }}</strong>{% if selected_batch %}, batch <strong>{{ selected_batch.batch_id }}</strong>{% endif %}.
+        {% elif selected_batch %}
+          Batch <strong>{{ selected_batch.batch_id }}</strong> across imported runs.
+        {% else %}
+          Browsing imported download-manifest rows across all runs.
+        {% endif %}
+      </p>
+      {% if current_download_status %}
+        <p class="mb-2">Download status: <strong>{{ current_download_status }}</strong>.</p>
+      {% endif %}
+      {% if current_package_mode %}
+        <p class="mb-0">Package mode: <strong>{{ current_package_mode }}</strong>.</p>
+      {% endif %}
+    </aside>
+  </div>
+</section>
+
+<section class="filter-card mb-4">
+  <form class="row g-3 align-items-end" method="get">
+    <div class="col-lg-3">
+      <label class="form-label" for="id_q">Search</label>
+      <input class="form-control" id="id_q" type="text" name="q" value="{{ current_query }}" placeholder="Accession, path, checksum, or notes">
+    </div>
+    <div class="col-md-4 col-lg-2">
+      <label class="form-label" for="id_run">Run</label>
+      <select class="form-select" id="id_run" name="run">
+        <option value="">All runs</option>
+        {% for pipeline_run in run_choices %}
+          <option value="{{ pipeline_run.run_id }}" {% if current_run_id == pipeline_run.run_id %}selected{% endif %}>{{ pipeline_run.run_id }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4 col-lg-2">
+      <label class="form-label" for="id_batch">Batch</label>
+      <select class="form-select" id="id_batch" name="batch">
+        <option value="">All batches</option>
+        {% for batch in batch_choices %}
+          <option value="{{ batch.pk }}" {% if current_batch == batch.pk|stringformat:"s" %}selected{% endif %}>
+            {{ batch.batch_id }}{% if not current_run %} [{{ batch.pipeline_run.run_id }}]{% endif %}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4 col-lg-2">
+      <label class="form-label" for="id_accession">Accession</label>
+      <input class="form-control" id="id_accession" type="text" name="accession" value="{{ current_accession }}" placeholder="GCF_...">
+    </div>
+    <div class="col-md-4 col-lg-1">
+      <label class="form-label" for="id_download_status">Status</label>
+      <select class="form-select" id="id_download_status" name="download_status">
+        <option value="">All</option>
+        {% for download_status in download_status_choices %}
+          <option value="{{ download_status }}" {% if current_download_status == download_status %}selected{% endif %}>{{ download_status }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4 col-lg-2">
+      <label class="form-label" for="id_package_mode">Package mode</label>
+      <select class="form-select" id="id_package_mode" name="package_mode">
+        <option value="">All modes</option>
+        {% for package_mode in package_mode_choices %}
+          <option value="{{ package_mode }}" {% if current_package_mode == package_mode %}selected{% endif %}>{{ package_mode }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4 col-lg-2">
+      <label class="form-label" for="id_order_by">Sort</label>
+      <select class="form-select" id="id_order_by" name="order_by">
+        <option value="">Default</option>
+        {% for option in ordering_options %}
+          <option value="{{ option.value }}" {% if current_order_by == option.value %}selected{% endif %}>{{ option.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12">
+      <div class="filter-actions">
+        <button class="btn btn-primary" type="submit">Apply</button>
+        <a class="btn btn-outline-secondary" href="{% url 'browser:downloadmanifest-list' %}">Reset</a>
+      </div>
+    </div>
+  </form>
+</section>
+
+<section class="surface-card surface-card-wide">
+  <div class="section-header">
+    <div>
+      <p class="section-kicker mb-2">Download inventory</p>
+      <h2>{{ page_obj.paginator.count }} download-manifest row{{ page_obj.paginator.count|pluralize }}</h2>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table align-middle mb-0 data-table">
+      <thead>
+        <tr>
+          <th>Accession</th>
+          <th>Batch</th>
+          <th>Status</th>
+          <th>Package mode</th>
+          <th>File size</th>
+          <th>Checksum</th>
+          <th>Paths</th>
+          <th>Run</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in download_entries %}
+          <tr>
+            <td><strong>{{ entry.assembly_accession }}</strong></td>
+            <td>
+              <a href="{% url 'browser:downloadmanifest-list' %}?run={{ entry.pipeline_run.run_id|urlencode }}&amp;batch={{ entry.batch.pk|urlencode }}">{{ entry.batch.batch_id }}</a>
+            </td>
+            <td>{{ entry.download_status|default:"-" }}</td>
+            <td>{{ entry.package_mode|default:"-" }}</td>
+            <td>{{ entry.file_size_bytes|default:"-" }}</td>
+            <td><code>{{ entry.checksum|default:"-" }}</code></td>
+            <td>
+              {% if entry.download_path %}
+                <div><code>{{ entry.download_path }}</code></div>
+              {% endif %}
+              {% if entry.rehydrated_path %}
+                <div><code>{{ entry.rehydrated_path }}</code></div>
+              {% endif %}
+              {% if not entry.download_path and not entry.rehydrated_path %}
+                -
+              {% endif %}
+            </td>
+            <td><a href="{% url 'browser:run-detail' entry.pipeline_run.pk %}">{{ entry.pipeline_run.run_id }}</a></td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="8" class="empty-cell">No download-manifest rows matched these filters.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% include "browser/includes/pagination.html" %}
+</section>
+{% endblock %}

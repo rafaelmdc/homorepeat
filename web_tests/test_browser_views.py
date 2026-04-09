@@ -142,6 +142,7 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, "?run=run-alpha")
         self.assertContains(response, reverse("browser:accessionstatus-list"))
         self.assertContains(response, reverse("browser:accessioncallcount-list"))
+        self.assertContains(response, reverse("browser:downloadmanifest-list"))
         self.assertContains(response, reverse("browser:normalizationwarning-list"))
         self.assertContains(response, "Method: pure")
         self.assertContains(response, "Acquisition batches")
@@ -329,6 +330,51 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, "threshold")
         self.assertContains(response, "A")
         self.assertNotContains(response, "seed_extend")
+        self.assertNotContains(response, "GCF_BETA_ALT")
+
+    def test_download_manifest_list_filters_by_run_batch_and_status(self):
+        pipeline_run = self.alpha["pipeline_run"]
+        extra_batch = AcquisitionBatch.objects.create(
+            pipeline_run=pipeline_run,
+            batch_id="batch_0002",
+        )
+        DownloadManifestEntry.objects.create(
+            pipeline_run=pipeline_run,
+            batch=extra_batch,
+            assembly_accession="GCF_ALPHA_ALT",
+            download_status="rehydrated",
+            package_mode="direct_zip",
+            download_path="/tmp/download_alpha_alt.zip",
+            rehydrated_path="/tmp/rehydrated_alpha_alt",
+            checksum="checksum-alpha-alt",
+            file_size_bytes=123456,
+            notes="rehydrated replacement",
+        )
+        DownloadManifestEntry.objects.create(
+            pipeline_run=self.beta["pipeline_run"],
+            batch=self.beta["batch"],
+            assembly_accession="GCF_BETA_ALT",
+            download_status="downloaded",
+            package_mode="prefetched",
+            checksum="checksum-beta-alt",
+            file_size_bytes=999,
+        )
+
+        response = self.client.get(
+            reverse("browser:downloadmanifest-list"),
+            {
+                "run": "run-alpha",
+                "batch": str(extra_batch.pk),
+                "download_status": "rehydrated",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "GCF_ALPHA_ALT")
+        self.assertContains(response, "rehydrated")
+        self.assertContains(response, "checksum-alpha-alt")
+        self.assertContains(response, "/tmp/rehydrated_alpha_alt")
+        self.assertNotContains(response, "prefetched")
         self.assertNotContains(response, "GCF_BETA_ALT")
 
     def test_normalization_warning_list_filters_by_run_batch_and_accession(self):

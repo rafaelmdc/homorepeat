@@ -221,6 +221,11 @@ class RunDetailView(DetailView):
                 "url_name": "browser:accessioncallcount-list",
             },
             {
+                "title": "Download manifest",
+                "description": "Batch-scoped download provenance rows imported from raw acquisition outputs.",
+                "url_name": "browser:downloadmanifest-list",
+            },
+            {
                 "title": "Normalization warnings",
                 "description": "Operational warning rows imported from raw acquisition and normalization outputs.",
                 "url_name": "browser:normalizationwarning-list",
@@ -274,6 +279,10 @@ class RunDetailView(DetailView):
         )
         context["accession_call_count_browser_url"] = _url_with_query(
             reverse("browser:accessioncallcount-list"),
+            run=pipeline_run.run_id,
+        )
+        context["download_manifest_browser_url"] = _url_with_query(
+            reverse("browser:downloadmanifest-list"),
             run=pipeline_run.run_id,
         )
         context["batch_preview"] = _annotated_batches(
@@ -584,6 +593,100 @@ class AccessionCallCountListView(BrowserListView):
             filter_choices.exclude(finalize_status="")
             .order_by("finalize_status")
             .values_list("finalize_status", flat=True)
+            .distinct()
+        )
+        return context
+
+
+class DownloadManifestEntryListView(BrowserListView):
+    model = DownloadManifestEntry
+    template_name = "browser/downloadmanifest_list.html"
+    context_object_name = "download_entries"
+    search_fields = (
+        "assembly_accession",
+        "download_path",
+        "rehydrated_path",
+        "checksum",
+        "notes",
+    )
+    ordering_map = {
+        "accession": ("assembly_accession", "pipeline_run__run_id", "batch__batch_id"),
+        "-accession": ("-assembly_accession", "pipeline_run__run_id", "batch__batch_id"),
+        "batch": ("batch__batch_id", "assembly_accession"),
+        "-batch": ("-batch__batch_id", "assembly_accession"),
+        "run": ("pipeline_run__run_id", "batch__batch_id", "assembly_accession"),
+        "-run": ("-pipeline_run__run_id", "batch__batch_id", "assembly_accession"),
+        "download_status": ("download_status", "assembly_accession"),
+        "-download_status": ("-download_status", "assembly_accession"),
+        "package_mode": ("package_mode", "assembly_accession"),
+        "-package_mode": ("-package_mode", "assembly_accession"),
+        "file_size_bytes": ("file_size_bytes", "assembly_accession"),
+        "-file_size_bytes": ("-file_size_bytes", "assembly_accession"),
+    }
+    default_ordering = ("pipeline_run__run_id", "batch__batch_id", "assembly_accession")
+
+    def get_base_queryset(self):
+        return DownloadManifestEntry.objects.select_related("pipeline_run", "batch")
+
+    def _load_filter_state(self):
+        self.current_run = _resolve_current_run(self.request)
+        self.current_batch = self.request.GET.get("batch", "").strip()
+        self.current_accession = self.request.GET.get("accession", "").strip()
+        self.current_download_status = self.request.GET.get("download_status", "").strip()
+        self.current_package_mode = self.request.GET.get("package_mode", "").strip()
+
+    def apply_filters(self, queryset):
+        self._load_filter_state()
+
+        if self.current_run:
+            queryset = queryset.filter(pipeline_run=self.current_run)
+
+        if self.current_batch:
+            queryset = queryset.filter(batch__pk=self.current_batch)
+
+        if self.current_accession:
+            queryset = queryset.filter(assembly_accession__icontains=self.current_accession)
+
+        if self.current_download_status:
+            queryset = queryset.filter(download_status=self.current_download_status)
+
+        if self.current_package_mode:
+            queryset = queryset.filter(package_mode=self.current_package_mode)
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        current_run = getattr(self, "current_run", None)
+        current_batch = getattr(self, "current_batch", "")
+
+        filter_choices = DownloadManifestEntry.objects.all()
+        batch_choices = AcquisitionBatch.objects.select_related("pipeline_run")
+        if current_run:
+            filter_choices = filter_choices.filter(pipeline_run=current_run)
+            batch_choices = batch_choices.filter(pipeline_run=current_run)
+        if current_batch:
+            filter_choices = filter_choices.filter(batch__pk=current_batch)
+
+        context["current_run"] = current_run
+        context["current_run_id"] = current_run.run_id if current_run else ""
+        context["selected_batch"] = _resolve_batch_filter(current_run, current_batch)
+        context["current_batch"] = current_batch
+        context["current_accession"] = getattr(self, "current_accession", "")
+        context["current_download_status"] = getattr(self, "current_download_status", "")
+        context["current_package_mode"] = getattr(self, "current_package_mode", "")
+        context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
+        context["batch_choices"] = batch_choices.order_by("pipeline_run__run_id", "batch_id")
+        context["download_status_choices"] = (
+            filter_choices.exclude(download_status="")
+            .order_by("download_status")
+            .values_list("download_status", flat=True)
+            .distinct()
+        )
+        context["package_mode_choices"] = (
+            filter_choices.exclude(package_mode="")
+            .order_by("package_mode")
+            .values_list("package_mode", flat=True)
             .distinct()
         )
         return context

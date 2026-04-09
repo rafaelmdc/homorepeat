@@ -121,7 +121,10 @@
   <div class="col-sm-6 col-xl-4">
     <article class="card h-100 border-0 shadow-sm stat-card">
       <div class="card-body">
-        <p class="text-uppercase text-secondary small mb-2">Download manifest</p>
+        <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
+          <p class="text-uppercase text-secondary small mb-0">Download manifest</p>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ download_manifest_browser_url }}">Browse</a>
+        </div>
         <p class="display-5 fw-semibold mb-3">{{ pipeline_run.download_manifest_entries_count }}</p>
         <p class="text-secondary mb-0">Imported batch-scoped download provenance rows.</p>
       </div>
