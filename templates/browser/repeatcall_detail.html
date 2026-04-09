@@ -99,8 +99,8 @@
         <dd>{{ repeat_call.merge_rule|default:"-" }}</dd>
         <dt>Score</dt>
         <dd>{{ repeat_call.score|default:"-" }}</dd>
-        <dt>Source file</dt>
-        <dd>{{ repeat_call.source_file|default:"-" }}</dd>
+        <dt>Acquisition batch</dt>
+        <dd>{{ repeat_call.genome.batch.batch_id|default:"-" }}</dd>
       </dl>
     </div>
   </div>

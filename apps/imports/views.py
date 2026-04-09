@@ -14,7 +14,7 @@ from django.views.generic import FormView, ListView
 
 from .forms import ImportRunForm
 from .models import ImportBatch
-from .services import ImportContractError, import_published_run
+from .services import enqueue_published_run
 
 
 @dataclass(frozen=True)
@@ -59,18 +59,16 @@ class ImportsHomeView(StaffOnlyMixin, FormView):
     def form_valid(self, form):
         publish_root = form.cleaned_data["resolved_publish_root"]
         replace_existing = form.cleaned_data["replace_existing"]
-        try:
-            result = import_published_run(
-                publish_root,
-                replace_existing=replace_existing,
-            )
-        except ImportContractError as exc:
-            messages.error(self.request, str(exc))
-            return HttpResponseRedirect(self.get_success_url())
+        manifest = _safe_read_manifest(Path(publish_root) / "metadata" / "run_manifest.json")
+        queued_batch = enqueue_published_run(
+            publish_root,
+            replace_existing=replace_existing,
+        )
+        run_id = str(manifest.get("run_id", "")) or Path(publish_root).parent.name
 
         messages.success(
             self.request,
-            f"Imported run {result.pipeline_run.run_id} from {publish_root}.",
+            f"Queued import batch {queued_batch.pk} for run {run_id} from {publish_root}.",
         )
         return HttpResponseRedirect(self.get_success_url())
 
@@ -111,7 +109,7 @@ def _discover_publish_runs() -> list[DetectedPublishRun]:
 
     for candidate in sorted(runs_root.iterdir(), key=_publish_run_sort_key):
         publish_root = candidate / "publish"
-        manifest_path = publish_root / "manifest" / "run_manifest.json"
+        manifest_path = publish_root / "metadata" / "run_manifest.json"
         if not publish_root.is_dir() or not manifest_path.is_file():
             continue
 

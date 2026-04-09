@@ -60,10 +60,13 @@ class ImportViewTests(TestCase):
                 )
 
             self.assertEqual(response.status_code, 200)
-            self.assertContains(response, "Imported run run-alpha")
-            self.assertEqual(PipelineRun.objects.count(), 1)
+            self.assertContains(response, "Queued import batch")
+            self.assertEqual(PipelineRun.objects.count(), 0)
             self.assertEqual(ImportBatch.objects.count(), 1)
-            self.assertEqual(ImportBatch.objects.get().row_counts["genomes"], 1)
+            batch = ImportBatch.objects.get()
+            self.assertEqual(batch.status, ImportBatch.Status.PENDING)
+            self.assertEqual(batch.phase, "queued")
+            self.assertEqual(batch.progress_payload["message"], "Queued for background import.")
 
     def test_import_history_shows_completed_and_failed_batches(self):
         with TemporaryDirectory() as tempdir:
@@ -79,6 +82,8 @@ class ImportViewTests(TestCase):
 
             self.assertEqual(response.status_code, 200)
             self.assertContains(response, "run-alpha")
+            self.assertContains(response, "completed")
+            self.assertContains(response, "failed")
             self.assertContains(response, "completed")
             self.assertContains(response, "failed")
             self.assertContains(response, "genomes")

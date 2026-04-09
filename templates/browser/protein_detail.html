@@ -45,8 +45,10 @@
         <dd>{{ protein.translation_status|default:"-" }}</dd>
         <dt>Sequence</dt>
         <dd>{{ protein.sequence.sequence_name }}</dd>
-        <dt>Protein path</dt>
-        <dd>{{ protein.protein_path }}</dd>
+        <dt>Stored protein sequence</dt>
+        <dd>{% if protein.amino_acid_sequence %}{{ protein.amino_acid_sequence|length }} aa{% else %}-{% endif %}</dd>
+        <dt>Stored CDS sequence</dt>
+        <dd>{% if protein.sequence.nucleotide_sequence %}{{ protein.sequence.nucleotide_sequence|length }} nt{% else %}-{% endif %}</dd>
       </dl>
     </div>
   </div>
@@ -57,6 +59,8 @@
       <dl class="info-grid">
         <dt>Genome</dt>
         <dd><a href="{% url 'browser:genome-detail' protein.genome.pk %}">{{ protein.genome.accession }}</a></dd>
+        <dt>Acquisition batch</dt>
+        <dd>{{ protein.genome.batch.batch_id|default:"-" }}</dd>
         <dt>Taxon</dt>
         <dd><a href="{{ taxon_detail_url }}">{{ protein.taxon.taxon_name }}</a></dd>
         <dt>Run</dt>
@@ -68,6 +72,32 @@
         <dt>Gene group</dt>
         <dd>{{ protein.gene_group|default:"-" }}</dd>
       </dl>
+    </div>
+  </div>
+</section>
+
+<section class="row g-4 mb-4">
+  <div class="col-lg-6">
+    <div class="surface-card surface-card-wide h-100">
+      <div class="section-header">
+        <div>
+          <p class="section-kicker mb-2">Stored protein</p>
+          <h2>Amino-acid sequence</h2>
+        </div>
+      </div>
+      <pre class="mb-0"><code>{{ protein.amino_acid_sequence|default:"-" }}</code></pre>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="surface-card surface-card-wide h-100">
+      <div class="section-header">
+        <div>
+          <p class="section-kicker mb-2">Stored CDS</p>
+          <h2>Nucleotide sequence</h2>
+        </div>
+      </div>
+      <pre class="mb-0"><code>{{ protein.sequence.nucleotide_sequence|default:"-" }}</code></pre>
     </div>
   </div>
 </section>

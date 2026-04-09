@@ -5,14 +5,25 @@ from .published_run import (
     load_published_run,
     resolve_required_artifacts,
 )
-from .import_run import ImportRunResult, import_published_run
+from .import_run import (
+    ImportPhase,
+    ImportRunResult,
+    enqueue_published_run,
+    import_published_run,
+    process_import_batch,
+    process_next_pending_import_batch,
+)
 
 __all__ = [
     "ImportContractError",
+    "ImportPhase",
     "ImportRunResult",
     "ParsedPublishedRun",
     "RequiredArtifactPaths",
+    "enqueue_published_run",
     "import_published_run",
     "load_published_run",
+    "process_import_batch",
+    "process_next_pending_import_batch",
     "resolve_required_artifacts",
 ]

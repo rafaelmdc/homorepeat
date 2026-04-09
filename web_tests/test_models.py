@@ -1,7 +1,21 @@
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
-from apps.browser.models import Genome, PipelineRun, Protein, RepeatCall, RunParameter, Sequence, Taxon, TaxonClosure
+from apps.browser.models import (
+    AccessionCallCount,
+    AccessionStatus,
+    AcquisitionBatch,
+    DownloadManifestEntry,
+    Genome,
+    NormalizationWarning,
+    PipelineRun,
+    Protein,
+    RepeatCall,
+    RunParameter,
+    Sequence,
+    Taxon,
+    TaxonClosure,
+)
 from apps.imports.models import ImportBatch
 
 
@@ -69,6 +83,57 @@ class ImportBatchModelTests(TestCase):
 
         self.assertEqual(batch.pipeline_run, pipeline_run)
         self.assertEqual(batch.status, ImportBatch.Status.PENDING)
+        self.assertEqual(batch.phase, "")
+        self.assertIsNone(batch.heartbeat_at)
+        self.assertEqual(batch.progress_payload, {})
+
+
+class RawProvenanceModelTests(TestCase):
+    def setUp(self):
+        self.run = PipelineRun.objects.create(run_id="run-alpha", status="success")
+        self.batch = AcquisitionBatch.objects.create(
+            pipeline_run=self.run,
+            batch_id="batch_0001",
+        )
+
+    def test_acquisition_batch_is_unique_within_run(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                AcquisitionBatch.objects.create(
+                    pipeline_run=self.run,
+                    batch_id="batch_0001",
+                )
+
+    def test_download_manifest_entry_is_unique_per_run_batch_accession(self):
+        DownloadManifestEntry.objects.create(
+            pipeline_run=self.run,
+            batch=self.batch,
+            assembly_accession="GCF_000001405.40",
+            download_status="downloaded",
+            package_mode="direct_zip",
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                DownloadManifestEntry.objects.create(
+                    pipeline_run=self.run,
+                    batch=self.batch,
+                    assembly_accession="GCF_000001405.40",
+                    download_status="downloaded",
+                    package_mode="direct_zip",
+                )
+
+    def test_normalization_warning_allows_blank_scoped_identifiers(self):
+        warning = NormalizationWarning.objects.create(
+            pipeline_run=self.run,
+            batch=self.batch,
+            warning_code="partial_cds",
+            warning_scope="sequence",
+            warning_message="CDS is partial",
+        )
+
+        self.assertEqual(warning.assembly_accession, "")
+        self.assertEqual(warning.sequence_id, "")
 
 
 class BiologicalModelTests(TestCase):
@@ -100,7 +165,6 @@ class BiologicalModelTests(TestCase):
             sequence_id="seq_1",
             sequence_name="NM_000001.1",
             sequence_length=900,
-            sequence_path="/tmp/cds.fna",
             gene_symbol="GENE1",
         )
         self.protein = Protein.objects.create(
@@ -111,7 +175,8 @@ class BiologicalModelTests(TestCase):
             protein_id="prot_1",
             protein_name="NP_000001.1",
             protein_length=300,
-            protein_path="/tmp/proteins.faa",
+            accession=self.genome.accession,
+            repeat_call_count=1,
             gene_symbol="GENE1",
         )
 
@@ -152,7 +217,6 @@ class BiologicalModelTests(TestCase):
                     sequence_id="seq_1",
                     sequence_name="duplicate",
                     sequence_length=100,
-                    sequence_path="/tmp/duplicate.fna",
                 )
 
     def test_protein_is_unique_within_run(self):
@@ -166,15 +230,15 @@ class BiologicalModelTests(TestCase):
                     protein_id="prot_1",
                     protein_name="duplicate",
                     protein_length=50,
-                    protein_path="/tmp/duplicate.faa",
                 )
 
-    def test_run_parameter_is_unique_within_run_method_name(self):
+    def test_run_parameter_is_unique_within_run_method_residue_name(self):
         RunParameter.objects.create(
             pipeline_run=self.run_alpha,
             method=RunParameter.Method.PURE,
-            param_name="repeat_residue",
-            param_value="Q",
+            repeat_residue="Q",
+            param_name="min_repeat_count",
+            param_value="6",
         )
 
         with self.assertRaises(IntegrityError):
@@ -182,9 +246,29 @@ class BiologicalModelTests(TestCase):
                 RunParameter.objects.create(
                     pipeline_run=self.run_alpha,
                     method=RunParameter.Method.PURE,
-                    param_name="repeat_residue",
-                    param_value="A",
+                    repeat_residue="Q",
+                    param_name="min_repeat_count",
+                    param_value="8",
                 )
+
+    def test_run_parameter_allows_same_method_name_for_different_residues(self):
+        RunParameter.objects.create(
+            pipeline_run=self.run_alpha,
+            method=RunParameter.Method.PURE,
+            repeat_residue="Q",
+            param_name="min_repeat_count",
+            param_value="6",
+        )
+
+        other_residue = RunParameter.objects.create(
+            pipeline_run=self.run_alpha,
+            method=RunParameter.Method.PURE,
+            repeat_residue="N",
+            param_name="min_repeat_count",
+            param_value="6",
+        )
+
+        self.assertEqual(other_residue.repeat_residue, "N")
 
     def test_repeat_call_is_unique_within_run(self):
         RepeatCall.objects.create(
@@ -195,6 +279,10 @@ class BiologicalModelTests(TestCase):
             taxon=self.species,
             call_id="call_1",
             method=RepeatCall.Method.PURE,
+            accession=self.genome.accession,
+            gene_symbol=self.protein.gene_symbol,
+            protein_name=self.protein.protein_name,
+            protein_length=self.protein.protein_length,
             start=10,
             end=20,
             length=11,
@@ -215,6 +303,10 @@ class BiologicalModelTests(TestCase):
                     taxon=self.species,
                     call_id="call_1",
                     method=RepeatCall.Method.THRESHOLD,
+                    accession=self.genome.accession,
+                    gene_symbol=self.protein.gene_symbol,
+                    protein_name=self.protein.protein_name,
+                    protein_length=self.protein.protein_length,
                     start=30,
                     end=35,
                     length=6,
@@ -236,6 +328,10 @@ class BiologicalModelTests(TestCase):
                     taxon=self.species,
                     call_id="call_bad_purity",
                     method=RepeatCall.Method.PURE,
+                    accession=self.genome.accession,
+                    gene_symbol=self.protein.gene_symbol,
+                    protein_name=self.protein.protein_name,
+                    protein_length=self.protein.protein_length,
                     start=10,
                     end=20,
                     length=11,
@@ -257,6 +353,10 @@ class BiologicalModelTests(TestCase):
                     taxon=self.species,
                     call_id="call_bad_coords",
                     method=RepeatCall.Method.PURE,
+                    accession=self.genome.accession,
+                    gene_symbol=self.protein.gene_symbol,
+                    protein_name=self.protein.protein_name,
+                    protein_length=self.protein.protein_length,
                     start=25,
                     end=20,
                     length=6,
@@ -266,3 +366,30 @@ class BiologicalModelTests(TestCase):
                     purity=1.0,
                     aa_sequence="QQQQQQ",
                 )
+
+    def test_repeat_call_can_store_denormalized_browse_fields(self):
+        repeat_call = RepeatCall.objects.create(
+            pipeline_run=self.run_alpha,
+            genome=self.genome,
+            sequence=self.sequence,
+            protein=self.protein,
+            taxon=self.species,
+            call_id="call_with_denorm",
+            method=RepeatCall.Method.PURE,
+            accession=self.genome.accession,
+            gene_symbol="GENE1",
+            protein_name="NP_000001.1",
+            protein_length=300,
+            start=10,
+            end=20,
+            length=11,
+            repeat_residue="Q",
+            repeat_count=11,
+            non_repeat_count=0,
+            purity=1.0,
+            aa_sequence="QQQQQQQQQQQ",
+        )
+
+        self.assertEqual(repeat_call.accession, self.genome.accession)
+        self.assertEqual(repeat_call.protein_name, self.protein.protein_name)
+        self.assertEqual(repeat_call.protein_length, self.protein.protein_length)

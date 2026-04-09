@@ -11,8 +11,8 @@
       <h1 class="landing-title mb-3">Staff-only published run imports over the existing TSV contract.</h1>
       <p class="landing-lead mb-0">
         Choose a detected publish root from the configured published-runs directory
-        or enter one manually, then import through the same transactional backend
-        used by the management command.
+        or enter one manually, then queue a background import batch that can be
+        processed by the management command worker path.
       </p>
     </div>
     <aside class="landing-aside">
@@ -150,7 +150,9 @@
         <tr>
           <th>Run</th>
           <th>Status</th>
+          <th>Phase</th>
           <th>Started</th>
+          <th>Heartbeat</th>
           <th>Rows</th>
           <th>Source</th>
         </tr>
@@ -166,7 +168,14 @@
               {% endif %}
             </td>
             <td>{{ batch.status }}</td>
+            <td>
+              {{ batch.phase|default:"-" }}
+              {% if batch.progress_payload.message %}
+                <div class="small text-secondary">{{ batch.progress_payload.message }}</div>
+              {% endif %}
+            </td>
             <td>{{ batch.started_at|date:"Y-m-d H:i:s" }}</td>
+            <td>{{ batch.heartbeat_at|date:"Y-m-d H:i:s"|default:"-" }}</td>
             <td>
               {% if batch.row_counts %}
                 {% for label, count in batch.row_counts.items %}
@@ -180,7 +189,7 @@
           </tr>
         {% empty %}
           <tr>
-            <td colspan="5" class="empty-cell">No import batches have been recorded yet.</td>
+            <td colspan="7" class="empty-cell">No import batches have been recorded yet.</td>
           </tr>
         {% endfor %}
       </tbody>

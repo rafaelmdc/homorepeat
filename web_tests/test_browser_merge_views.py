@@ -33,10 +33,11 @@ class BrowserMergeViewTests(TestCase):
             run_id=run_id,
             status="success",
             profile="docker",
+            acquisition_publish_mode="raw",
             git_revision="abc123",
-            manifest_path=f"/tmp/{run_id}/manifest/run_manifest.json",
+            manifest_path=f"/tmp/{run_id}/metadata/run_manifest.json",
             publish_root=f"/tmp/{run_id}/publish",
-            manifest_payload={"run_id": run_id},
+            manifest_payload={"run_id": run_id, "acquisition_publish_mode": "raw"},
         )
         genome = Genome.objects.create(
             pipeline_run=pipeline_run,
@@ -57,7 +58,6 @@ class BrowserMergeViewTests(TestCase):
             sequence_id=f"seq_{genome_suffix}",
             sequence_name=f"NM_{genome_suffix}",
             sequence_length=900,
-            sequence_path=f"/tmp/{genome_suffix}/cds.fna",
             gene_symbol="GENE1",
         )
         protein = Protein.objects.create(
@@ -68,7 +68,6 @@ class BrowserMergeViewTests(TestCase):
             protein_id=f"prot_{genome_suffix}",
             protein_name=protein_name,
             protein_length=protein_length,
-            protein_path=f"/tmp/{genome_suffix}/proteins.faa",
             gene_symbol="GENE1",
         )
         repeat_count = max(1, min(length, int(round(length * purity))))

@@ -27,6 +27,9 @@ class ImportBatch(models.Model):
     finished_at = models.DateTimeField(blank=True, null=True)
     success_count = models.PositiveIntegerField(default=0)
     error_count = models.PositiveIntegerField(default=0)
+    phase = models.CharField(max_length=64, blank=True, db_index=True)
+    heartbeat_at = models.DateTimeField(blank=True, null=True, db_index=True)
+    progress_payload = models.JSONField(default=dict, blank=True)
     row_counts = models.JSONField(default=dict, blank=True)
     error_message = models.TextField(blank=True)
 

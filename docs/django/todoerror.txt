@@ -1,0 +1,19 @@
+  - 1.2 Add real-run inspection fixtures and regression tests.
+    Implemented: helper fixtures emit the new raw layout and parser tests were updated.
+    Not yet done: dedicated large-run contract/regression coverage.
+  - 2.1 Add canonical raw provenance models.
+    Implemented: PipelineRun.acquisition_publish_mode, AcquisitionBatch, AccessionStatus, AccessionCallCount, RunParameter.repeat_residue, Genome.batch.
+    Not yet done: DownloadManifestEntry, NormalizationWarning, denormalized hot browse fields, ImportBatch progress/heartbeat fields.
+  - 3.1 Read-only raw parser.
+    Implemented: manifest, batches, taxonomy, genomes, sequences, proteins, run params, repeat calls, accession status, accession call counts.
+    Not yet done: download manifest, normalization warnings, acquisition validation parsing.
+  - 3.3 Transactional importer.
+    Implemented: transactional import of batches, taxonomy, genomes, matched sequences, matched proteins, matched FASTA content, run params, accession
+    status, accession call counts, repeat calls, replace-existing, rollback behavior.
+    Not yet done: download manifest/warning import, progress/heartbeat updates.
+  - 4.1 Run and batch provenance pages.
+    Implemented: run detail now shows more raw provenance and status summary.
+    Not yet done: actual batch list/detail pages.
+  - 4.3 Biological browsing on the corrected schema.
+    Implemented: runtime no longer depends on pipeline file paths; protein and repeat-call detail pages use DB-backed stored content and batch provenance.
+    Not yet done: keyset pagination and a broader performance pass.

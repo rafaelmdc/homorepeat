@@ -58,7 +58,6 @@ class BrowserViewTests(TestCase):
                 sequence_id=f"seq_{suffix}",
                 sequence_name=f"NM_{suffix}",
                 sequence_length=900,
-                sequence_path=f"/tmp/{suffix}/cds.fna",
                 gene_symbol=gene_symbol,
             )
             protein = Protein.objects.create(
@@ -69,7 +68,6 @@ class BrowserViewTests(TestCase):
                 protein_id=f"prot_{suffix}",
                 protein_name=f"NP_{suffix}",
                 protein_length=300,
-                protein_path=f"/tmp/{suffix}/proteins.faa",
                 gene_symbol=gene_symbol,
             )
         else:
@@ -131,6 +129,9 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, "Distinct taxa referenced")
         self.assertContains(response, "?run=run-alpha")
         self.assertContains(response, "Method: pure")
+        self.assertContains(response, "Acquisition batches")
+        self.assertContains(response, "Accession status")
+        self.assertContains(response, "completed")
 
     def test_taxon_list_run_filter_keeps_ancestor_path(self):
         response = self.client.get(reverse("browser:taxon-list"), {"run": "run-alpha"})
@@ -192,6 +193,13 @@ class BrowserViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "NP_run-alpha")
         self.assertNotContains(response, "NP_run-beta")
+
+    def test_protein_list_defers_large_sequence_payloads(self):
+        response = self.client.get(reverse("browser:protein-list"), {"run": "run-alpha"})
+
+        self.assertEqual(response.status_code, 200)
+        protein = response.context["page_obj"].object_list[0]
+        self.assertIn("amino_acid_sequence", protein.get_deferred_fields())
 
     def test_protein_list_combined_call_filters_match_same_linked_call(self):
         matched = self._create_repeat_call(
@@ -264,6 +272,9 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, "call_alpha")
         self.assertContains(response, threshold["repeat_call"].call_id)
         self.assertContains(response, reverse("browser:genome-detail", args=[self.alpha["genome"].pk]))
+        self.assertContains(response, "Stored protein sequence")
+        self.assertContains(response, "Q" * 30)
+        self.assertContains(response, "CAG" * 30)
 
     def test_repeatcall_list_combined_filters_and_branch_scope_work(self):
         matched = self._create_repeat_call(
@@ -314,6 +325,15 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, matched["repeat_call"].call_id)
         self.assertNotContains(response, "call_call_filter_low_purity")
         self.assertNotContains(response, "call_call_filter_beta")
+
+    def test_repeatcall_list_defers_large_sequence_payloads(self):
+        response = self.client.get(reverse("browser:repeatcall-list"), {"run": "run-alpha"})
+
+        self.assertEqual(response.status_code, 200)
+        repeat_call = response.context["page_obj"].object_list[0]
+        self.assertIn("aa_sequence", repeat_call.get_deferred_fields())
+        self.assertIn("codon_sequence", repeat_call.get_deferred_fields())
+        self.assertIn("amino_acid_sequence", repeat_call.protein.get_deferred_fields())
 
     def test_repeatcall_detail_shows_linked_parents_and_coordinates(self):
         matched = self._create_repeat_call(

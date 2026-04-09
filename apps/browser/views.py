@@ -14,6 +14,9 @@ from .merged import (
     merged_repeat_call_groups,
 )
 from .models import (
+    AccessionCallCount,
+    AccessionStatus,
+    AcquisitionBatch,
     Genome,
     PipelineRun,
     Protein,
@@ -199,6 +202,11 @@ class RunDetailView(DetailView):
         )
         context["repeat_residues"] = list(
             pipeline_run.repeat_calls.order_by("repeat_residue").values_list("repeat_residue", flat=True).distinct()
+        )
+        context["terminal_status_summary"] = list(
+            pipeline_run.accession_status_rows.values("terminal_status")
+            .annotate(total=Count("pk"))
+            .order_by("terminal_status")
         )
         context["latest_import_batch"] = pipeline_run.import_batches.order_by("-started_at").first()
         return context
@@ -580,7 +588,7 @@ class ProteinListView(BrowserListView):
 
     def get_base_queryset(self):
         return _annotated_proteins(
-            Protein.objects.select_related("pipeline_run", "genome", "sequence", "taxon")
+            Protein.objects.select_related("pipeline_run", "genome", "taxon").defer("amino_acid_sequence")
         )
 
     def _load_filter_state(self):
@@ -768,7 +776,11 @@ class RepeatCallListView(BrowserListView):
     default_ordering = ("pipeline_run__run_id", "protein__protein_name", "start", "call_id")
 
     def get_base_queryset(self):
-        return RepeatCall.objects.select_related("pipeline_run", "genome", "sequence", "protein", "taxon")
+        return RepeatCall.objects.select_related("pipeline_run", "genome", "protein", "taxon").defer(
+            "aa_sequence",
+            "codon_sequence",
+            "protein__amino_acid_sequence",
+        )
 
     def _load_filter_state(self):
         self.current_run = _resolve_current_run(self.request)
@@ -962,10 +974,13 @@ def _annotated_runs(queryset=None):
     if queryset is None:
         queryset = PipelineRun.objects.all()
     return queryset.annotate(
+        acquisition_batches_count=Coalesce(_count_subquery(AcquisitionBatch, "pipeline_run"), Value(0)),
         genomes_count=Coalesce(_count_subquery(Genome, "pipeline_run"), Value(0)),
         sequences_count=Coalesce(_count_subquery(Sequence, "pipeline_run"), Value(0)),
         proteins_count=Coalesce(_count_subquery(Protein, "pipeline_run"), Value(0)),
         repeat_calls_count=Coalesce(_count_subquery(RepeatCall, "pipeline_run"), Value(0)),
+        accession_status_rows_count=Coalesce(_count_subquery(AccessionStatus, "pipeline_run"), Value(0)),
+        accession_call_count_rows_count=Coalesce(_count_subquery(AccessionCallCount, "pipeline_run"), Value(0)),
         run_parameters_count=Coalesce(_count_subquery(RunParameter, "pipeline_run"), Value(0)),
     )
 

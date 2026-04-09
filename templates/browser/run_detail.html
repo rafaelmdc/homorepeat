@@ -33,6 +33,7 @@
         <div class="card-body p-4">
           <p class="text-uppercase text-secondary small mb-3">At a glance</p>
           <ul class="stack-list mb-0">
+            <li>{{ pipeline_run.acquisition_batches_count }} acquisition batch{{ pipeline_run.acquisition_batches_count|pluralize }}</li>
             <li>{{ pipeline_run.genomes_count }} genome{{ pipeline_run.genomes_count|pluralize }}</li>
             <li>{{ pipeline_run.proteins_count }} repeat-bearing protein{{ pipeline_run.proteins_count|pluralize }}</li>
             <li>{{ pipeline_run.repeat_calls_count }} repeat call{{ pipeline_run.repeat_calls_count|pluralize }}</li>
@@ -45,6 +46,15 @@
 </section>
 
 <section class="row g-4 mb-4">
+  <div class="col-sm-6 col-xl-4">
+    <article class="card h-100 border-0 shadow-sm stat-card">
+      <div class="card-body">
+        <p class="text-uppercase text-secondary small mb-2">Acquisition batches</p>
+        <p class="display-5 fw-semibold mb-3">{{ pipeline_run.acquisition_batches_count }}</p>
+        <p class="text-secondary mb-0">Raw acquisition batches represented by this imported run.</p>
+      </div>
+    </article>
+  </div>
   <div class="col-sm-6 col-xl-4">
     <article class="card h-100 border-0 shadow-sm stat-card">
       <div class="card-body">
@@ -99,6 +109,24 @@
       </div>
     </article>
   </div>
+  <div class="col-sm-6 col-xl-4">
+    <article class="card h-100 border-0 shadow-sm stat-card">
+      <div class="card-body">
+        <p class="text-uppercase text-secondary small mb-2">Accession status</p>
+        <p class="display-5 fw-semibold mb-3">{{ pipeline_run.accession_status_rows_count }}</p>
+        <p class="text-secondary mb-0">Accession-level operational ledger rows imported from the published status tables.</p>
+      </div>
+    </article>
+  </div>
+  <div class="col-sm-6 col-xl-4">
+    <article class="card h-100 border-0 shadow-sm stat-card">
+      <div class="card-body">
+        <p class="text-uppercase text-secondary small mb-2">Method/residue status</p>
+        <p class="display-5 fw-semibold mb-3">{{ pipeline_run.accession_call_count_rows_count }}</p>
+        <p class="text-secondary mb-0">Per-accession method and repeat-residue status rows imported for this run.</p>
+      </div>
+    </article>
+  </div>
 </section>
 
 <section class="row g-4">
@@ -128,6 +156,24 @@
           -
         {% endif %}
       </dd>
+        </dl>
+      </div>
+    </article>
+  </div>
+
+  <div class="col-lg-6">
+    <article class="card h-100 border-0 shadow-sm detail-card">
+      <div class="card-body">
+        <p class="eyebrow">Status ledger</p>
+        <h2>Operational summary</h2>
+        <dl class="info-grid">
+          {% for item in terminal_status_summary %}
+            <dt>{{ item.terminal_status|default:"(blank)" }}</dt>
+            <dd>{{ item.total }}</dd>
+          {% empty %}
+            <dt>Status rows</dt>
+            <dd>Not imported</dd>
+          {% endfor %}
         </dl>
       </div>
     </article>
