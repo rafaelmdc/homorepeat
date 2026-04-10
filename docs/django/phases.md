@@ -1,9 +1,9 @@
-# HomoRepeat Raw-Mode Refactor Phases
+# HomoRepeat Django Refactor Phases
 
 ## Purpose
 
-This document turns `docs/django/implementation.md` into a reviewable
-implementation sequence.
+This document turns `docs/django/implementation.md` and
+`docs/django/merged.md` into a reviewable implementation sequence.
 
 ## Current Status
 
@@ -36,7 +36,7 @@ Validated today:
 
 Current next slice:
 
-- `4.3` Biological browsing on the corrected schema
+- `5.1` Merged identity and exclusion rules on the corrected raw layer
 
 The sequencing rules are:
 
@@ -377,28 +377,137 @@ Required behavior:
 Exit criteria:
 - browser tests pass on corrected models and imports
 
-## Phase 5: Derived Merged Layer
+## Phase 5: Merged Redesign
 
-### Slice 5.1: Rebase merged views on the corrected raw layer
+### Slice 5.1: Define merged identity and exclusion rules
 
 Goal:
-- keep merged browsing useful without confusing it with raw truth
+- move merged semantics from collapsed call fingerprints to trusted biological
+  identities
 
 Scope:
-- preserve accession-based grouping as a derived layer
-- preserve explicit repeat-call grouping fingerprints
-- update merged pages to show source counts, source runs, and backlinks to raw
-  records
-- continue surfacing denominator conflicts instead of flattening them away
-- keep merged views as ordinary queries or simple SQL views first
+- replace the primary merged keys with:
+  - protein-level identity `(accession, protein_id)`
+  - residue-specific identity `(accession, protein_id, residue)`
+- centralize trusted-key validation for accession, protein ID, and residue
+- exclude unkeyed or untrusted rows from merged statistics while keeping them
+  visible in raw mode and provenance views
+- define deterministic representative-row ranking for merged summaries when one
+  raw row must be shown for convenience
+
+Out of scope:
+- no new materialized tables yet
+- no broad merged-page refresh yet
 
 Required behavior:
-- merged views are clearly labeled as derived
-- raw views remain the default authoritative layer
+- coordinate drift, method differences, purity changes, and minor sequence or
+  annotation drift do not split merged identity when the relevant key is
+  unchanged
+- residue only splits identity in residue-specific merged summaries
+- merged logic remains derived from raw imported rows
 
 Exit criteria:
-- merged accession and merged call pages work against the refactored import
-  model
+- helper-level tests cover duplicate collapse, residue split behavior, excluded
+  rows, and representative-row ranking
+
+### Slice 5.2: Rebuild protein-level merged summaries
+
+Goal:
+- make accession and taxon merged counts reflect unique proteins rather than
+  collapsed repeat-call fingerprints
+
+Scope:
+- rework merged accession analytics around unique `(accession, protein_id)`
+  units
+- update merged protein lists and counters to use presence-per-protein
+  semantics
+- preserve denominator conflict reporting and contributing source-run and
+  source-call counts
+- keep merged queries derived from raw tables only
+
+Required behavior:
+- the same `(accession, protein_id)` across runs counts once in protein-level
+  merged statistics
+- filtered merged views include a protein-level unit when at least one
+  contributing raw row matches the active filters
+- raw and merged pages remain cross-linked
+
+Exit criteria:
+- merged accession and protein pages follow the protein-level rules in
+  `docs/django/merged.md`
+
+### Slice 5.3: Add residue-specific merged summaries
+
+Goal:
+- support residue-aware biological summaries without reintroducing
+  call-fingerprint identity
+
+Scope:
+- add or refactor residue-specific grouping around
+  `(accession, protein_id, residue)`
+- update residue-filtered analytics and list pages to use residue-specific
+  merged units
+- ensure one protein can contribute to multiple residue groups when distinct
+  residues are observed
+
+Required behavior:
+- the same protein with residues such as Q and N counts:
+  - once at the protein level
+  - once per residue at the residue-specific level
+- residue filters operate on exact residue-specific identities, not on generic
+  representative rows
+
+Exit criteria:
+- merged residue summaries and filters follow the documented residue-specific
+  semantics
+
+### Slice 5.4: Make merged pages evidence-first and provenance-complete
+
+Goal:
+- present merged rows as derived summaries over raw evidence rather than as
+  independent truth rows
+
+Scope:
+- add contributing run count, contributing raw row or raw call count, and
+  backlinks to source proteins and repeat calls
+- surface methods observed, coordinate drift, and sequence-length or sequence
+  variability where relevant
+- label any displayed source row as representative evidence, not as canonical
+  merged truth
+
+Required behavior:
+- every merged row remains auditable back to raw evidence
+- merged pages do not imply "latest row wins" semantics
+- excluded-row counts remain visible where they affect the summary
+
+Exit criteria:
+- merged detail and presentation paths surface provenance and evidence
+  variability clearly
+
+### Slice 5.5: Query shaping, performance, and regression coverage
+
+Goal:
+- keep the identity-first merged layer fast and stable on realistic imports
+
+Scope:
+- keep the implementation as ORM or ordinary-query logic first
+- narrow hot-path projections and add any missing browse indexes only if
+  profiling justifies them
+- add regression tests for:
+  - multi-run duplicate collapse
+  - residue splits
+  - excluded unkeyed rows
+  - filter inclusion semantics
+  - backlinks to raw evidence
+- validate the merged layer on the small and large imported runs
+
+Out of scope:
+- no speculative materialized layer unless ordinary queries prove insufficient
+
+Exit criteria:
+- merged browser tests pass
+- merged pages remain responsive on realistic data
+- any further optimization work is evidence-driven rather than speculative
 
 ## Phase 6: Documentation And Hardening
 
@@ -409,7 +518,8 @@ Goal:
 
 Scope:
 - update import-facing README or operator docs if needed
-- document that raw mode is supported and merged mode is deferred
+- document that raw mode is canonical and merged mode is derived from imported
+  raw evidence
 - document the runtime dependency model:
   Postgres for normal browsing, TSV artifacts for import, and database-backed
   runtime serving

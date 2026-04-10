@@ -117,7 +117,7 @@
           {% include "browser/includes/sortable_th.html" with label="Taxon" header=sort_links.taxon_name %}
           {% include "browser/includes/sortable_th.html" with label="Taxonomy ID" header=sort_links.taxon_id %}
           {% include "browser/includes/sortable_th.html" with label="Rank" header=sort_links.rank %}
-          <th>Parent</th>
+          {% include "browser/includes/sortable_th.html" with label="Parent" header=sort_links.parent %}
         </tr>
       </thead>
       <tbody {% if virtual_scroll_enabled %}data-virtual-scroll-body{% endif %}>

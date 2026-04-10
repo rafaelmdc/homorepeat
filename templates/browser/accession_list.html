@@ -210,9 +210,9 @@
           {% include "browser/includes/sortable_th.html" with label="Source genomes" header=sort_links.genomes %}
           {% include "browser/includes/sortable_th.html" with label="Source runs" header=sort_links.runs %}
           {% include "browser/includes/sortable_th.html" with label="Raw calls" header=sort_links.calls %}
-          <th>Collapsed calls</th>
-          <th>Derived proteins</th>
-          <th>Analyzed proteins</th>
+          {% include "browser/includes/sortable_th.html" with label="Collapsed calls" header=sort_links.collapsed_calls %}
+          {% include "browser/includes/sortable_th.html" with label="Derived proteins" header=sort_links.derived_proteins %}
+          {% include "browser/includes/sortable_th.html" with label="Analyzed proteins" header=sort_links.analyzed_proteins %}
         </tr>
       </thead>
       <tbody {% if virtual_scroll_enabled %}data-virtual-scroll-body{% endif %}>

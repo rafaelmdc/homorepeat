@@ -346,6 +346,18 @@ class RunListView(VirtualScrollListView):
     ordering_map = {
         "run_id": ("run_id",),
         "-run_id": ("-run_id",),
+        "status": ("status", "run_id"),
+        "-status": ("-status", "run_id"),
+        "profile": ("profile", "run_id"),
+        "-profile": ("-profile", "run_id"),
+        "genomes": ("-genomes_count", "run_id"),
+        "-genomes": ("genomes_count", "run_id"),
+        "sequences": ("-sequences_count", "run_id"),
+        "-sequences": ("sequences_count", "run_id"),
+        "proteins": ("-proteins_count", "run_id"),
+        "-proteins": ("proteins_count", "run_id"),
+        "repeat_calls": ("-repeat_calls_count", "run_id"),
+        "-repeat_calls": ("repeat_calls_count", "run_id"),
         "started": ("started_at_utc", "run_id"),
         "-started": ("-started_at_utc", "run_id"),
         "finished": ("finished_at_utc", "run_id"),
@@ -568,8 +580,16 @@ class NormalizationWarningListView(VirtualScrollListView):
         "-accession": ("-assembly_accession", "warning_code", "pipeline_run__run_id", "batch__batch_id"),
         "batch": ("batch__batch_id", "warning_code", "assembly_accession"),
         "-batch": ("-batch__batch_id", "warning_code", "assembly_accession"),
+        "genome": ("genome_id", "warning_code", "assembly_accession", "pipeline_run__run_id"),
+        "-genome": ("-genome_id", "warning_code", "assembly_accession", "pipeline_run__run_id"),
+        "sequence": ("sequence_id", "warning_code", "assembly_accession", "pipeline_run__run_id"),
+        "-sequence": ("-sequence_id", "warning_code", "assembly_accession", "pipeline_run__run_id"),
+        "protein": ("protein_id", "warning_code", "assembly_accession", "pipeline_run__run_id"),
+        "-protein": ("-protein_id", "warning_code", "assembly_accession", "pipeline_run__run_id"),
         "run": ("pipeline_run__run_id", "batch__batch_id", "warning_code", "assembly_accession"),
         "-run": ("-pipeline_run__run_id", "batch__batch_id", "warning_code", "assembly_accession"),
+        "message": ("warning_message", "warning_code", "assembly_accession", "pipeline_run__run_id"),
+        "-message": ("-warning_message", "warning_code", "assembly_accession", "pipeline_run__run_id"),
     }
     default_ordering = ("pipeline_run__run_id", "batch__batch_id", "warning_code", "assembly_accession")
 
@@ -650,6 +670,16 @@ class AccessionStatusListView(VirtualScrollListView):
         "-accession": ("-assembly_accession", "pipeline_run__run_id", "batch__batch_id"),
         "batch": ("batch__batch_id", "assembly_accession"),
         "-batch": ("-batch__batch_id", "assembly_accession"),
+        "download_status": ("download_status", "assembly_accession"),
+        "-download_status": ("-download_status", "assembly_accession"),
+        "normalize_status": ("normalize_status", "assembly_accession"),
+        "-normalize_status": ("-normalize_status", "assembly_accession"),
+        "translate_status": ("translate_status", "assembly_accession"),
+        "-translate_status": ("-translate_status", "assembly_accession"),
+        "detect_status": ("detect_status", "assembly_accession"),
+        "-detect_status": ("-detect_status", "assembly_accession"),
+        "finalize_status": ("finalize_status", "assembly_accession"),
+        "-finalize_status": ("-finalize_status", "assembly_accession"),
         "run": ("pipeline_run__run_id", "batch__batch_id", "assembly_accession"),
         "-run": ("-pipeline_run__run_id", "batch__batch_id", "assembly_accession"),
         "terminal_status": ("terminal_status", "assembly_accession"),
@@ -755,6 +785,10 @@ class AccessionCallCountListView(VirtualScrollListView):
         "-method": ("-method", "repeat_residue", "assembly_accession"),
         "residue": ("repeat_residue", "method", "assembly_accession"),
         "-residue": ("-repeat_residue", "method", "assembly_accession"),
+        "detect_status": ("detect_status", "assembly_accession", "method", "repeat_residue"),
+        "-detect_status": ("-detect_status", "assembly_accession", "method", "repeat_residue"),
+        "finalize_status": ("finalize_status", "assembly_accession", "method", "repeat_residue"),
+        "-finalize_status": ("-finalize_status", "assembly_accession", "method", "repeat_residue"),
         "repeat_calls": ("-n_repeat_calls", "assembly_accession", "method", "repeat_residue"),
         "-repeat_calls": ("n_repeat_calls", "assembly_accession", "method", "repeat_residue"),
     }
@@ -870,6 +904,10 @@ class DownloadManifestEntryListView(VirtualScrollListView):
         "-package_mode": ("-package_mode", "assembly_accession"),
         "file_size_bytes": ("file_size_bytes", "assembly_accession"),
         "-file_size_bytes": ("-file_size_bytes", "assembly_accession"),
+        "checksum": ("checksum", "assembly_accession"),
+        "-checksum": ("-checksum", "assembly_accession"),
+        "paths": ("download_path", "rehydrated_path", "assembly_accession"),
+        "-paths": ("-download_path", "-rehydrated_path", "assembly_accession"),
     }
     default_ordering = ("pipeline_run__run_id", "batch__batch_id", "assembly_accession")
 
@@ -954,6 +992,8 @@ class TaxonListView(VirtualScrollListView):
         "-taxon_id": ("-taxon_id",),
         "rank": ("rank", "taxon_name"),
         "-rank": ("-rank", "taxon_name"),
+        "parent": ("parent_taxon__taxon_name", "taxon_name", "taxon_id"),
+        "-parent": ("-parent_taxon__taxon_name", "taxon_name", "taxon_id"),
     }
     default_ordering = ("taxon_name", "taxon_id")
 
@@ -1098,8 +1138,16 @@ class GenomeListView(VirtualScrollListView):
     merged_ordering_map = {
         "accession": ("accession",),
         "-accession": ("-accession",),
+        "source_genomes": ("-source_genomes_count", "accession"),
+        "-source_genomes": ("source_genomes_count", "accession"),
+        "source_runs": ("-source_runs_count", "accession"),
+        "-source_runs": ("source_runs_count", "accession"),
+        "raw_repeat_calls": ("-raw_repeat_calls_count", "accession"),
+        "-raw_repeat_calls": ("raw_repeat_calls_count", "accession"),
         "proteins": ("-raw_repeat_calls_count", "accession"),
         "-proteins": ("raw_repeat_calls_count", "accession"),
+        "analyzed_proteins": ("-analyzed_protein_max", "-analyzed_protein_min", "accession"),
+        "-analyzed_proteins": ("analyzed_protein_min", "analyzed_protein_max", "accession"),
     }
     merged_default_ordering = ("accession",)
     ordering_map = {
@@ -1107,10 +1155,16 @@ class GenomeListView(VirtualScrollListView):
         "-accession": ("pipeline_run__run_id", "-accession", "genome_id"),
         "genome_name": ("pipeline_run__run_id", "genome_name", "accession", "genome_id"),
         "-genome_name": ("pipeline_run__run_id", "-genome_name", "accession", "genome_id"),
+        "taxon": ("taxon__taxon_name", "pipeline_run__run_id", "accession", "genome_id"),
+        "-taxon": ("-taxon__taxon_name", "pipeline_run__run_id", "accession", "genome_id"),
         "run": ("pipeline_run__run_id", "accession", "genome_id"),
         "-run": ("-pipeline_run__run_id", "accession", "genome_id"),
+        "sequences": ("-sequences_count", "pipeline_run__run_id", "accession", "genome_id"),
+        "-sequences": ("sequences_count", "pipeline_run__run_id", "accession", "genome_id"),
         "proteins": ("-proteins_count", "pipeline_run__run_id", "accession", "genome_id"),
         "-proteins": ("proteins_count", "pipeline_run__run_id", "accession", "genome_id"),
+        "repeat_calls": ("-repeat_calls_count", "pipeline_run__run_id", "accession", "genome_id"),
+        "-repeat_calls": ("repeat_calls_count", "pipeline_run__run_id", "accession", "genome_id"),
     }
     default_ordering = ("pipeline_run__run_id", "accession", "genome_id")
 
@@ -1262,6 +1316,10 @@ class SequenceListView(VirtualScrollListView):
         "-sequence_name": ("pipeline_run__run_id", "-sequence_name", "sequence_id"),
         "gene_symbol": ("pipeline_run__run_id", "gene_symbol", "sequence_name", "sequence_id"),
         "-gene_symbol": ("pipeline_run__run_id", "-gene_symbol", "sequence_name", "sequence_id"),
+        "genome": ("genome__accession", "pipeline_run__run_id", "sequence_name", "sequence_id"),
+        "-genome": ("-genome__accession", "pipeline_run__run_id", "sequence_name", "sequence_id"),
+        "taxon": ("taxon__taxon_name", "pipeline_run__run_id", "sequence_name", "sequence_id"),
+        "-taxon": ("-taxon__taxon_name", "pipeline_run__run_id", "sequence_name", "sequence_id"),
         "run": ("pipeline_run__run_id", "sequence_name", "sequence_id"),
         "-run": ("-pipeline_run__run_id", "sequence_name", "sequence_id"),
         "proteins": ("-proteins_count", "pipeline_run__run_id", "sequence_name", "sequence_id"),
@@ -1414,8 +1472,23 @@ class AccessionsListView(VirtualScrollListView):
         "-genomes": ("source_genomes_count", "accession"),
         "calls": ("-raw_repeat_calls_count", "accession"),
         "-calls": ("raw_repeat_calls_count", "accession"),
+        "collapsed_calls": ("-collapsed_repeat_calls_count", "accession"),
+        "-collapsed_calls": ("collapsed_repeat_calls_count", "accession"),
+        "derived_proteins": ("-merged_repeat_bearing_proteins_count", "accession"),
+        "-derived_proteins": ("merged_repeat_bearing_proteins_count", "accession"),
+        "analyzed_proteins": ("-analyzed_protein_max", "-analyzed_protein_min", "accession"),
+        "-analyzed_proteins": ("analyzed_protein_min", "analyzed_protein_max", "accession"),
     }
     default_ordering = ("accession",)
+
+    def _get_analytics_summary(self):
+        if not hasattr(self, "_analytics_summary"):
+            self._analytics_summary = build_accession_analytics(
+                current_run=getattr(self, "current_run", None),
+                search_query=self.get_search_query(),
+                branch_taxon=getattr(self, "selected_branch_taxon", None),
+            )
+        return self._analytics_summary
 
     def get_search_query(self):
         return self.request.GET.get("q", "").strip()
@@ -1432,26 +1505,32 @@ class AccessionsListView(VirtualScrollListView):
 
     def get_queryset(self):
         self._load_filter_state()
-        queryset = accession_group_queryset(
-            current_run=self.current_run,
-            search_query=self.get_search_query(),
-            branch_taxon=self.selected_branch_taxon,
+        summary = self._get_analytics_summary()
+        return _sort_dict_records(
+            summary["accession_groups"],
+            requested_ordering=self.request.GET.get("order_by", "").strip(),
+            default_ordering="accession",
+            key_map={
+                "accession": lambda record: (record["accession"],),
+                "runs": lambda record: (record["source_runs_count"], record["accession"]),
+                "genomes": lambda record: (record["source_genomes_count"], record["accession"]),
+                "calls": lambda record: (record["raw_repeat_calls_count"], record["accession"]),
+                "collapsed_calls": lambda record: (record["collapsed_repeat_calls_count"], record["accession"]),
+                "derived_proteins": lambda record: (
+                    record["merged_repeat_bearing_proteins_count"],
+                    record["accession"],
+                ),
+                "analyzed_proteins": lambda record: (
+                    record["analyzed_protein_min"],
+                    record["analyzed_protein_max"],
+                    record["accession"],
+                ),
+            },
         )
-        ordering = self.get_ordering()
-        if ordering:
-            queryset = queryset.order_by(*ordering)
-        return queryset
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        summary = build_accession_analytics(
-            current_run=getattr(self, "current_run", None),
-            search_query=self.get_search_query(),
-            branch_taxon=getattr(self, "selected_branch_taxon", None),
-        )
-        for accession_group in context["accession_groups"]:
-            accession_group.update(summary["accession_metrics"][accession_group["accession"]])
-
+        summary = self._get_analytics_summary()
         current_run = getattr(self, "current_run", None)
         context["summary"] = summary
         context["current_query"] = self.get_search_query()
@@ -1511,6 +1590,21 @@ class ProteinListView(VirtualScrollListView):
     context_object_name = "proteins"
     virtual_scroll_row_template_name = "browser/includes/protein_list_rows.html"
     virtual_scroll_colspan = 6
+    merged_ordering_map = {
+        "protein_name": ("protein_name", "accession"),
+        "-protein_name": ("-protein_name", "accession"),
+        "gene_symbol": ("gene_symbol", "protein_name", "accession"),
+        "-gene_symbol": ("-gene_symbol", "protein_name", "accession"),
+        "accession": ("accession", "protein_name"),
+        "-accession": ("-accession", "protein_name"),
+        "run": ("source_runs_count", "protein_name", "accession"),
+        "-run": ("-source_runs_count", "protein_name", "accession"),
+        "source_proteins": ("source_proteins_count", "protein_name", "accession"),
+        "-source_proteins": ("-source_proteins_count", "protein_name", "accession"),
+        "calls": ("collapsed_repeat_calls_count", "protein_name", "accession"),
+        "-calls": ("-collapsed_repeat_calls_count", "protein_name", "accession"),
+    }
+    merged_default_ordering = ("protein_name", "accession")
     ordering_map = {
         "protein_name": ("pipeline_run__run_id", "accession", "protein_name", "protein_id"),
         "-protein_name": ("pipeline_run__run_id", "accession", "-protein_name", "protein_id"),
@@ -1518,6 +1612,10 @@ class ProteinListView(VirtualScrollListView):
         "-gene_symbol": ("pipeline_run__run_id", "-gene_symbol", "accession", "protein_name", "protein_id"),
         "protein_length": ("pipeline_run__run_id", "protein_length", "accession", "protein_name", "protein_id"),
         "-protein_length": ("pipeline_run__run_id", "-protein_length", "accession", "protein_name", "protein_id"),
+        "accession": ("pipeline_run__run_id", "accession", "protein_name", "protein_id"),
+        "-accession": ("pipeline_run__run_id", "-accession", "protein_name", "protein_id"),
+        "taxon": ("taxon__taxon_name", "pipeline_run__run_id", "accession", "protein_name", "protein_id"),
+        "-taxon": ("-taxon__taxon_name", "pipeline_run__run_id", "accession", "protein_name", "protein_id"),
         "run": ("pipeline_run__run_id", "accession", "protein_name", "protein_id"),
         "-run": ("-pipeline_run__run_id", "accession", "protein_name", "protein_id"),
         "calls": ("-repeat_calls_count", "pipeline_run__run_id", "accession", "protein_name", "protein_id"),
@@ -1639,7 +1737,13 @@ class ProteinListView(VirtualScrollListView):
                     "protein_name": lambda record: (record["protein_name"], record["accession"]),
                     "gene_symbol": lambda record: (record["gene_symbol_label"], record["protein_name"], record["accession"]),
                     "protein_length": lambda record: (record["protein_length"], record["protein_name"], record["accession"]),
+                    "accession": lambda record: (record["accession"], record["protein_name"]),
                     "run": lambda record: (record["source_runs_count"], record["protein_name"], record["accession"]),
+                    "source_proteins": lambda record: (
+                        record["source_proteins_count"],
+                        record["protein_name"],
+                        record["accession"],
+                    ),
                     "calls": lambda record: (
                         record["collapsed_repeat_calls_count"],
                         record["protein_name"],
@@ -1690,6 +1794,15 @@ class ProteinListView(VirtualScrollListView):
             .values_list("repeat_residue", flat=True)
             .distinct()
         )
+        if context["current_mode"] == "merged":
+            context["sort_links"] = self.build_sort_links(
+                self.merged_ordering_map,
+                current_order_by=context["current_order_by"],
+            )
+            context["ordering_options"] = [
+                {"value": value, "label": _ordering_label(value)}
+                for value in self.merged_ordering_map.keys()
+            ]
         return context
 
 

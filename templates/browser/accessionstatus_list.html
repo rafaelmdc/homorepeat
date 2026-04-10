@@ -133,11 +133,11 @@
         <tr>
           {% include "browser/includes/sortable_th.html" with label="Accession" header=sort_links.accession %}
           {% include "browser/includes/sortable_th.html" with label="Batch" header=sort_links.batch %}
-          <th>Download</th>
-          <th>Normalize</th>
-          <th>Translate</th>
-          <th>Detect</th>
-          <th>Finalize</th>
+          {% include "browser/includes/sortable_th.html" with label="Download" header=sort_links.download_status %}
+          {% include "browser/includes/sortable_th.html" with label="Normalize" header=sort_links.normalize_status %}
+          {% include "browser/includes/sortable_th.html" with label="Translate" header=sort_links.translate_status %}
+          {% include "browser/includes/sortable_th.html" with label="Detect" header=sort_links.detect_status %}
+          {% include "browser/includes/sortable_th.html" with label="Finalize" header=sort_links.finalize_status %}
           {% include "browser/includes/sortable_th.html" with label="Terminal" header=sort_links.terminal_status %}
           {% include "browser/includes/sortable_th.html" with label="Repeat calls" header=sort_links.repeat_calls %}
           {% include "browser/includes/sortable_th.html" with label="Run" header=sort_links.run %}

@@ -107,8 +107,8 @@
         <tr>
           {% include "browser/includes/sortable_th.html" with label="Sequence" header=sort_links.sequence_name %}
           {% include "browser/includes/sortable_th.html" with label="Gene" header=sort_links.gene_symbol %}
-          <th>Genome</th>
-          <th>Taxon</th>
+          {% include "browser/includes/sortable_th.html" with label="Genome" header=sort_links.genome %}
+          {% include "browser/includes/sortable_th.html" with label="Taxon" header=sort_links.taxon %}
           {% include "browser/includes/sortable_th.html" with label="Run" header=sort_links.run %}
           {% include "browser/includes/sortable_th.html" with label="Proteins" header=sort_links.proteins %}
           {% include "browser/includes/sortable_th.html" with label="Repeat calls" header=sort_links.calls %}

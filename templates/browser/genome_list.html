@@ -116,20 +116,20 @@
         {% if current_mode == "merged" %}
           <tr>
             {% include "browser/includes/sortable_th.html" with label="Accession" header=sort_links.accession %}
-            <th>Source genomes</th>
-            <th>Source runs</th>
-            {% include "browser/includes/sortable_th.html" with label="Raw repeat calls" header=sort_links.proteins %}
-            <th>Analyzed proteins</th>
+            {% include "browser/includes/sortable_th.html" with label="Source genomes" header=sort_links.source_genomes %}
+            {% include "browser/includes/sortable_th.html" with label="Source runs" header=sort_links.source_runs %}
+            {% include "browser/includes/sortable_th.html" with label="Raw repeat calls" header=sort_links.raw_repeat_calls %}
+            {% include "browser/includes/sortable_th.html" with label="Analyzed proteins" header=sort_links.analyzed_proteins %}
           </tr>
         {% else %}
           <tr>
             {% include "browser/includes/sortable_th.html" with label="Accession" header=sort_links.accession %}
             {% include "browser/includes/sortable_th.html" with label="Genome" header=sort_links.genome_name %}
-            <th>Taxon</th>
+            {% include "browser/includes/sortable_th.html" with label="Taxon" header=sort_links.taxon %}
             {% include "browser/includes/sortable_th.html" with label="Run" header=sort_links.run %}
-            <th>Sequences</th>
+            {% include "browser/includes/sortable_th.html" with label="Sequences" header=sort_links.sequences %}
             {% include "browser/includes/sortable_th.html" with label="Proteins" header=sort_links.proteins %}
-            <th>Repeat calls</th>
+            {% include "browser/includes/sortable_th.html" with label="Repeat calls" header=sort_links.repeat_calls %}
           </tr>
         {% endif %}
       </thead>

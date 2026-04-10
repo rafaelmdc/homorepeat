@@ -303,7 +303,11 @@ def build_accession_analytics(
             "repeat_bearing_protein_percentage": accession_percentage,
         }
 
+    for group in accession_groups:
+        group.update(accession_metrics[group["accession"]])
+
     return {
+        "accession_groups": accession_groups,
         "accession_groups_count": len(accession_groups),
         "source_genomes_count": source_genomes.count(),
         "source_runs_count": source_genomes.order_by().values("pipeline_run_id").distinct().count(),

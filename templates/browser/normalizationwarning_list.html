@@ -122,11 +122,11 @@
           {% include "browser/includes/sortable_th.html" with label="Warning" header=sort_links.warning_code %}
           {% include "browser/includes/sortable_th.html" with label="Accession" header=sort_links.accession %}
           {% include "browser/includes/sortable_th.html" with label="Batch" header=sort_links.batch %}
-          <th>Genome</th>
-          <th>Sequence</th>
-          <th>Protein</th>
+          {% include "browser/includes/sortable_th.html" with label="Genome" header=sort_links.genome %}
+          {% include "browser/includes/sortable_th.html" with label="Sequence" header=sort_links.sequence %}
+          {% include "browser/includes/sortable_th.html" with label="Protein" header=sort_links.protein %}
           {% include "browser/includes/sortable_th.html" with label="Run" header=sort_links.run %}
-          <th>Message</th>
+          {% include "browser/includes/sortable_th.html" with label="Message" header=sort_links.message %}
         </tr>
       </thead>
       <tbody {% if virtual_scroll_enabled %}data-virtual-scroll-body{% endif %}>

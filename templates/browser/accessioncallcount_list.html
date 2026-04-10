@@ -147,8 +147,8 @@
           {% include "browser/includes/sortable_th.html" with label="Batch" header=sort_links.batch %}
           {% include "browser/includes/sortable_th.html" with label="Method" header=sort_links.method %}
           {% include "browser/includes/sortable_th.html" with label="Residue" header=sort_links.residue %}
-          <th>Detect</th>
-          <th>Finalize</th>
+          {% include "browser/includes/sortable_th.html" with label="Detect" header=sort_links.detect_status %}
+          {% include "browser/includes/sortable_th.html" with label="Finalize" header=sort_links.finalize_status %}
           {% include "browser/includes/sortable_th.html" with label="Repeat calls" header=sort_links.repeat_calls %}
           {% include "browser/includes/sortable_th.html" with label="Run" header=sort_links.run %}
         </tr>

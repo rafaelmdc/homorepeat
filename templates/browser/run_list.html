@@ -68,12 +68,12 @@
       <thead>
         <tr>
           {% include "browser/includes/sortable_th.html" with label="Run" header=sort_links.run_id %}
-          <th>Status</th>
-          <th>Profile</th>
-          <th>Genomes</th>
-          <th>Sequences</th>
-          <th>Proteins</th>
-          <th>Repeat calls</th>
+          {% include "browser/includes/sortable_th.html" with label="Status" header=sort_links.status %}
+          {% include "browser/includes/sortable_th.html" with label="Profile" header=sort_links.profile %}
+          {% include "browser/includes/sortable_th.html" with label="Genomes" header=sort_links.genomes %}
+          {% include "browser/includes/sortable_th.html" with label="Sequences" header=sort_links.sequences %}
+          {% include "browser/includes/sortable_th.html" with label="Proteins" header=sort_links.proteins %}
+          {% include "browser/includes/sortable_th.html" with label="Repeat calls" header=sort_links.repeat_calls %}
           {% include "browser/includes/sortable_th.html" with label="Imported" header=sort_links.imported %}
         </tr>
       </thead>

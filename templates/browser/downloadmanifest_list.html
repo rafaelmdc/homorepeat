@@ -124,8 +124,8 @@
           {% include "browser/includes/sortable_th.html" with label="Status" header=sort_links.download_status %}
           {% include "browser/includes/sortable_th.html" with label="Package mode" header=sort_links.package_mode %}
           {% include "browser/includes/sortable_th.html" with label="File size" header=sort_links.file_size_bytes %}
-          <th>Checksum</th>
-          <th>Paths</th>
+          {% include "browser/includes/sortable_th.html" with label="Checksum" header=sort_links.checksum %}
+          {% include "browser/includes/sortable_th.html" with label="Paths" header=sort_links.paths %}
           {% include "browser/includes/sortable_th.html" with label="Run" header=sort_links.run %}
         </tr>
       </thead>

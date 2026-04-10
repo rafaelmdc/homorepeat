@@ -485,6 +485,125 @@ class BrowserViewTests(TestCase):
                 self.assertContains(response, "sortable-header-link")
                 self.assertNotContains(response, "id_order_by")
 
+    def test_primary_browser_tables_render_sort_links_for_previously_plain_headers(self):
+        cases = [
+            (
+                reverse("browser:run-list"),
+                {},
+                [
+                    "order_by=-status",
+                    "order_by=-profile",
+                    "order_by=-genomes",
+                    "order_by=-sequences",
+                    "order_by=-proteins",
+                    "order_by=-repeat_calls",
+                ],
+            ),
+            (
+                reverse("browser:normalizationwarning-list"),
+                {},
+                [
+                    "order_by=-genome",
+                    "order_by=-sequence",
+                    "order_by=-protein",
+                    "order_by=-message",
+                ],
+            ),
+            (
+                reverse("browser:accessionstatus-list"),
+                {},
+                [
+                    "order_by=-download_status",
+                    "order_by=-normalize_status",
+                    "order_by=-translate_status",
+                    "order_by=-detect_status",
+                    "order_by=-finalize_status",
+                ],
+            ),
+            (
+                reverse("browser:accessioncallcount-list"),
+                {},
+                [
+                    "order_by=-detect_status",
+                    "order_by=-finalize_status",
+                ],
+            ),
+            (
+                reverse("browser:downloadmanifest-list"),
+                {},
+                [
+                    "order_by=-checksum",
+                    "order_by=-paths",
+                ],
+            ),
+            (
+                reverse("browser:taxon-list"),
+                {},
+                [
+                    "order_by=-parent",
+                ],
+            ),
+            (
+                reverse("browser:genome-list"),
+                {},
+                [
+                    "order_by=-taxon",
+                    "order_by=-sequences",
+                    "order_by=-repeat_calls",
+                ],
+            ),
+            (
+                reverse("browser:genome-list"),
+                {"mode": "merged"},
+                [
+                    "order_by=-source_genomes",
+                    "order_by=-source_runs",
+                    "order_by=-raw_repeat_calls",
+                    "order_by=-analyzed_proteins",
+                ],
+            ),
+            (
+                reverse("browser:sequence-list"),
+                {},
+                [
+                    "order_by=-genome",
+                    "order_by=-taxon",
+                ],
+            ),
+            (
+                reverse("browser:protein-list"),
+                {},
+                [
+                    "order_by=-accession",
+                    "order_by=-taxon",
+                ],
+            ),
+            (
+                reverse("browser:protein-list"),
+                {"mode": "merged"},
+                [
+                    "order_by=-accession",
+                    "order_by=-source_proteins",
+                ],
+            ),
+            (
+                reverse("browser:accession-list"),
+                {},
+                [
+                    "order_by=-collapsed_calls",
+                    "order_by=-derived_proteins",
+                    "order_by=-analyzed_proteins",
+                ],
+            ),
+        ]
+
+        for url, params, expected_links in cases:
+            with self.subTest(url=url, params=params):
+                response = self.client.get(url, params)
+                self.assertEqual(response.status_code, 200)
+                for expected_link in expected_links:
+                    self.assertContains(response, expected_link)
+
     def test_run_list_sort_header_cycles_desc_asc_clear(self):
         url = reverse("browser:run-list")
 

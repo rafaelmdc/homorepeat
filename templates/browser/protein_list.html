@@ -171,17 +171,17 @@
           <tr>
             {% include "browser/includes/sortable_th.html" with label="Protein" header=sort_links.protein_name %}
             {% include "browser/includes/sortable_th.html" with label="Gene" header=sort_links.gene_symbol %}
-            <th>Accession</th>
+            {% include "browser/includes/sortable_th.html" with label="Accession" header=sort_links.accession %}
             {% include "browser/includes/sortable_th.html" with label="Source runs" header=sort_links.run %}
-            <th>Source proteins</th>
+            {% include "browser/includes/sortable_th.html" with label="Source proteins" header=sort_links.source_proteins %}
             {% include "browser/includes/sortable_th.html" with label="Collapsed calls" header=sort_links.calls %}
           </tr>
         {% else %}
           <tr>
             {% include "browser/includes/sortable_th.html" with label="Protein" header=sort_links.protein_name %}
             {% include "browser/includes/sortable_th.html" with label="Gene" header=sort_links.gene_symbol %}
-            <th>Genome</th>
-            <th>Taxon</th>
+            {% include "browser/includes/sortable_th.html" with label="Genome" header=sort_links.accession %}
+            {% include "browser/includes/sortable_th.html" with label="Taxon" header=sort_links.taxon %}
             {% include "browser/includes/sortable_th.html" with label="Run" header=sort_links.run %}
             {% include "browser/includes/sortable_th.html" with label="Repeat calls" header=sort_links.calls %}
           </tr>
