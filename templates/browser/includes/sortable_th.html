@@ -1,0 +1,12 @@
+<th class="sortable-header-cell">
+  <a
+    class="sortable-header-link{% if header.active %} is-active{% endif %}"
+    href="{{ header.url }}"
+    data-sort-state="{{ header.state }}"
+  >
+    <span>{{ label }}</span>
+    {% if header.indicator %}
+      <span class="sort-indicator" aria-hidden="true">{{ header.indicator }}</span>
+    {% endif %}
+  </a>
+</th>

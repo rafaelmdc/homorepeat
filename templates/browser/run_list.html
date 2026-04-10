@@ -18,6 +18,9 @@
 
 <section class="card border-0 shadow-sm filter-card mb-4">
   <form class="row g-3 align-items-end" method="get">
+    {% if current_order_by %}
+      <input type="hidden" name="order_by" value="{{ current_order_by }}">
+    {% endif %}
     <div class="col-lg-5">
       <label class="form-label" for="id_q">Search</label>
       <input class="form-control" id="id_q" type="text" name="q" value="{{ current_query }}" placeholder="Run id, status, profile, git revision">
@@ -28,15 +31,6 @@
         <option value="">All statuses</option>
         {% for status in status_choices %}
           <option value="{{ status }}" {% if current_status == status %}selected{% endif %}>{{ status }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-md-4 col-lg-2">
-      <label class="form-label" for="id_order_by">Sort</label>
-      <select class="form-select" id="id_order_by" name="order_by">
-        <option value="">Default</option>
-        {% for option in ordering_options %}
-          <option value="{{ option.value }}" {% if current_order_by == option.value %}selected{% endif %}>{{ option.label }}</option>
         {% endfor %}
       </select>
     </div>
@@ -73,14 +67,14 @@
     <table class="table table-hover align-middle mb-0 data-table">
       <thead>
         <tr>
-          <th>Run</th>
+          {% include "browser/includes/sortable_th.html" with label="Run" header=sort_links.run_id %}
           <th>Status</th>
           <th>Profile</th>
           <th>Genomes</th>
           <th>Sequences</th>
           <th>Proteins</th>
           <th>Repeat calls</th>
-          <th>Imported</th>
+          {% include "browser/includes/sortable_th.html" with label="Imported" header=sort_links.imported %}
         </tr>
       </thead>
       <tbody {% if virtual_scroll_enabled %}data-virtual-scroll-body{% endif %}>

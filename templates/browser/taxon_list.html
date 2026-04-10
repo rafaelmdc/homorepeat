@@ -40,6 +40,9 @@
 <section class="filter-card mb-4">
   <form class="row g-3 align-items-end" method="get">
     <input type="hidden" name="mode" value="{{ current_mode }}">
+    {% if current_order_by %}
+      <input type="hidden" name="order_by" value="{{ current_order_by }}">
+    {% endif %}
     <div class="col-lg-3">
       <label class="form-label" for="id_q">Search</label>
       <input class="form-control" id="id_q" type="text" name="q" value="{{ current_query }}" placeholder="Taxon name or taxonomy id">
@@ -68,15 +71,6 @@
         <option value="">All branches</option>
         {% for branch_taxon in branch_choices %}
           <option value="{{ branch_taxon.pk }}" {% if current_branch == branch_taxon.pk|stringformat:"s" %}selected{% endif %}>{{ branch_taxon.taxon_name }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-md-4 col-lg-2">
-      <label class="form-label" for="id_order_by">Sort</label>
-      <select class="form-select" id="id_order_by" name="order_by">
-        <option value="">Default</option>
-        {% for option in ordering_options %}
-          <option value="{{ option.value }}" {% if current_order_by == option.value %}selected{% endif %}>{{ option.label }}</option>
         {% endfor %}
       </select>
     </div>
@@ -120,9 +114,9 @@
     <table class="table align-middle mb-0 data-table">
       <thead>
         <tr>
-          <th>Taxon</th>
-          <th>Taxonomy ID</th>
-          <th>Rank</th>
+          {% include "browser/includes/sortable_th.html" with label="Taxon" header=sort_links.taxon_name %}
+          {% include "browser/includes/sortable_th.html" with label="Taxonomy ID" header=sort_links.taxon_id %}
+          {% include "browser/includes/sortable_th.html" with label="Rank" header=sort_links.rank %}
           <th>Parent</th>
         </tr>
       </thead>

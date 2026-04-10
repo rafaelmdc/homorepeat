@@ -64,6 +64,9 @@
       <input type="hidden" name="protein" value="{{ current_protein }}">
     {% endif %}
     <input type="hidden" name="mode" value="{{ current_mode }}">
+    {% if current_order_by %}
+      <input type="hidden" name="order_by" value="{{ current_order_by }}">
+    {% endif %}
     <div class="col-lg-3">
       <label class="form-label" for="id_q">Search</label>
       <input class="form-control" id="id_q" type="text" name="q" value="{{ current_query }}" placeholder="Call, protein, or accession prefix">
@@ -128,15 +131,6 @@
       <label class="form-label" for="id_purity_max">Max purity</label>
       <input class="form-control" id="id_purity_max" type="number" min="0" max="1" step="0.01" name="purity_max" value="{{ current_purity_max }}">
     </div>
-    <div class="col-md-6 col-lg-2">
-      <label class="form-label" for="id_order_by">Sort</label>
-      <select class="form-select" id="id_order_by" name="order_by">
-        <option value="">Default</option>
-        {% for option in ordering_options %}
-          <option value="{{ option.value }}" {% if current_order_by == option.value %}selected{% endif %}>{{ option.label }}</option>
-        {% endfor %}
-      </select>
-    </div>
     <div class="col-12">
       <div class="filter-toolbar">
         <div class="mode-switch">
@@ -181,29 +175,29 @@
       <thead>
         {% if current_mode == "merged" %}
           <tr>
-            <th>Accession</th>
-            <th>Protein</th>
-            <th>Gene</th>
-            <th>Method</th>
-            <th>Coordinates</th>
-            <th>Residue</th>
-            <th>Length</th>
-            <th>Purity</th>
-            <th>Source rows</th>
-            <th>Source runs</th>
+            {% include "browser/includes/sortable_th.html" with label="Accession" header=sort_links.accession %}
+            {% include "browser/includes/sortable_th.html" with label="Protein" header=sort_links.protein_name %}
+            {% include "browser/includes/sortable_th.html" with label="Gene" header=sort_links.gene_symbol %}
+            {% include "browser/includes/sortable_th.html" with label="Method" header=sort_links.method %}
+            {% include "browser/includes/sortable_th.html" with label="Coordinates" header=sort_links.coordinates %}
+            {% include "browser/includes/sortable_th.html" with label="Residue" header=sort_links.residue %}
+            {% include "browser/includes/sortable_th.html" with label="Length" header=sort_links.length %}
+            {% include "browser/includes/sortable_th.html" with label="Purity" header=sort_links.purity %}
+            {% include "browser/includes/sortable_th.html" with label="Source rows" header=sort_links.source_rows %}
+            {% include "browser/includes/sortable_th.html" with label="Source runs" header=sort_links.run %}
           </tr>
         {% else %}
           <tr>
-            <th>Call</th>
-            <th>Protein</th>
-            <th>Gene</th>
-            <th>Genome</th>
-            <th>Taxon</th>
-            <th>Method</th>
-            <th>Residue</th>
-            <th>Length</th>
-            <th>Purity</th>
-            <th>Run</th>
+            {% include "browser/includes/sortable_th.html" with label="Call" header=sort_links.call_id %}
+            {% include "browser/includes/sortable_th.html" with label="Protein" header=sort_links.protein_name %}
+            {% include "browser/includes/sortable_th.html" with label="Gene" header=sort_links.gene_symbol %}
+            {% include "browser/includes/sortable_th.html" with label="Genome" header=sort_links.genome %}
+            {% include "browser/includes/sortable_th.html" with label="Taxon" header=sort_links.taxon %}
+            {% include "browser/includes/sortable_th.html" with label="Method" header=sort_links.method %}
+            {% include "browser/includes/sortable_th.html" with label="Residue" header=sort_links.residue %}
+            {% include "browser/includes/sortable_th.html" with label="Length" header=sort_links.length %}
+            {% include "browser/includes/sortable_th.html" with label="Purity" header=sort_links.purity %}
+            {% include "browser/includes/sortable_th.html" with label="Run" header=sort_links.run %}
           </tr>
         {% endif %}
       </thead>

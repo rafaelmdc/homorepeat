@@ -57,6 +57,50 @@ class BrowserListView(ListView):
     def get_search_query(self):
         return self.request.GET.get("q", "").strip()
 
+    def build_sort_links(self, ordering_map, current_order_by=""):
+        sort_links = {}
+        if not ordering_map:
+            return sort_links
+
+        query = self.request.GET.copy()
+        query.pop("fragment", None)
+        query.pop("page", None)
+        query.pop("after", None)
+        query.pop("before", None)
+
+        for ordering_value in ordering_map.keys():
+            base_key = ordering_value[1:] if ordering_value.startswith("-") else ordering_value
+            if base_key in sort_links:
+                continue
+
+            if current_order_by == f"-{base_key}":
+                state = "desc"
+                next_order_by = base_key
+                indicator = "v"
+            elif current_order_by == base_key:
+                state = "asc"
+                next_order_by = ""
+                indicator = "^"
+            else:
+                state = "none"
+                next_order_by = f"-{base_key}"
+                indicator = ""
+
+            link_query = query.copy()
+            if next_order_by:
+                link_query["order_by"] = next_order_by
+            else:
+                link_query.pop("order_by", None)
+
+            sort_links[base_key] = {
+                "url": f"{self.request.path}?{link_query.urlencode()}" if link_query else self.request.path,
+                "state": state,
+                "active": state != "none",
+                "indicator": indicator,
+            }
+
+        return sort_links
+
     def get_ordering(self):
         requested_ordering = self.request.GET.get("order_by", "").strip()
         if requested_ordering in self.ordering_map:
@@ -88,11 +132,13 @@ class BrowserListView(ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["current_query"] = self.get_search_query()
-        context["current_order_by"] = self.request.GET.get("order_by", "").strip()
+        current_order_by = self.request.GET.get("order_by", "").strip()
+        context["current_order_by"] = current_order_by
         context["ordering_options"] = [
             {"value": value, "label": _ordering_label(value)}
             for value in self.ordering_map.keys()
         ]
+        context["sort_links"] = self.build_sort_links(self.ordering_map, current_order_by=current_order_by)
         page_query = self.request.GET.copy()
         page_query.pop("page", None)
         page_query.pop("after", None)
@@ -1145,6 +1191,10 @@ class GenomeListView(VirtualScrollListView):
         context["current_accession"] = getattr(self, "current_accession", "")
         context["current_genome_name"] = getattr(self, "current_genome_name", "")
         if context["current_mode"] == "merged":
+            context["sort_links"] = self.build_sort_links(
+                self.merged_ordering_map,
+                current_order_by=context["current_order_by"],
+            )
             context["ordering_options"] = [
                 {"value": value, "label": _ordering_label(value)}
                 for value in self.merged_ordering_map.keys()
@@ -1695,6 +1745,14 @@ class RepeatCallListView(VirtualScrollListView):
     ordering_map = {
         "call_id": ("pipeline_run__run_id", "call_id"),
         "-call_id": ("pipeline_run__run_id", "-call_id"),
+        "protein_name": ("pipeline_run__run_id", "protein_name", "accession", "start", "call_id"),
+        "-protein_name": ("pipeline_run__run_id", "-protein_name", "accession", "start", "call_id"),
+        "gene_symbol": ("pipeline_run__run_id", "gene_symbol", "accession", "protein_name", "start", "call_id"),
+        "-gene_symbol": ("pipeline_run__run_id", "-gene_symbol", "accession", "protein_name", "start", "call_id"),
+        "genome": ("pipeline_run__run_id", "accession", "protein_name", "start", "call_id"),
+        "-genome": ("pipeline_run__run_id", "-accession", "protein_name", "start", "call_id"),
+        "taxon": ("pipeline_run__run_id", "taxon__taxon_name", "accession", "protein_name", "start", "call_id"),
+        "-taxon": ("pipeline_run__run_id", "-taxon__taxon_name", "accession", "protein_name", "start", "call_id"),
         "method": ("method", "pipeline_run__run_id", "accession", "protein_name", "start", "call_id"),
         "-method": ("-method", "pipeline_run__run_id", "accession", "protein_name", "start", "call_id"),
         "residue": ("repeat_residue", "pipeline_run__run_id", "accession", "protein_name", "start", "call_id"),
@@ -1854,6 +1912,30 @@ class RepeatCallListView(VirtualScrollListView):
                         record["end"],
                         record["method"],
                     ),
+                    "accession": lambda record: (
+                        record["accession"],
+                        record["protein_name"],
+                        record["start"],
+                        record["end"],
+                    ),
+                    "protein_name": lambda record: (
+                        record["protein_name"],
+                        record["accession"],
+                        record["start"],
+                        record["end"],
+                    ),
+                    "gene_symbol": lambda record: (
+                        record["gene_symbol_label"],
+                        record["protein_name"],
+                        record["accession"],
+                        record["start"],
+                    ),
+                    "coordinates": lambda record: (
+                        record["start"],
+                        record["end"],
+                        record["accession"],
+                        record["protein_name"],
+                    ),
                     "method": lambda record: (
                         record["method"],
                         record["accession"],
@@ -1880,6 +1962,12 @@ class RepeatCallListView(VirtualScrollListView):
                     ),
                     "run": lambda record: (
                         record["source_runs_count"],
+                        record["accession"],
+                        record["protein_name"],
+                        record["start"],
+                    ),
+                    "source_rows": lambda record: (
+                        record["source_count"],
                         record["accession"],
                         record["protein_name"],
                         record["start"],

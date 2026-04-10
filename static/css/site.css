@@ -609,6 +609,37 @@ h4,
   text-transform: uppercase;
 }
 
+.sortable-header-cell {
+  padding: 0 !important;
+}
+
+.sortable-header-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 0.85rem 0.75rem;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.data-table thead .sortable-header-link:hover,
+.data-table thead .sortable-header-link:focus {
+  color: var(--site-brand-dark);
+}
+
+.sortable-header-link.is-active {
+  color: var(--site-ink);
+}
+
+.sort-indicator {
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
 .data-table tbody td {
   border-top-color: rgba(23, 36, 44, 0.08);
 }

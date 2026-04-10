@@ -58,6 +58,9 @@
       <input type="hidden" name="sequence" value="{{ current_sequence }}">
     {% endif %}
     <input type="hidden" name="mode" value="{{ current_mode }}">
+    {% if current_order_by %}
+      <input type="hidden" name="order_by" value="{{ current_order_by }}">
+    {% endif %}
     <div class="col-lg-3">
       <label class="form-label" for="id_q">Search</label>
       <input class="form-control" id="id_q" type="text" name="q" value="{{ current_query }}" placeholder="Protein name or ID prefix">
@@ -122,15 +125,6 @@
       <label class="form-label" for="id_purity_max">Max purity</label>
       <input class="form-control" id="id_purity_max" type="number" min="0" max="1" step="0.01" name="purity_max" value="{{ current_purity_max }}">
     </div>
-    <div class="col-md-6 col-lg-2">
-      <label class="form-label" for="id_order_by">Sort</label>
-      <select class="form-select" id="id_order_by" name="order_by">
-        <option value="">Default</option>
-        {% for option in ordering_options %}
-          <option value="{{ option.value }}" {% if current_order_by == option.value %}selected{% endif %}>{{ option.label }}</option>
-        {% endfor %}
-      </select>
-    </div>
     <div class="col-12">
       <div class="filter-toolbar">
         <div class="mode-switch">
@@ -175,21 +169,21 @@
       <thead>
         {% if current_mode == "merged" %}
           <tr>
-            <th>Protein</th>
-            <th>Gene</th>
+            {% include "browser/includes/sortable_th.html" with label="Protein" header=sort_links.protein_name %}
+            {% include "browser/includes/sortable_th.html" with label="Gene" header=sort_links.gene_symbol %}
             <th>Accession</th>
-            <th>Source runs</th>
+            {% include "browser/includes/sortable_th.html" with label="Source runs" header=sort_links.run %}
             <th>Source proteins</th>
-            <th>Collapsed calls</th>
+            {% include "browser/includes/sortable_th.html" with label="Collapsed calls" header=sort_links.calls %}
           </tr>
         {% else %}
           <tr>
-            <th>Protein</th>
-            <th>Gene</th>
+            {% include "browser/includes/sortable_th.html" with label="Protein" header=sort_links.protein_name %}
+            {% include "browser/includes/sortable_th.html" with label="Gene" header=sort_links.gene_symbol %}
             <th>Genome</th>
             <th>Taxon</th>
-            <th>Run</th>
-            <th>Repeat calls</th>
+            {% include "browser/includes/sortable_th.html" with label="Run" header=sort_links.run %}
+            {% include "browser/includes/sortable_th.html" with label="Repeat calls" header=sort_links.calls %}
           </tr>
         {% endif %}
       </thead>

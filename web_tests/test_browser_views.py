@@ -460,6 +460,49 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, "method=pure")
         self.assertContains(response, "accession=GCF_ALPHA")
 
+    def test_sort_headers_render_across_browser_lists(self):
+        cases = [
+            (reverse("browser:run-list"), {}),
+            (reverse("browser:normalizationwarning-list"), {}),
+            (reverse("browser:accessionstatus-list"), {}),
+            (reverse("browser:accessioncallcount-list"), {}),
+            (reverse("browser:downloadmanifest-list"), {}),
+            (reverse("browser:taxon-list"), {}),
+            (reverse("browser:genome-list"), {}),
+            (reverse("browser:genome-list"), {"mode": "merged"}),
+            (reverse("browser:sequence-list"), {}),
+            (reverse("browser:protein-list"), {}),
+            (reverse("browser:protein-list"), {"mode": "merged"}),
+            (reverse("browser:repeatcall-list"), {}),
+            (reverse("browser:repeatcall-list"), {"mode": "merged"}),
+            (reverse("browser:accession-list"), {}),
+        ]
+
+        for url, params in cases:
+            with self.subTest(url=url, params=params):
+                response = self.client.get(url, params)
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, "sortable-header-link")
+                self.assertNotContains(response, "id_order_by")
+
+    def test_run_list_sort_header_cycles_desc_asc_clear(self):
+        url = reverse("browser:run-list")
+
+        default_response = self.client.get(url, {"q": "run"})
+        self.assertEqual(default_response.status_code, 200)
+        self.assertContains(default_response, f'href="{url}?q=run&amp;order_by=-run_id"')
+        self.assertContains(default_response, 'data-sort-state="none"')
+
+        descending_response = self.client.get(url, {"q": "run", "order_by": "-run_id"})
+        self.assertEqual(descending_response.status_code, 200)
+        self.assertContains(descending_response, f'href="{url}?q=run&amp;order_by=run_id"')
+        self.assertContains(descending_response, 'data-sort-state="desc"')
+
+        ascending_response = self.client.get(url, {"q": "run", "order_by": "run_id"})
+        self.assertEqual(ascending_response.status_code, 200)
+        self.assertContains(ascending_response, f'href="{url}?q=run"')
+        self.assertContains(ascending_response, 'data-sort-state="asc"')
+
     def test_virtual_scroll_hooks_render_across_browser_lists(self):
         cases = [
             (reverse("browser:run-list"), {}),
@@ -839,6 +882,21 @@ class BrowserViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "data-virtual-scroll-root")
         self.assertContains(response, "data-virtual-scroll-body")
+
+    def test_repeatcall_list_renders_sort_links_for_all_visible_headers(self):
+        response = self.client.get(reverse("browser:repeatcall-list"), {"run": "run-alpha"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "order_by=-call_id")
+        self.assertContains(response, "order_by=-protein_name")
+        self.assertContains(response, "order_by=-gene_symbol")
+        self.assertContains(response, "order_by=-genome")
+        self.assertContains(response, "order_by=-taxon")
+        self.assertContains(response, "order_by=-method")
+        self.assertContains(response, "order_by=-residue")
+        self.assertContains(response, "order_by=-length")
+        self.assertContains(response, "order_by=-purity")
+        self.assertContains(response, "order_by=-run")
 
     def test_repeatcall_list_virtual_scroll_fragment_returns_rows(self):
         response = self.client.get(
