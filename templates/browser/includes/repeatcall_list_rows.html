@@ -1,6 +1,10 @@
 {% for repeat_call in repeat_calls %}
   <tr data-virtual-row="1">
-    <td><a href="{% url 'browser:repeatcall-detail' repeat_call.pk %}">{{ repeat_call.call_id }}</a></td>
+    <td>
+      <a href="{% url 'browser:repeatcall-detail' repeat_call.pk %}" title="{{ repeat_call.call_id }}">
+        {{ repeat_call.call_id|truncatechars:30 }}
+      </a>
+    </td>
     <td><a href="{% url 'browser:protein-detail' repeat_call.protein.pk %}">{{ repeat_call.protein_name }}</a></td>
     <td>{{ repeat_call.gene_symbol|default:"-" }}</td>
     <td><a href="{% url 'browser:genome-detail' repeat_call.genome.pk %}">{{ repeat_call.genome.accession }}</a></td>
@@ -12,7 +16,7 @@
     <td>{{ repeat_call.method }}</td>
     <td>{{ repeat_call.repeat_residue }}</td>
     <td>{{ repeat_call.length }}</td>
-    <td>{{ repeat_call.purity }}</td>
+    <td title="{{ repeat_call.purity }}">{{ repeat_call.purity|stringformat:"s"|slice:":4" }}</td>
     <td><a href="{% url 'browser:run-detail' repeat_call.pipeline_run.pk %}">{{ repeat_call.pipeline_run.run_id }}</a></td>
   </tr>
 {% endfor %}

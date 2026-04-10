@@ -218,7 +218,7 @@
               <td>{{ repeat_call.start }}-{{ repeat_call.end }}</td>
               <td>{{ repeat_call.repeat_residue }}</td>
               <td>{{ repeat_call.length }}</td>
-              <td>{{ repeat_call.normalized_purity }}</td>
+              <td title="{{ repeat_call.normalized_purity }}">{{ repeat_call.normalized_purity|stringformat:"s"|slice:":4" }}</td>
               <td>{{ repeat_call.source_count }}</td>
               <td>{{ repeat_call.source_runs|join:", " }}</td>
             </tr>
