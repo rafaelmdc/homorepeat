@@ -171,6 +171,7 @@
       data-virtual-scroll-url="{{ virtual_scroll_fragment_url }}"
       data-virtual-scroll-next-query="{{ page_obj.next_query }}"
       data-virtual-scroll-previous-query="{{ page_obj.previous_query }}"
+      data-virtual-scroll-total-rows="{{ page_obj.paginator.count }}"
       data-virtual-scroll-colspan="{{ virtual_scroll_colspan }}"
       data-virtual-scroll-window-pages="{{ virtual_scroll_window_pages }}"
     {% endif %}

@@ -43,8 +43,8 @@
   }
 
   function updateSpacers(state) {
-    updateSpacerHeight(state.topSpacer, state.topSpacerHeight);
-    updateSpacerHeight(state.bottomSpacer, state.bottomSpacerHeight);
+    updateSpacerHeight(state.topSpacer, state.hiddenTopRows * state.averageRowHeight);
+    updateSpacerHeight(state.bottomSpacer, state.hiddenBottomRows * state.averageRowHeight);
   }
 
   function parseRows(rowsHtml) {
@@ -61,6 +61,19 @@
     return state.pages[state.pages.length - 1] || null;
   }
 
+  function mountedRows(state) {
+    return Array.from(state.body.querySelectorAll("tr[data-virtual-row]"));
+  }
+
+  function firstMountedRow(state) {
+    return mountedRows(state)[0] || null;
+  }
+
+  function lastMountedRow(state) {
+    const rows = mountedRows(state);
+    return rows[rows.length - 1] || null;
+  }
+
   function seedPageLimit(state) {
     return Math.min(3, state.maxPages);
   }
@@ -71,6 +84,24 @@
 
   function edgeThreshold(state) {
     return Math.max(220, state.averageRowHeight * 4);
+  }
+
+  function distanceToLoadedTop(state) {
+    const row = firstMountedRow(state);
+    if (!row) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    return row.getBoundingClientRect().top - state.root.getBoundingClientRect().top;
+  }
+
+  function distanceToLoadedBottom(state) {
+    const row = lastMountedRow(state);
+    if (!row) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    return row.getBoundingClientRect().bottom - state.root.getBoundingClientRect().bottom;
   }
 
   function canEvictTop(state) {
@@ -88,9 +119,8 @@
 
     const page = state.pages.shift();
     const rows = pageRows(state, page.key);
-    const removedHeight = sumRowHeight(rows) || (page.rowCount * state.averageRowHeight);
     rows.forEach((row) => row.remove());
-    state.topSpacerHeight += removedHeight;
+    state.hiddenTopRows += page.rowCount;
     updateSpacers(state);
   }
 
@@ -101,9 +131,8 @@
 
     const page = state.pages.pop();
     const rows = pageRows(state, page.key);
-    const removedHeight = sumRowHeight(rows) || (page.rowCount * state.averageRowHeight);
     rows.forEach((row) => row.remove());
-    state.bottomSpacerHeight += removedHeight;
+    state.hiddenBottomRows += page.rowCount;
     updateSpacers(state);
   }
 
@@ -180,22 +209,22 @@
     });
     insertRows(state, rows, direction);
     updateAverageRowHeight(state, rows);
-    const insertedHeight = sumRowHeight(rows) || (rows.length * state.averageRowHeight);
+    const insertedRowCount = payload.row_count || rows.length;
 
     if (direction === "previous") {
-      state.topSpacerHeight = Math.max(0, state.topSpacerHeight - insertedHeight);
+      state.hiddenTopRows = Math.max(0, state.hiddenTopRows - insertedRowCount);
       state.pages.unshift({
         key: pageKey,
-        rowCount: payload.row_count || rows.length,
+        rowCount: insertedRowCount,
         previousQuery: payload.previous_query || "",
         nextQuery: payload.next_query || "",
       });
       trimWindow(state, "previous");
     } else {
-      state.bottomSpacerHeight = Math.max(0, state.bottomSpacerHeight - insertedHeight);
+      state.hiddenBottomRows = Math.max(0, state.hiddenBottomRows - insertedRowCount);
       state.pages.push({
         key: pageKey,
-        rowCount: payload.row_count || rows.length,
+        rowCount: insertedRowCount,
         previousQuery: payload.previous_query || "",
         nextQuery: payload.next_query || "",
       });
@@ -244,16 +273,17 @@
   function refresh(state) {
     state.refreshFrame = null;
     const threshold = edgeThreshold(state);
-    const remainingBottomDistance = distanceToBottom(state);
+    const loadedTopDistance = distanceToLoadedTop(state);
+    const loadedBottomDistance = distanceToLoadedBottom(state);
     const shouldSeedWindow = (
       state.pages.length < seedPageLimit(state)
-      && state.root.scrollHeight <= state.root.clientHeight
+      && mountedRows(state).length < state.root.clientHeight / Math.max(state.averageRowHeight, 1)
     );
 
-    if (state.topSpacerHeight > 0 && state.root.scrollTop <= threshold) {
+    if (state.hiddenTopRows > 0 && loadedTopDistance >= -threshold) {
       loadPrevious(state);
     }
-    if (remainingBottomDistance <= threshold || shouldSeedWindow) {
+    if (loadedBottomDistance <= threshold || shouldSeedWindow) {
       loadNext(state);
     }
   }
@@ -284,10 +314,11 @@
       root,
       body,
       fragmentUrl: root.dataset.virtualScrollUrl,
+      totalRows: Math.max(0, Number.parseInt(root.dataset.virtualScrollTotalRows || "0", 10)),
       maxPages: Math.max(2, Number.parseInt(root.dataset.virtualScrollWindowPages || "8", 10)),
       averageRowHeight: 0,
-      topSpacerHeight: 0,
-      bottomSpacerHeight: 0,
+      hiddenTopRows: 0,
+      hiddenBottomRows: 0,
       topSpacer: buildSpacer(colspan, "top"),
       bottomSpacer: buildSpacer(colspan, "bottom"),
       pages: [],
@@ -309,6 +340,7 @@
       nextQuery: root.dataset.virtualScrollNextQuery || "",
     });
     updateAverageRowHeight(state, initialRows);
+    state.hiddenBottomRows = Math.max(0, state.totalRows - initialRows.length);
     updateSpacers(state);
 
     root.dataset.virtualScrollReady = "true";
