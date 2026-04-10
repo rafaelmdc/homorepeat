@@ -1,0 +1,28 @@
+{% for accession_group in accession_groups %}
+  <tr data-virtual-row="1">
+    <td><a href="{% url 'browser:accession-detail' accession_group.accession %}">{{ accession_group.accession }}</a></td>
+    <td><a href="{% url 'browser:genome-list' %}?accession={{ accession_group.accession|urlencode }}{% if current_run_id %}&amp;run={{ current_run_id|urlencode }}{% endif %}{% if current_branch %}&amp;branch={{ current_branch|urlencode }}{% endif %}">{{ accession_group.source_genomes_count }}</a></td>
+    <td>{{ accession_group.source_runs_count }}</td>
+    <td>
+      <a href="{% url 'browser:repeatcall-list' %}?accession={{ accession_group.accession|urlencode }}{% if current_run_id %}&amp;run={{ current_run_id|urlencode }}{% endif %}{% if current_branch %}&amp;branch={{ current_branch|urlencode }}{% endif %}">{{ accession_group.raw_repeat_calls_count }}</a>
+      {% if accession_group.duplicate_source_repeat_calls_count %}
+        <span class="small text-secondary">(-{{ accession_group.duplicate_source_repeat_calls_count }} duplicate{{ accession_group.duplicate_source_repeat_calls_count|pluralize }})</span>
+      {% endif %}
+    </td>
+    <td><a href="{% url 'browser:repeatcall-list' %}?mode=merged&amp;accession={{ accession_group.accession|urlencode }}{% if current_run_id %}&amp;run={{ current_run_id|urlencode }}{% endif %}{% if current_branch %}&amp;branch={{ current_branch|urlencode }}{% endif %}">{{ accession_group.collapsed_repeat_calls_count }}</a></td>
+    <td>
+      <a href="{% url 'browser:protein-list' %}?mode=merged&amp;accession={{ accession_group.accession|urlencode }}{% if current_run_id %}&amp;run={{ current_run_id|urlencode }}{% endif %}{% if current_branch %}&amp;branch={{ current_branch|urlencode }}{% endif %}">{{ accession_group.merged_repeat_bearing_proteins_count }}</a>
+      {% if accession_group.repeat_bearing_protein_percentage is not None %}
+        <span class="small text-secondary">({{ accession_group.repeat_bearing_protein_percentage|floatformat:2 }}%)</span>
+      {% endif %}
+    </td>
+    <td>
+      {% if accession_group.has_analyzed_protein_conflict %}
+        <span class="badge rounded-pill text-bg-light border status-badge">Conflict</span>
+        <span class="small text-secondary">{{ accession_group.analyzed_protein_min }}-{{ accession_group.analyzed_protein_max }}</span>
+      {% else %}
+        {{ accession_group.merged_analyzed_protein_count }}
+      {% endif %}
+    </td>
+  </tr>
+{% endfor %}

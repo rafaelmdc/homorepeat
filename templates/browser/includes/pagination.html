@@ -1,5 +1,5 @@
 {% if page_obj.has_other_pages %}
-  <nav class="pagination-bar" aria-label="Pagination" {% if virtual_scroll_enabled and page_obj.cursor_pagination %}data-virtual-scroll-pagination{% endif %}>
+  <nav class="pagination-bar" aria-label="Pagination" {% if virtual_scroll_enabled %}data-virtual-scroll-pagination{% endif %}>
     {% if page_obj.cursor_pagination %}
       {% if page_obj.has_previous %}
         <a class="btn btn-outline-secondary" href="?{{ page_obj.previous_query }}">Previous</a>

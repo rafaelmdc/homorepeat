@@ -96,7 +96,7 @@
   </form>
 </section>
 
-<section class="surface-card surface-card-wide">
+<section class="surface-card surface-card-wide" {% if virtual_scroll_enabled %}data-virtual-scroll-surface{% endif %}>
   <div class="section-header">
     <div>
       <p class="section-kicker mb-2">Taxonomy</p>
@@ -104,6 +104,18 @@
     </div>
   </div>
 
+  <div
+    class="{% if virtual_scroll_enabled %}virtual-scroll-frame{% endif %}"
+    {% if virtual_scroll_enabled %}
+      data-virtual-scroll-root
+      data-virtual-scroll-url="{{ virtual_scroll_fragment_url }}"
+      data-virtual-scroll-next-query="{{ virtual_scroll_next_query }}"
+      data-virtual-scroll-previous-query="{{ virtual_scroll_previous_query }}"
+      data-virtual-scroll-total-rows="{{ virtual_scroll_total_rows }}"
+      data-virtual-scroll-colspan="{{ virtual_scroll_colspan }}"
+      data-virtual-scroll-window-pages="{{ virtual_scroll_window_pages }}"
+    {% endif %}
+  >
   <div class="table-responsive">
     <table class="table align-middle mb-0 data-table">
       <thead>
@@ -114,33 +126,17 @@
           <th>Parent</th>
         </tr>
       </thead>
-      <tbody>
-        {% for taxon in taxa %}
-          <tr>
-            <td>
-              <a href="{% url 'browser:taxon-detail' taxon.pk %}{% if current_run_id or current_mode == 'merged' %}?{% if current_run_id %}run={{ current_run_id|urlencode }}{% if current_mode == 'merged' %}&amp;{% endif %}{% endif %}{% if current_mode == 'merged' %}mode=merged{% endif %}{% endif %}">
-                {{ taxon.taxon_name }}
-              </a>
-            </td>
-            <td>{{ taxon.taxon_id }}</td>
-            <td>{{ taxon.rank|default:"-" }}</td>
-            <td>
-              {% if taxon.parent_taxon %}
-                <a href="{% url 'browser:taxon-detail' taxon.parent_taxon.pk %}{% if current_run_id or current_mode == 'merged' %}?{% if current_run_id %}run={{ current_run_id|urlencode }}{% if current_mode == 'merged' %}&amp;{% endif %}{% endif %}{% if current_mode == 'merged' %}mode=merged{% endif %}{% endif %}">
-                  {{ taxon.parent_taxon.taxon_name }}
-                </a>
-              {% else %}
-                -
-              {% endif %}
-            </td>
-          </tr>
-        {% empty %}
+      <tbody {% if virtual_scroll_enabled %}data-virtual-scroll-body{% endif %}>
+        {% if taxa %}
+          {% include "browser/includes/taxon_list_rows.html" %}
+        {% else %}
           <tr>
             <td colspan="4" class="empty-cell">No taxa matched these filters.</td>
           </tr>
-        {% endfor %}
+        {% endif %}
       </tbody>
     </table>
+  </div>
   </div>
 
   {% include "browser/includes/pagination.html" %}

@@ -1,0 +1,27 @@
+{% for status_row in status_rows %}
+  <tr data-virtual-row="1">
+    <td>
+      <a href="{% url 'browser:accession-detail' status_row.assembly_accession %}"><strong>{{ status_row.assembly_accession }}</strong></a>
+      {% if status_row.failure_stage or status_row.failure_reason %}
+        <div class="small text-secondary">
+          {{ status_row.failure_stage|default:"-" }}{% if status_row.failure_reason %}: {{ status_row.failure_reason }}{% endif %}
+        </div>
+      {% endif %}
+    </td>
+    <td>
+      {% if status_row.batch %}
+        <a href="{% url 'browser:accessionstatus-list' %}?run={{ status_row.pipeline_run.run_id|urlencode }}&amp;batch={{ status_row.batch.pk|urlencode }}">{{ status_row.batch.batch_id }}</a>
+      {% else %}
+        -
+      {% endif %}
+    </td>
+    <td>{{ status_row.download_status|default:"-" }}</td>
+    <td>{{ status_row.normalize_status|default:"-" }}</td>
+    <td>{{ status_row.translate_status|default:"-" }}</td>
+    <td>{{ status_row.detect_status|default:"-" }}</td>
+    <td>{{ status_row.finalize_status|default:"-" }}</td>
+    <td>{{ status_row.terminal_status|default:"-" }}</td>
+    <td><a href="{% url 'browser:repeatcall-list' %}?run={{ status_row.pipeline_run.run_id|urlencode }}&amp;accession={{ status_row.assembly_accession|urlencode }}">{{ status_row.n_repeat_calls }}</a></td>
+    <td><a href="{% url 'browser:run-detail' status_row.pipeline_run.pk %}">{{ status_row.pipeline_run.run_id }}</a></td>
+  </tr>
+{% endfor %}

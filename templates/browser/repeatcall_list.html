@@ -169,9 +169,9 @@
     {% if virtual_scroll_enabled %}
       data-virtual-scroll-root
       data-virtual-scroll-url="{{ virtual_scroll_fragment_url }}"
-      data-virtual-scroll-next-query="{{ page_obj.next_query }}"
-      data-virtual-scroll-previous-query="{{ page_obj.previous_query }}"
-      data-virtual-scroll-total-rows="{{ page_obj.paginator.count }}"
+      data-virtual-scroll-next-query="{{ virtual_scroll_next_query }}"
+      data-virtual-scroll-previous-query="{{ virtual_scroll_previous_query }}"
+      data-virtual-scroll-total-rows="{{ virtual_scroll_total_rows }}"
       data-virtual-scroll-colspan="{{ virtual_scroll_colspan }}"
       data-virtual-scroll-window-pages="{{ virtual_scroll_window_pages }}"
     {% endif %}
@@ -208,30 +208,17 @@
         {% endif %}
       </thead>
       <tbody {% if virtual_scroll_enabled %}data-virtual-scroll-body{% endif %}>
-        {% if current_mode == "merged" %}
-          {% for repeat_call in repeat_calls %}
-            <tr>
-              <td><a href="{% url 'browser:accession-detail' repeat_call.accession %}">{{ repeat_call.accession }}</a></td>
-              <td>{{ repeat_call.protein_name }}</td>
-              <td>{{ repeat_call.gene_symbol_label }}</td>
-              <td>{{ repeat_call.method }}</td>
-              <td>{{ repeat_call.start }}-{{ repeat_call.end }}</td>
-              <td>{{ repeat_call.repeat_residue }}</td>
-              <td>{{ repeat_call.length }}</td>
-              <td title="{{ repeat_call.normalized_purity }}">{{ repeat_call.normalized_purity|stringformat:"s"|slice:":4" }}</td>
-              <td>{{ repeat_call.source_count }}</td>
-              <td>{{ repeat_call.source_runs|join:", " }}</td>
-            </tr>
-          {% empty %}
-            <tr>
-              <td colspan="10" class="empty-cell">No merged repeat-call groups matched these filters.</td>
-            </tr>
-          {% endfor %}
-        {% elif repeat_calls %}
+        {% if repeat_calls %}
           {% include "browser/includes/repeatcall_list_rows.html" %}
         {% else %}
           <tr>
-            <td colspan="10" class="empty-cell">No repeat calls matched these filters.</td>
+            <td colspan="10" class="empty-cell">
+              {% if current_mode == "merged" %}
+                No merged repeat-call groups matched these filters.
+              {% else %}
+                No repeat calls matched these filters.
+              {% endif %}
+            </td>
           </tr>
         {% endif %}
       </tbody>

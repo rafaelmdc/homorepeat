@@ -1,0 +1,32 @@
+{% for genome in genomes %}
+  {% if current_mode == "merged" %}
+    <tr data-virtual-row="1">
+      <td><a href="{% url 'browser:accession-detail' genome.accession %}">{{ genome.accession }}</a></td>
+      <td>{{ genome.source_genomes_count }}</td>
+      <td>{{ genome.source_runs_count }}</td>
+      <td>{{ genome.raw_repeat_calls_count }}</td>
+      <td>
+        {% if genome.analyzed_protein_min != genome.analyzed_protein_max %}
+          <span class="badge rounded-pill text-bg-light border status-badge">Conflict</span>
+          <span class="small text-secondary">{{ genome.analyzed_protein_min }}-{{ genome.analyzed_protein_max }}</span>
+        {% else %}
+          {{ genome.analyzed_protein_min }}
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr data-virtual-row="1">
+      <td><a href="{% url 'browser:genome-detail' genome.pk %}">{{ genome.accession }}</a></td>
+      <td>{{ genome.genome_name }}</td>
+      <td>
+        <a href="{% url 'browser:taxon-detail' genome.taxon.pk %}?run={{ genome.pipeline_run.run_id|urlencode }}">
+          {{ genome.taxon.taxon_name }}
+        </a>
+      </td>
+      <td><a href="{% url 'browser:run-detail' genome.pipeline_run.pk %}">{{ genome.pipeline_run.run_id }}</a></td>
+      <td><a href="{% url 'browser:sequence-list' %}?run={{ genome.pipeline_run.run_id|urlencode }}&amp;genome={{ genome.genome_id|urlencode }}">{{ genome.sequences_count }}</a></td>
+      <td><a href="{% url 'browser:protein-list' %}?run={{ genome.pipeline_run.run_id|urlencode }}&amp;genome={{ genome.genome_id|urlencode }}">{{ genome.proteins_count }}</a></td>
+      <td><a href="{% url 'browser:repeatcall-list' %}?run={{ genome.pipeline_run.run_id|urlencode }}&amp;genome={{ genome.genome_id|urlencode }}">{{ genome.repeat_calls_count }}</a></td>
+    </tr>
+  {% endif %}
+{% endfor %}

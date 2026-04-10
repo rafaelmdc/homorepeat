@@ -1,0 +1,20 @@
+{% for taxon in taxa %}
+  <tr data-virtual-row="1">
+    <td>
+      <a href="{% url 'browser:taxon-detail' taxon.pk %}{% if current_run_id or current_mode == 'merged' %}?{% if current_run_id %}run={{ current_run_id|urlencode }}{% if current_mode == 'merged' %}&amp;{% endif %}{% endif %}{% if current_mode == 'merged' %}mode=merged{% endif %}{% endif %}">
+        {{ taxon.taxon_name }}
+      </a>
+    </td>
+    <td>{{ taxon.taxon_id }}</td>
+    <td>{{ taxon.rank|default:"-" }}</td>
+    <td>
+      {% if taxon.parent_taxon %}
+        <a href="{% url 'browser:taxon-detail' taxon.parent_taxon.pk %}{% if current_run_id or current_mode == 'merged' %}?{% if current_run_id %}run={{ current_run_id|urlencode }}{% if current_mode == 'merged' %}&amp;{% endif %}{% endif %}{% if current_mode == 'merged' %}mode=merged{% endif %}{% endif %}">
+          {{ taxon.parent_taxon.taxon_name }}
+        </a>
+      {% else %}
+        -
+      {% endif %}
+    </td>
+  </tr>
+{% endfor %}

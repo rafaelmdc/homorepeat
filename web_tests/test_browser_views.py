@@ -460,6 +460,54 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, "method=pure")
         self.assertContains(response, "accession=GCF_ALPHA")
 
+    def test_virtual_scroll_hooks_render_across_browser_lists(self):
+        cases = [
+            (reverse("browser:run-list"), {}),
+            (reverse("browser:normalizationwarning-list"), {}),
+            (reverse("browser:accessionstatus-list"), {}),
+            (reverse("browser:accessioncallcount-list"), {}),
+            (reverse("browser:downloadmanifest-list"), {}),
+            (reverse("browser:taxon-list"), {}),
+            (reverse("browser:genome-list"), {}),
+            (reverse("browser:sequence-list"), {}),
+            (reverse("browser:protein-list"), {}),
+            (reverse("browser:repeatcall-list"), {}),
+            (reverse("browser:accession-list"), {}),
+        ]
+
+        for url, params in cases:
+            with self.subTest(url=url):
+                response = self.client.get(url, params)
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, "data-virtual-scroll-root")
+                self.assertContains(response, "data-virtual-scroll-body")
+
+    def test_run_list_virtual_scroll_fragment_returns_rows(self):
+        response = self.client.get(
+            reverse("browser:run-list"),
+            {"fragment": "virtual-scroll"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("rows_html", payload)
+        self.assertIn("run-alpha", payload["rows_html"])
+        self.assertEqual(payload["count"], 2)
+
+    def test_accession_list_virtual_scroll_fragment_returns_rows(self):
+        response = self.client.get(
+            reverse("browser:accession-list"),
+            {"fragment": "virtual-scroll"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("rows_html", payload)
+        self.assertIn("GCF_ALPHA", payload["rows_html"])
+        self.assertEqual(payload["count"], 2)
+
     def test_taxon_list_run_filter_keeps_ancestor_path(self):
         response = self.client.get(reverse("browser:taxon-list"), {"run": "run-alpha"})
 
@@ -608,6 +656,18 @@ class BrowserViewTests(TestCase):
         self.assertEqual(payload["row_count"], 1)
         self.assertEqual(payload["count"], 1)
         self.assertEqual(payload["next_query"], "")
+
+    def test_protein_list_merged_virtual_scroll_fragment_returns_rows(self):
+        response = self.client.get(
+            reverse("browser:protein-list"),
+            {"mode": "merged", "fragment": "virtual-scroll"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("rows_html", payload)
+        self.assertIn("GCF_ALPHA", payload["rows_html"])
 
     def test_protein_list_combined_call_filters_match_same_linked_call(self):
         matched = self._create_repeat_call(
@@ -794,6 +854,18 @@ class BrowserViewTests(TestCase):
         self.assertEqual(payload["row_count"], 1)
         self.assertEqual(payload["count"], 1)
         self.assertEqual(payload["next_query"], "")
+
+    def test_repeatcall_list_merged_virtual_scroll_fragment_returns_rows(self):
+        response = self.client.get(
+            reverse("browser:repeatcall-list"),
+            {"mode": "merged", "fragment": "virtual-scroll"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("rows_html", payload)
+        self.assertIn("GCF_ALPHA", payload["rows_html"])
 
     def test_repeatcall_detail_shows_linked_parents_and_coordinates(self):
         matched = self._create_repeat_call(

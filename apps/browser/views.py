@@ -198,6 +198,7 @@ class CursorPaginatedListView(BrowserListView):
 
     def _cursor_query_string(self, direction: str, cursor_token: str):
         query = self.request.GET.copy()
+        query.pop("fragment", None)
         query.pop("page", None)
         query.pop(self.cursor_after_param, None)
         query.pop(self.cursor_before_param, None)
@@ -211,7 +212,38 @@ class VirtualScrollListView(CursorPaginatedListView):
     virtual_scroll_window_pages = 8
 
     def virtual_scroll_enabled(self):
-        return getattr(self, "current_mode", "run") == "run"
+        return True
+
+    def get_virtual_scroll_colspan(self, context):
+        return self.virtual_scroll_colspan
+
+    def _virtual_scroll_base_query(self):
+        query = self.request.GET.copy()
+        query.pop("fragment", None)
+        query.pop("page", None)
+        query.pop(self.cursor_after_param, None)
+        query.pop(self.cursor_before_param, None)
+        return query
+
+    def _page_query_string(self, page_number: int):
+        query = self._virtual_scroll_base_query()
+        query["page"] = page_number
+        return query.urlencode()
+
+    def get_virtual_scroll_queries(self, page_obj):
+        if not page_obj:
+            return "", ""
+
+        previous_query = getattr(page_obj, "previous_query", "")
+        next_query = getattr(page_obj, "next_query", "")
+        if getattr(page_obj, "cursor_pagination", False):
+            return previous_query, next_query
+
+        if hasattr(page_obj, "has_previous") and page_obj.has_previous():
+            previous_query = self._page_query_string(page_obj.previous_page_number())
+        if hasattr(page_obj, "has_next") and page_obj.has_next():
+            next_query = self._page_query_string(page_obj.next_page_number())
+        return previous_query, next_query
 
     def is_virtual_scroll_fragment_request(self):
         return (
@@ -226,37 +258,44 @@ class VirtualScrollListView(CursorPaginatedListView):
 
     def _virtual_scroll_payload(self, context):
         object_list = list(context[self.context_object_name])
+        rows_context = context.copy()
+        rows_context[self.context_object_name] = object_list
         rows_html = render_to_string(
             self.virtual_scroll_row_template_name,
-            {
-                self.context_object_name: object_list,
-            },
+            rows_context,
             request=self.request,
         )
         page_obj = context["page_obj"]
+        previous_query, next_query = self.get_virtual_scroll_queries(page_obj)
         return {
             "rows_html": rows_html,
             "row_count": len(object_list),
             "count": page_obj.paginator.count,
-            "next_query": getattr(page_obj, "next_query", ""),
-            "previous_query": getattr(page_obj, "previous_query", ""),
+            "next_query": next_query,
+            "previous_query": previous_query,
         }
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         page_obj = context.get("page_obj")
-        enabled = bool(getattr(page_obj, "cursor_pagination", False)) and self.virtual_scroll_enabled()
+        enabled = page_obj is not None and bool(self.virtual_scroll_row_template_name) and self.virtual_scroll_enabled()
+        previous_query, next_query = self.get_virtual_scroll_queries(page_obj)
         context["virtual_scroll_enabled"] = enabled
         context["virtual_scroll_fragment_url"] = self.request.path
-        context["virtual_scroll_colspan"] = self.virtual_scroll_colspan
+        context["virtual_scroll_previous_query"] = previous_query
+        context["virtual_scroll_next_query"] = next_query
+        context["virtual_scroll_total_rows"] = page_obj.paginator.count if page_obj else 0
+        context["virtual_scroll_colspan"] = self.get_virtual_scroll_colspan(context)
         context["virtual_scroll_window_pages"] = self.virtual_scroll_window_pages
         return context
 
 
-class RunListView(BrowserListView):
+class RunListView(VirtualScrollListView):
     model = PipelineRun
     template_name = "browser/run_list.html"
     context_object_name = "runs"
+    virtual_scroll_row_template_name = "browser/includes/run_list_rows.html"
+    virtual_scroll_colspan = 8
     search_fields = ("run_id", "status", "profile", "git_revision")
     ordering_map = {
         "run_id": ("run_id",),
@@ -459,10 +498,12 @@ class RunDetailView(DetailView):
         return context
 
 
-class NormalizationWarningListView(BrowserListView):
+class NormalizationWarningListView(VirtualScrollListView):
     model = NormalizationWarning
     template_name = "browser/normalizationwarning_list.html"
     context_object_name = "warnings"
+    virtual_scroll_row_template_name = "browser/includes/normalizationwarning_list_rows.html"
+    virtual_scroll_colspan = 8
     search_fields = (
         "warning_code",
         "warning_message",
@@ -551,10 +592,12 @@ class NormalizationWarningListView(BrowserListView):
         return context
 
 
-class AccessionStatusListView(BrowserListView):
+class AccessionStatusListView(VirtualScrollListView):
     model = AccessionStatus
     template_name = "browser/accessionstatus_list.html"
     context_object_name = "status_rows"
+    virtual_scroll_row_template_name = "browser/includes/accessionstatus_list_rows.html"
+    virtual_scroll_colspan = 10
     search_fields = ("assembly_accession", "failure_stage", "failure_reason", "notes")
     ordering_map = {
         "accession": ("assembly_accession", "pipeline_run__run_id", "batch__batch_id"),
@@ -648,10 +691,12 @@ class AccessionStatusListView(BrowserListView):
         return context
 
 
-class AccessionCallCountListView(BrowserListView):
+class AccessionCallCountListView(VirtualScrollListView):
     model = AccessionCallCount
     template_name = "browser/accessioncallcount_list.html"
     context_object_name = "call_count_rows"
+    virtual_scroll_row_template_name = "browser/includes/accessioncallcount_list_rows.html"
+    virtual_scroll_colspan = 8
     search_fields = ("assembly_accession",)
     ordering_map = {
         "accession": ("assembly_accession", "method", "repeat_residue"),
@@ -753,10 +798,12 @@ class AccessionCallCountListView(BrowserListView):
         return context
 
 
-class DownloadManifestEntryListView(BrowserListView):
+class DownloadManifestEntryListView(VirtualScrollListView):
     model = DownloadManifestEntry
     template_name = "browser/downloadmanifest_list.html"
     context_object_name = "download_entries"
+    virtual_scroll_row_template_name = "browser/includes/downloadmanifest_list_rows.html"
+    virtual_scroll_colspan = 8
     search_fields = (
         "assembly_accession",
         "download_path",
@@ -847,10 +894,12 @@ class DownloadManifestEntryListView(BrowserListView):
         return context
 
 
-class TaxonListView(BrowserListView):
+class TaxonListView(VirtualScrollListView):
     model = Taxon
     template_name = "browser/taxon_list.html"
     context_object_name = "taxa"
+    virtual_scroll_row_template_name = "browser/includes/taxon_list_rows.html"
+    virtual_scroll_colspan = 4
     search_fields = ("taxon_name",)
     ordering_map = {
         "taxon_name": ("taxon_name", "taxon_id"),
@@ -995,10 +1044,11 @@ class TaxonDetailView(DetailView):
         return context
 
 
-class GenomeListView(BrowserListView):
+class GenomeListView(VirtualScrollListView):
     model = Genome
     template_name = "browser/genome_list.html"
     context_object_name = "genomes"
+    virtual_scroll_row_template_name = "browser/includes/genome_list_rows.html"
     merged_ordering_map = {
         "accession": ("accession",),
         "-accession": ("-accession",),
@@ -1017,6 +1067,9 @@ class GenomeListView(BrowserListView):
         "-proteins": ("proteins_count", "pipeline_run__run_id", "accession", "genome_id"),
     }
     default_ordering = ("pipeline_run__run_id", "accession", "genome_id")
+
+    def get_virtual_scroll_colspan(self, context):
+        return 5 if context.get("current_mode") == "merged" else 7
 
     def get_base_queryset(self):
         return _annotated_genomes(
@@ -1148,10 +1201,12 @@ class GenomeDetailView(DetailView):
         return context
 
 
-class SequenceListView(BrowserListView):
+class SequenceListView(VirtualScrollListView):
     model = Sequence
     template_name = "browser/sequence_list.html"
     context_object_name = "sequences"
+    virtual_scroll_row_template_name = "browser/includes/sequence_list_rows.html"
+    virtual_scroll_colspan = 7
     ordering_map = {
         "sequence_name": ("pipeline_run__run_id", "sequence_name", "sequence_id"),
         "-sequence_name": ("pipeline_run__run_id", "-sequence_name", "sequence_id"),
@@ -1294,9 +1349,11 @@ class SequenceDetailView(DetailView):
         return context
 
 
-class AccessionsListView(ListView):
+class AccessionsListView(VirtualScrollListView):
     template_name = "browser/accession_list.html"
     context_object_name = "accession_groups"
+    virtual_scroll_row_template_name = "browser/includes/accession_list_rows.html"
+    virtual_scroll_colspan = 7
     paginate_by = 20
     ordering_map = {
         "accession": ("accession",),

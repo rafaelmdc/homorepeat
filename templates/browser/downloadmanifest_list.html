@@ -101,7 +101,7 @@
   </form>
 </section>
 
-<section class="surface-card surface-card-wide">
+<section class="surface-card surface-card-wide" {% if virtual_scroll_enabled %}data-virtual-scroll-surface{% endif %}>
   <div class="section-header">
     <div>
       <p class="section-kicker mb-2">Download inventory</p>
@@ -109,6 +109,18 @@
     </div>
   </div>
 
+  <div
+    class="{% if virtual_scroll_enabled %}virtual-scroll-frame{% endif %}"
+    {% if virtual_scroll_enabled %}
+      data-virtual-scroll-root
+      data-virtual-scroll-url="{{ virtual_scroll_fragment_url }}"
+      data-virtual-scroll-next-query="{{ virtual_scroll_next_query }}"
+      data-virtual-scroll-previous-query="{{ virtual_scroll_previous_query }}"
+      data-virtual-scroll-total-rows="{{ virtual_scroll_total_rows }}"
+      data-virtual-scroll-colspan="{{ virtual_scroll_colspan }}"
+      data-virtual-scroll-window-pages="{{ virtual_scroll_window_pages }}"
+    {% endif %}
+  >
   <div class="table-responsive">
     <table class="table align-middle mb-0 data-table">
       <thead>
@@ -123,37 +135,17 @@
           <th>Run</th>
         </tr>
       </thead>
-      <tbody>
-        {% for entry in download_entries %}
-          <tr>
-            <td><a href="{% url 'browser:accession-detail' entry.assembly_accession %}"><strong>{{ entry.assembly_accession }}</strong></a></td>
-            <td>
-              <a href="{% url 'browser:downloadmanifest-list' %}?run={{ entry.pipeline_run.run_id|urlencode }}&amp;batch={{ entry.batch.pk|urlencode }}">{{ entry.batch.batch_id }}</a>
-            </td>
-            <td>{{ entry.download_status|default:"-" }}</td>
-            <td>{{ entry.package_mode|default:"-" }}</td>
-            <td>{{ entry.file_size_bytes|default:"-" }}</td>
-            <td><code>{{ entry.checksum|default:"-" }}</code></td>
-            <td>
-              {% if entry.download_path %}
-                <div><code>{{ entry.download_path }}</code></div>
-              {% endif %}
-              {% if entry.rehydrated_path %}
-                <div><code>{{ entry.rehydrated_path }}</code></div>
-              {% endif %}
-              {% if not entry.download_path and not entry.rehydrated_path %}
-                -
-              {% endif %}
-            </td>
-            <td><a href="{% url 'browser:run-detail' entry.pipeline_run.pk %}">{{ entry.pipeline_run.run_id }}</a></td>
-          </tr>
-        {% empty %}
+      <tbody {% if virtual_scroll_enabled %}data-virtual-scroll-body{% endif %}>
+        {% if download_entries %}
+          {% include "browser/includes/downloadmanifest_list_rows.html" %}
+        {% else %}
           <tr>
             <td colspan="8" class="empty-cell">No download-manifest rows matched these filters.</td>
           </tr>
-        {% endfor %}
+        {% endif %}
       </tbody>
     </table>
+  </div>
   </div>
 
   {% include "browser/includes/pagination.html" %}

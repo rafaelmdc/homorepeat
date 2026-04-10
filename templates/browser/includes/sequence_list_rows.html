@@ -1,0 +1,15 @@
+{% for sequence in sequences %}
+  <tr data-virtual-row="1">
+    <td><a href="{% url 'browser:sequence-detail' sequence.pk %}">{{ sequence.sequence_name }}</a></td>
+    <td>{{ sequence.gene_symbol|default:"-" }}</td>
+    <td><a href="{% url 'browser:genome-detail' sequence.genome.pk %}">{{ sequence.genome.accession }}</a></td>
+    <td>
+      <a href="{% url 'browser:taxon-detail' sequence.taxon.pk %}?run={{ sequence.pipeline_run.run_id|urlencode }}">
+        {{ sequence.taxon.taxon_name }}
+      </a>
+    </td>
+    <td><a href="{% url 'browser:run-detail' sequence.pipeline_run.pk %}">{{ sequence.pipeline_run.run_id }}</a></td>
+    <td><a href="{% url 'browser:protein-list' %}?run={{ sequence.pipeline_run.run_id|urlencode }}&amp;sequence={{ sequence.sequence_id|urlencode }}">{{ sequence.proteins_count }}</a></td>
+    <td><a href="{% url 'browser:repeatcall-list' %}?run={{ sequence.pipeline_run.run_id|urlencode }}&amp;sequence={{ sequence.sequence_id|urlencode }}">{{ sequence.repeat_calls_count }}</a></td>
+  </tr>
+{% endfor %}

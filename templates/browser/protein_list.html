@@ -163,9 +163,9 @@
     {% if virtual_scroll_enabled %}
       data-virtual-scroll-root
       data-virtual-scroll-url="{{ virtual_scroll_fragment_url }}"
-      data-virtual-scroll-next-query="{{ page_obj.next_query }}"
-      data-virtual-scroll-previous-query="{{ page_obj.previous_query }}"
-      data-virtual-scroll-total-rows="{{ page_obj.paginator.count }}"
+      data-virtual-scroll-next-query="{{ virtual_scroll_next_query }}"
+      data-virtual-scroll-previous-query="{{ virtual_scroll_previous_query }}"
+      data-virtual-scroll-total-rows="{{ virtual_scroll_total_rows }}"
       data-virtual-scroll-colspan="{{ virtual_scroll_colspan }}"
       data-virtual-scroll-window-pages="{{ virtual_scroll_window_pages }}"
     {% endif %}
@@ -194,26 +194,17 @@
         {% endif %}
       </thead>
       <tbody {% if virtual_scroll_enabled %}data-virtual-scroll-body{% endif %}>
-        {% if current_mode == "merged" %}
-          {% for protein in proteins %}
-            <tr>
-              <td><a href="{% url 'browser:accession-detail' protein.accession %}">{{ protein.protein_name }}</a></td>
-              <td>{{ protein.gene_symbol_label }}</td>
-              <td><a href="{% url 'browser:accession-detail' protein.accession %}">{{ protein.accession }}</a></td>
-              <td>{{ protein.source_runs_count }}</td>
-              <td>{{ protein.source_proteins_count }}</td>
-              <td>{{ protein.collapsed_repeat_calls_count }}</td>
-            </tr>
-          {% empty %}
-            <tr>
-              <td colspan="6" class="empty-cell">No merged protein groups matched these filters.</td>
-            </tr>
-          {% endfor %}
-        {% elif proteins %}
+        {% if proteins %}
           {% include "browser/includes/protein_list_rows.html" %}
         {% else %}
           <tr>
-            <td colspan="6" class="empty-cell">No proteins matched these filters.</td>
+            <td colspan="6" class="empty-cell">
+              {% if current_mode == "merged" %}
+                No merged protein groups matched these filters.
+              {% else %}
+                No proteins matched these filters.
+              {% endif %}
+            </td>
           </tr>
         {% endif %}
       </tbody>

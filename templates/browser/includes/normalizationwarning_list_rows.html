@@ -1,0 +1,23 @@
+{% for warning in warnings %}
+  <tr data-virtual-row="1">
+    <td>
+      <strong>{{ warning.warning_code }}</strong>
+      <div class="small text-secondary">{{ warning.warning_scope|default:"-" }}</div>
+    </td>
+    <td>
+      {% if warning.assembly_accession %}
+        <a href="{% url 'browser:accession-detail' warning.assembly_accession %}">{{ warning.assembly_accession }}</a>
+      {% else %}
+        -
+      {% endif %}
+    </td>
+    <td>
+      <a href="{% url 'browser:normalizationwarning-list' %}?run={{ warning.pipeline_run.run_id|urlencode }}&amp;batch={{ warning.batch.pk|urlencode }}">{{ warning.batch.batch_id }}</a>
+    </td>
+    <td><code>{{ warning.genome_id|default:"-" }}</code></td>
+    <td><code>{{ warning.sequence_id|default:"-" }}</code></td>
+    <td><code>{{ warning.protein_id|default:"-" }}</code></td>
+    <td><a href="{% url 'browser:run-detail' warning.pipeline_run.pk %}">{{ warning.pipeline_run.run_id }}</a></td>
+    <td>{{ warning.warning_message|default:"-" }}</td>
+  </tr>
+{% endfor %}

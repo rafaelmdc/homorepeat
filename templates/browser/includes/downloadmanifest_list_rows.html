@@ -1,0 +1,24 @@
+{% for entry in download_entries %}
+  <tr data-virtual-row="1">
+    <td><a href="{% url 'browser:accession-detail' entry.assembly_accession %}"><strong>{{ entry.assembly_accession }}</strong></a></td>
+    <td>
+      <a href="{% url 'browser:downloadmanifest-list' %}?run={{ entry.pipeline_run.run_id|urlencode }}&amp;batch={{ entry.batch.pk|urlencode }}">{{ entry.batch.batch_id }}</a>
+    </td>
+    <td>{{ entry.download_status|default:"-" }}</td>
+    <td>{{ entry.package_mode|default:"-" }}</td>
+    <td>{{ entry.file_size_bytes|default:"-" }}</td>
+    <td><code>{{ entry.checksum|default:"-" }}</code></td>
+    <td>
+      {% if entry.download_path %}
+        <div><code>{{ entry.download_path }}</code></div>
+      {% endif %}
+      {% if entry.rehydrated_path %}
+        <div><code>{{ entry.rehydrated_path }}</code></div>
+      {% endif %}
+      {% if not entry.download_path and not entry.rehydrated_path %}
+        -
+      {% endif %}
+    </td>
+    <td><a href="{% url 'browser:run-detail' entry.pipeline_run.pk %}">{{ entry.pipeline_run.run_id }}</a></td>
+  </tr>
+{% endfor %}
