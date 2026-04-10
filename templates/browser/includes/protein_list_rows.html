@@ -1,12 +1,50 @@
 {% for protein in proteins %}
   {% if current_mode == "merged" %}
     <tr data-virtual-row="1">
-      <td><a href="{% url 'browser:accession-detail' protein.accession %}">{{ protein.protein_name }}</a></td>
-      <td>{{ protein.gene_symbol_label }}</td>
+      <td>
+        <div>{{ protein.protein_name }}</div>
+        <div class="small text-secondary">ID {{ protein.protein_id }}{% if protein.protein_length_label != "-" %} | {{ protein.protein_length_label }} aa{% endif %}</div>
+        <div class="small text-secondary">
+          Representative evidence:
+          <a href="{% url 'browser:repeatcall-detail' protein.representative_repeat_call.pk %}">
+            {{ protein.representative_repeat_call.pipeline_run.run_id }}:{{ protein.representative_repeat_call.call_id }}
+          </a>
+        </div>
+      </td>
+      <td>
+        <div>{{ protein.gene_symbol_label }}</div>
+        <div class="small text-secondary">Residues {{ protein.repeat_residues_label }} | Methods {{ protein.methods_label }}</div>
+        <div class="small text-secondary">Coordinate evidence {{ protein.coordinate_label }}</div>
+      </td>
       <td><a href="{% url 'browser:accession-detail' protein.accession %}">{{ protein.accession }}</a></td>
-      <td>{{ protein.source_runs_count }}</td>
-      <td>{{ protein.source_proteins_count }}</td>
-      <td>{{ protein.collapsed_repeat_calls_count }}</td>
+      <td>
+        <div>{{ protein.source_runs_count }}</div>
+        <div class="d-flex flex-wrap gap-1 mt-1">
+          {% for source_run in protein.source_run_records %}
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:run-detail' source_run.pk %}">{{ source_run.run_id }}</a>
+          {% endfor %}
+        </div>
+      </td>
+      <td>
+        <div>{{ protein.source_proteins_count }}</div>
+        <div class="d-flex flex-wrap gap-1 mt-1">
+          {% for source_protein in protein.source_proteins %}
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:protein-detail' source_protein.pk %}">
+              {{ source_protein.run_id }}:{{ source_protein.protein_id }}
+            </a>
+          {% endfor %}
+        </div>
+      </td>
+      <td>
+        <div>{{ protein.collapsed_repeat_calls_count }} residue unit{{ protein.collapsed_repeat_calls_count|pluralize }} from {{ protein.source_repeat_calls_count }} raw call{{ protein.source_repeat_calls_count|pluralize }}</div>
+        <div class="d-flex flex-wrap gap-1 mt-1">
+          {% for repeat_call in protein.source_repeat_calls %}
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:repeatcall-detail' repeat_call.pk %}">
+              {{ repeat_call.pipeline_run.run_id }}:{{ repeat_call.call_id }}
+            </a>
+          {% endfor %}
+        </div>
+      </td>
     </tr>
   {% else %}
     <tr data-virtual-row="1">

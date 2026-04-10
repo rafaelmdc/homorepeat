@@ -8,10 +8,11 @@
   <div class="landing-band-shell">
     <div class="landing-copy">
       <span class="section-kicker mb-3">Merged accession analytics</span>
-      <h1 class="landing-title mb-3">Derived merged summaries over accession groups and collapsed repeat calls.</h1>
+      <h1 class="landing-title mb-3">Derived merged summaries over accession groups, protein units, and residue-specific units.</h1>
       <p class="landing-lead mb-0">
         This page summarizes the merged layer directly: accession groups are derived by shared accession,
-        repeat calls collapse on the documented fingerprint, and percentages use only conflict-safe analyzed-protein denominators.
+        protein counts deduplicate on accession plus protein ID, residue counts deduplicate on accession plus protein ID plus residue,
+        and percentages use only conflict-safe analyzed-protein denominators.
       </p>
     </div>
     <aside class="landing-aside">
@@ -30,6 +31,12 @@
           All taxonomy branches
         {% endif %}
       </p>
+      {% if summary.excluded_residue_identity_repeat_calls_count %}
+        <p class="mt-2 mb-0">
+          {{ summary.excluded_residue_identity_repeat_calls_count }} raw call{{ summary.excluded_residue_identity_repeat_calls_count|pluralize }}
+          excluded from residue-unit counts because merged identity keys were incomplete.
+        </p>
+      {% endif %}
     </aside>
   </div>
 </section>
@@ -83,9 +90,16 @@
   <div class="col-sm-6 col-xl-3">
     <article class="card h-100 border-0 shadow-sm stat-card">
       <div class="card-body">
-        <p class="text-uppercase text-secondary small mb-2">Collapsed repeat calls</p>
+        <p class="text-uppercase text-secondary small mb-2">Residue units</p>
         <a class="display-5 fw-semibold mb-3 d-inline-block text-decoration-none" href="{% url 'browser:repeatcall-list' %}?mode=merged{% if current_run_id %}&amp;run={{ current_run_id|urlencode }}{% endif %}{% if current_branch %}&amp;branch={{ current_branch|urlencode }}{% endif %}">{{ summary.collapsed_repeat_calls_count }}</a>
-        <p class="text-secondary mb-0">{{ summary.duplicate_source_repeat_calls_count }} duplicate source call{{ summary.duplicate_source_repeat_calls_count|pluralize }} removed from {{ summary.source_repeat_calls_count }} raw call{{ summary.source_repeat_calls_count|pluralize }}.</p>
+        <p class="text-secondary mb-0">
+          {{ summary.duplicate_source_repeat_calls_count }} duplicate source call{{ summary.duplicate_source_repeat_calls_count|pluralize }} removed from
+          {{ summary.source_repeat_calls_count }} raw call{{ summary.source_repeat_calls_count|pluralize }}.
+          {% if summary.excluded_residue_identity_repeat_calls_count %}
+            {{ summary.excluded_residue_identity_repeat_calls_count }} raw call{{ summary.excluded_residue_identity_repeat_calls_count|pluralize }}
+            excluded instead of being treated as duplicates.
+          {% endif %}
+        </p>
       </div>
     </article>
   </div>
@@ -99,6 +113,10 @@
             {{ summary.safe_repeat_bearing_proteins_count }} / {{ summary.analyzed_proteins_total }} = {{ summary.repeat_bearing_protein_percentage|floatformat:2 }}% across conflict-safe accessions.
           {% else %}
             Percentage withheld because no conflict-safe analyzed-protein denominator is available.
+          {% endif %}
+          {% if summary.excluded_protein_identity_repeat_calls_count %}
+            {{ summary.excluded_protein_identity_repeat_calls_count }} raw call{{ summary.excluded_protein_identity_repeat_calls_count|pluralize }}
+            with missing accession or protein ID stayed visible only in raw evidence views.
           {% endif %}
         </p>
       </div>
@@ -120,7 +138,7 @@
     <div class="surface-card surface-card-wide h-100">
       <div class="section-header">
         <div>
-          <p class="section-kicker mb-2">Collapsed calls</p>
+          <p class="section-kicker mb-2">Residue units</p>
           <h2>By method</h2>
         </div>
       </div>
@@ -140,7 +158,7 @@
               </tr>
             {% empty %}
               <tr>
-                <td colspan="2" class="empty-cell">No collapsed repeat calls matched these filters.</td>
+                <td colspan="2" class="empty-cell">No merged residue units matched these filters.</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -152,7 +170,7 @@
     <div class="surface-card surface-card-wide h-100">
       <div class="section-header">
         <div>
-          <p class="section-kicker mb-2">Collapsed calls</p>
+          <p class="section-kicker mb-2">Residue units</p>
           <h2>By residue</h2>
         </div>
       </div>
@@ -172,7 +190,7 @@
               </tr>
             {% empty %}
               <tr>
-                <td colspan="2" class="empty-cell">No collapsed repeat calls matched these filters.</td>
+                <td colspan="2" class="empty-cell">No merged residue units matched these filters.</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -210,7 +228,7 @@
           {% include "browser/includes/sortable_th.html" with label="Source genomes" header=sort_links.genomes %}
           {% include "browser/includes/sortable_th.html" with label="Source runs" header=sort_links.runs %}
           {% include "browser/includes/sortable_th.html" with label="Raw calls" header=sort_links.calls %}
-          {% include "browser/includes/sortable_th.html" with label="Collapsed calls" header=sort_links.collapsed_calls %}
+          {% include "browser/includes/sortable_th.html" with label="Residue units" header=sort_links.collapsed_calls %}
           {% include "browser/includes/sortable_th.html" with label="Derived proteins" header=sort_links.derived_proteins %}
           {% include "browser/includes/sortable_th.html" with label="Analyzed proteins" header=sort_links.analyzed_proteins %}
         </tr>

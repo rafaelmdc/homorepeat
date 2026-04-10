@@ -1855,6 +1855,28 @@ class RepeatCallListView(VirtualScrollListView):
     context_object_name = "repeat_calls"
     virtual_scroll_row_template_name = "browser/includes/repeatcall_list_rows.html"
     virtual_scroll_colspan = 10
+    merged_ordering_map = {
+        "accession": ("accession", "protein_name", "start", "end"),
+        "-accession": ("-accession", "protein_name", "start", "end"),
+        "protein_name": ("protein_name", "accession", "start", "end"),
+        "-protein_name": ("-protein_name", "accession", "start", "end"),
+        "gene_symbol": ("gene_symbol_label", "protein_name", "accession", "start"),
+        "-gene_symbol": ("-gene_symbol_label", "protein_name", "accession", "start"),
+        "method": ("method", "accession", "protein_name", "start"),
+        "-method": ("-method", "accession", "protein_name", "start"),
+        "coordinates": ("start", "end", "accession", "protein_name"),
+        "-coordinates": ("-start", "-end", "accession", "protein_name"),
+        "residue": ("repeat_residue", "accession", "protein_name", "start"),
+        "-residue": ("-repeat_residue", "accession", "protein_name", "start"),
+        "length": ("length", "accession", "protein_name", "start"),
+        "-length": ("-length", "accession", "protein_name", "start"),
+        "purity": ("normalized_purity", "accession", "protein_name", "start"),
+        "-purity": ("-normalized_purity", "accession", "protein_name", "start"),
+        "source_rows": ("source_count", "accession", "protein_name", "start"),
+        "-source_rows": ("-source_count", "accession", "protein_name", "start"),
+        "run": ("source_runs_count", "accession", "protein_name", "start"),
+        "-run": ("-source_runs_count", "accession", "protein_name", "start"),
+    }
     ordering_map = {
         "call_id": ("pipeline_run__run_id", "call_id"),
         "-call_id": ("pipeline_run__run_id", "-call_id"),
@@ -2133,6 +2155,15 @@ class RepeatCallListView(VirtualScrollListView):
             .values_list("repeat_residue", flat=True)
             .distinct()
         )
+        if context["current_mode"] == "merged":
+            context["sort_links"] = self.build_sort_links(
+                self.merged_ordering_map,
+                current_order_by=context["current_order_by"],
+            )
+            context["ordering_options"] = [
+                {"value": value, "label": _ordering_label(value)}
+                for value in self.merged_ordering_map.keys()
+            ]
         return context
 
 

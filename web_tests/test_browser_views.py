@@ -1017,6 +1017,21 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, "order_by=-purity")
         self.assertContains(response, "order_by=-run")
 
+    def test_repeatcall_list_merged_renders_sort_links_for_all_visible_headers(self):
+        response = self.client.get(reverse("browser:repeatcall-list"), {"mode": "merged"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "order_by=-accession")
+        self.assertContains(response, "order_by=-protein_name")
+        self.assertContains(response, "order_by=-gene_symbol")
+        self.assertContains(response, "order_by=-method")
+        self.assertContains(response, "order_by=-coordinates")
+        self.assertContains(response, "order_by=-residue")
+        self.assertContains(response, "order_by=-length")
+        self.assertContains(response, "order_by=-purity")
+        self.assertContains(response, "order_by=-source_rows")
+        self.assertContains(response, "order_by=-run")
+
     def test_repeatcall_list_virtual_scroll_fragment_returns_rows(self):
         response = self.client.get(
             reverse("browser:repeatcall-list"),

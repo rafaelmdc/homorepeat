@@ -27,6 +27,7 @@
           {% else %}
             Browsing merged protein groups across imported runs.
           {% endif %}
+          Representative evidence links below are convenience backlinks to raw rows, not canonical merged truth.
         {% elif current_run %}
           Run <strong>{{ current_run.run_id }}</strong>{% if selected_branch_taxon %}, branch <strong>{{ selected_branch_taxon.taxon_name }}</strong>{% endif %}.
         {% elif selected_branch_taxon %}

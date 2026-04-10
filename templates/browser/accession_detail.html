@@ -22,9 +22,21 @@
     </div>
     <aside class="landing-aside">
       <p class="sheet-label">Merged summary</p>
-      <p class="mb-2"><a class="text-decoration-none" href="{{ merged_repeatcall_list_url }}">{{ collapsed_repeat_calls_count }} collapsed repeat call{{ collapsed_repeat_calls_count|pluralize }}</a></p>
+      <p class="mb-2"><a class="text-decoration-none" href="{{ merged_repeatcall_list_url }}">{{ collapsed_repeat_calls_count }} residue unit{{ collapsed_repeat_calls_count|pluralize }}</a></p>
       <p class="mb-2">{{ duplicate_source_repeat_calls_count }} duplicate source call{{ duplicate_source_repeat_calls_count|pluralize }} removed</p>
       <p class="mb-2"><a class="text-decoration-none" href="{{ merged_protein_list_url }}">{{ merged_repeat_bearing_proteins_count }} derived repeat-bearing protein{{ merged_repeat_bearing_proteins_count|pluralize }}</a></p>
+      {% if excluded_residue_identity_repeat_calls_count %}
+        <p class="mb-2">
+          {{ excluded_residue_identity_repeat_calls_count }} raw call{{ excluded_residue_identity_repeat_calls_count|pluralize }}
+          excluded from residue-unit counts because merged identity keys were incomplete.
+        </p>
+      {% endif %}
+      {% if excluded_protein_identity_repeat_calls_count %}
+        <p class="mb-2">
+          {{ excluded_protein_identity_repeat_calls_count }} raw call{{ excluded_protein_identity_repeat_calls_count|pluralize }}
+          excluded from protein-unit counts because accession or protein ID was missing.
+        </p>
+      {% endif %}
       {% if has_analyzed_protein_conflict %}
         <p class="mb-0">Analyzed protein count conflict: {{ analyzed_protein_counts|join:", " }}</p>
       {% else %}
@@ -49,16 +61,22 @@
       <div class="card-body">
         <p class="text-uppercase text-secondary small mb-2">Raw repeat calls</p>
         <a class="display-5 fw-semibold mb-3 d-inline-block text-decoration-none" href="{{ repeatcall_list_url }}">{{ source_repeat_calls_count }}</a>
-        <p class="text-secondary mb-0">Source repeat calls before any exact cross-run collapse.</p>
+        <p class="text-secondary mb-0">
+          Source repeat calls before any residue-level merged collapse.
+          {% if excluded_residue_identity_repeat_calls_count %}
+            {{ excluded_residue_identity_repeat_calls_count }} raw call{{ excluded_residue_identity_repeat_calls_count|pluralize }}
+            stay visible only as raw evidence because residue-level identity keys were incomplete.
+          {% endif %}
+        </p>
       </div>
     </article>
   </div>
   <div class="col-sm-6 col-xl-3">
     <article class="card h-100 border-0 shadow-sm stat-card">
       <div class="card-body">
-        <p class="text-uppercase text-secondary small mb-2">Collapsed repeat calls</p>
+        <p class="text-uppercase text-secondary small mb-2">Residue units</p>
         <a class="display-5 fw-semibold mb-3 d-inline-block text-decoration-none" href="{{ merged_repeatcall_list_url }}">{{ collapsed_repeat_calls_count }}</a>
-        <p class="text-secondary mb-0">Exact-match calls after derived fingerprint collapse.</p>
+        <p class="text-secondary mb-0">Merged by accession, protein ID, and residue across supporting evidence.</p>
       </div>
     </article>
   </div>
@@ -72,6 +90,10 @@
             {{ repeat_bearing_protein_percentage|floatformat:2 }}% of analyzed proteins after denominator-safe collapse.
           {% else %}
             Percentage withheld because the analyzed protein denominator conflicts across runs.
+          {% endif %}
+          {% if excluded_protein_identity_repeat_calls_count %}
+            {{ excluded_protein_identity_repeat_calls_count }} raw call{{ excluded_protein_identity_repeat_calls_count|pluralize }}
+            with missing accession or protein ID stayed excluded from these merged protein counts.
           {% endif %}
         </p>
       </div>
@@ -142,8 +164,8 @@
 <section class="surface-card surface-card-wide">
   <div class="section-header">
     <div>
-      <p class="section-kicker mb-2">Collapsed repeat calls</p>
-      <h2>Exact fingerprint groups</h2>
+      <p class="section-kicker mb-2">Residue units</p>
+      <h2>Residue-specific merged groups</h2>
     </div>
   </div>
 
@@ -157,21 +179,45 @@
           <th>Residue</th>
           <th>Length</th>
           <th>Purity</th>
-          <th>Source rows</th>
-          <th>Supporting calls</th>
+          <th>Evidence summary</th>
+          <th>Source evidence</th>
         </tr>
       </thead>
       <tbody>
         {% for call_group in collapsed_call_groups %}
           <tr>
-            <td>{{ call_group.protein_name }} <span class="small text-secondary">({{ call_group.protein_length }} aa)</span></td>
-            <td><a href="{{ merged_repeatcall_list_url }}&amp;method={{ call_group.method|urlencode }}">{{ call_group.method }}</a></td>
-            <td>{{ call_group.start }}-{{ call_group.end }}</td>
-            <td><a href="{{ merged_repeatcall_list_url }}&amp;residue={{ call_group.repeat_residue|urlencode }}">{{ call_group.repeat_residue }}</a></td>
-            <td>{{ call_group.length }}</td>
-            <td>{{ call_group.normalized_purity }}</td>
-            <td>{{ call_group.source_count }}</td>
             <td>
+              <div>{{ call_group.protein_name }} <span class="small text-secondary">({{ call_group.protein_length }} aa)</span></div>
+              <div class="small text-secondary">ID {{ call_group.protein_id }}</div>
+              <div class="small text-secondary">
+                Representative evidence:
+                <a href="{% url 'browser:repeatcall-detail' call_group.representative_repeat_call.pk %}">
+                  {{ call_group.representative_repeat_call.pipeline_run.run_id }}:{{ call_group.representative_repeat_call.call_id }}
+                </a>
+              </div>
+            </td>
+            <td>{{ call_group.methods_label }}</td>
+            <td>
+              {{ call_group.coordinate_label }}
+              <div class="small text-secondary">Protein {{ call_group.protein_length_label }} aa</div>
+            </td>
+            <td><a href="{{ merged_repeatcall_list_url }}&amp;residue={{ call_group.repeat_residue|urlencode }}">{{ call_group.repeat_residue }}</a></td>
+            <td>{{ call_group.length_label }}</td>
+            <td>{{ call_group.purity_label }}</td>
+            <td>
+              <div>{{ call_group.source_count }} raw call{{ call_group.source_count|pluralize }}</div>
+              <div class="small text-secondary">{{ call_group.source_runs_count }} run{{ call_group.source_runs_count|pluralize }}, {{ call_group.source_proteins_count }} protein row{{ call_group.source_proteins_count|pluralize }}</div>
+            </td>
+            <td>
+              <div class="small text-secondary mb-2">Source proteins</div>
+              <div class="d-flex flex-wrap gap-2 mb-2">
+                {% for source_protein in call_group.source_proteins %}
+                  <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:protein-detail' source_protein.pk %}">
+                    {{ source_protein.run_id }}:{{ source_protein.protein_id }}
+                  </a>
+                {% endfor %}
+              </div>
+              <div class="small text-secondary mb-2">Raw calls</div>
               <div class="d-flex flex-wrap gap-2">
                 {% for repeat_call in call_group.source_repeat_calls %}
                   <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:repeatcall-detail' repeat_call.pk %}">
@@ -183,7 +229,7 @@
           </tr>
         {% empty %}
           <tr>
-            <td colspan="8" class="empty-cell">No repeat calls were linked to this accession group.</td>
+            <td colspan="8" class="empty-cell">No merged residue units were linked to this accession group.</td>
           </tr>
         {% endfor %}
       </tbody>

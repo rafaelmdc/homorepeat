@@ -8,6 +8,9 @@
       {% if accession_group.duplicate_source_repeat_calls_count %}
         <span class="small text-secondary">(-{{ accession_group.duplicate_source_repeat_calls_count }} duplicate{{ accession_group.duplicate_source_repeat_calls_count|pluralize }})</span>
       {% endif %}
+      {% if accession_group.excluded_residue_identity_repeat_calls_count %}
+        <span class="small text-secondary">({{ accession_group.excluded_residue_identity_repeat_calls_count }} excluded)</span>
+      {% endif %}
     </td>
     <td><a href="{% url 'browser:repeatcall-list' %}?mode=merged&amp;accession={{ accession_group.accession|urlencode }}{% if current_run_id %}&amp;run={{ current_run_id|urlencode }}{% endif %}{% if current_branch %}&amp;branch={{ current_branch|urlencode }}{% endif %}">{{ accession_group.collapsed_repeat_calls_count }}</a></td>
     <td>

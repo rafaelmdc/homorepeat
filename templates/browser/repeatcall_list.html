@@ -19,12 +19,13 @@
       <p class="mb-2">
         {% if current_mode == "merged" %}
           {% if current_run %}
-            Run <strong>{{ current_run.run_id }}</strong>{% if selected_branch_taxon %}, branch <strong>{{ selected_branch_taxon.taxon_name }}</strong>{% endif %}, using merged call groups.
+            Run <strong>{{ current_run.run_id }}</strong>{% if selected_branch_taxon %}, branch <strong>{{ selected_branch_taxon.taxon_name }}</strong>{% endif %}, using merged residue groups.
           {% elif selected_branch_taxon %}
-            Branch <strong>{{ selected_branch_taxon.taxon_name }}</strong> across merged call groups.
+            Branch <strong>{{ selected_branch_taxon.taxon_name }}</strong> across merged residue groups.
           {% else %}
-            Browsing merged repeat-call groups across imported runs.
+            Browsing merged residue groups across imported runs.
           {% endif %}
+          Representative evidence links below are convenience backlinks to raw rows, not canonical merged truth.
         {% elif current_run %}
           Run <strong>{{ current_run.run_id }}</strong>{% if selected_branch_taxon %}, branch <strong>{{ selected_branch_taxon.taxon_name }}</strong>{% endif %}.
         {% elif selected_branch_taxon %}
@@ -150,10 +151,10 @@
 <section class="surface-card surface-card-wide" {% if virtual_scroll_enabled %}data-virtual-scroll-surface{% endif %}>
   <div class="section-header">
     <div>
-      <p class="section-kicker mb-2">{% if current_mode == "merged" %}Merged repeat-call inventory{% else %}Repeat-call inventory{% endif %}</p>
+      <p class="section-kicker mb-2">{% if current_mode == "merged" %}Merged residue inventory{% else %}Repeat-call inventory{% endif %}</p>
       <h2>
         {{ page_obj.paginator.count }}
-        {% if current_mode == "merged" %}collapsed call group{{ page_obj.paginator.count|pluralize }}{% else %}repeat call{{ page_obj.paginator.count|pluralize }}{% endif %}
+        {% if current_mode == "merged" %}residue unit{{ page_obj.paginator.count|pluralize }}{% else %}repeat call{{ page_obj.paginator.count|pluralize }}{% endif %}
       </h2>
     </div>
   </div>
@@ -178,10 +179,10 @@
             {% include "browser/includes/sortable_th.html" with label="Accession" header=sort_links.accession %}
             {% include "browser/includes/sortable_th.html" with label="Protein" header=sort_links.protein_name %}
             {% include "browser/includes/sortable_th.html" with label="Gene" header=sort_links.gene_symbol %}
-            {% include "browser/includes/sortable_th.html" with label="Method" header=sort_links.method %}
+            {% include "browser/includes/sortable_th.html" with label="Methods" header=sort_links.method %}
             {% include "browser/includes/sortable_th.html" with label="Coordinates" header=sort_links.coordinates %}
             {% include "browser/includes/sortable_th.html" with label="Residue" header=sort_links.residue %}
-            {% include "browser/includes/sortable_th.html" with label="Length" header=sort_links.length %}
+            {% include "browser/includes/sortable_th.html" with label="Lengths" header=sort_links.length %}
             {% include "browser/includes/sortable_th.html" with label="Purity" header=sort_links.purity %}
             {% include "browser/includes/sortable_th.html" with label="Source rows" header=sort_links.source_rows %}
             {% include "browser/includes/sortable_th.html" with label="Source runs" header=sort_links.run %}
@@ -208,7 +209,7 @@
           <tr>
             <td colspan="10" class="empty-cell">
               {% if current_mode == "merged" %}
-                No merged repeat-call groups matched these filters.
+                No merged residue groups matched these filters.
               {% else %}
                 No repeat calls matched these filters.
               {% endif %}
