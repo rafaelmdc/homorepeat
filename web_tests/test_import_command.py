@@ -27,6 +27,37 @@ from .support import build_minimal_publish_root, build_multibatch_publish_root
 
 
 class ImportRunCommandTests(TestCase):
+    def test_import_run_persists_browser_metadata(self):
+        with TemporaryDirectory() as tempdir:
+            publish_root = build_minimal_publish_root(Path(tempdir), run_id="run-browser-metadata")
+            stdout = StringIO()
+
+            call_command("import_run", publish_root=str(publish_root), stdout=stdout)
+
+            self.assertIn("Imported run run-browser-metadata", stdout.getvalue())
+            pipeline_run = PipelineRun.objects.get(run_id="run-browser-metadata")
+            batch = ImportBatch.objects.get()
+            self.assertEqual(
+                pipeline_run.browser_metadata["raw_counts"],
+                {
+                    "genomes": batch.row_counts["genomes"],
+                    "sequences": batch.row_counts["sequences"],
+                    "proteins": batch.row_counts["proteins"],
+                    "repeat_calls": batch.row_counts["repeat_calls"],
+                    "accession_status_rows": batch.row_counts["accession_status_rows"],
+                    "accession_call_count_rows": batch.row_counts["accession_call_count_rows"],
+                    "download_manifest_entries": batch.row_counts["download_manifest_entries"],
+                    "normalization_warnings": batch.row_counts["normalization_warnings"],
+                },
+            )
+            self.assertEqual(
+                pipeline_run.browser_metadata["facets"],
+                {
+                    "methods": [RunParameter.Method.PURE],
+                    "residues": ["Q"],
+                },
+            )
+
     def test_import_run_keeps_only_repeat_linked_sequences_and_proteins(self):
         with TemporaryDirectory() as tempdir:
             publish_root = build_minimal_publish_root(Path(tempdir))
@@ -136,7 +167,12 @@ class ImportRunCommandTests(TestCase):
             )
             (publish_root / "calls" / "repeat_calls.tsv").write_text(
                 "call_id\tmethod\tgenome_id\ttaxon_id\tsequence_id\tprotein_id\tstart\tend\tlength\trepeat_residue\trepeat_count\tnon_repeat_count\tpurity\taa_sequence\tcodon_sequence\tcodon_metric_name\tcodon_metric_value\twindow_definition\ttemplate_name\tmerge_rule\tscore\n"
-                "call_2\tpure\tgenome_1\t9606\tseq_1\tprot_1\t11\t21\t11\tQ\t11\t0\t1.0\tQQQQQQQQQQQ\t\t\t\t\t\t\t\n",
+                "call_2\tseed_extend\tgenome_1\t9606\tseq_1\tprot_1\t11\t21\t11\tA\t11\t0\t1.0\tAAAAAAAAAAA\t\t\t\tseed:A6/8|extend:A8/12\t\tseed_extend_connected_windows\t\n",
+                encoding="utf-8",
+            )
+            (publish_root / "calls" / "run_params.tsv").write_text(
+                "method\trepeat_residue\tparam_name\tparam_value\n"
+                "seed_extend\tA\tseed_window_size\t8\n",
                 encoding="utf-8",
             )
             (publish_root / "acquisition" / "batches" / "batch_0001" / "download_manifest.tsv").write_text(
@@ -147,6 +183,11 @@ class ImportRunCommandTests(TestCase):
             (publish_root / "acquisition" / "batches" / "batch_0001" / "normalization_warnings.tsv").write_text(
                 "warning_code\twarning_scope\twarning_message\tbatch_id\tgenome_id\tsequence_id\tprotein_id\tassembly_accession\tsource_file\tsource_record_id\n"
                 "partial_cds\tsequence\tCDS is partial\tbatch_0001\tgenome_1\tseq_1\t\tGCF_000001405.40\t/source/path\tcds-1\n",
+                encoding="utf-8",
+            )
+            (publish_root / "status" / "accession_call_counts.tsv").write_text(
+                "assembly_accession\tbatch_id\tmethod\trepeat_residue\tdetect_status\tfinalize_status\tn_repeat_calls\n"
+                "GCF_000001405.40\tbatch_0001\tseed_extend\tA\tsuccess\tsuccess\t1\n",
                 encoding="utf-8",
             )
 
@@ -165,9 +206,30 @@ class ImportRunCommandTests(TestCase):
             self.assertEqual(Genome.objects.get().genome_name, "Replacement genome")
             self.assertEqual(Genome.objects.get().analyzed_protein_count, 2)
             self.assertEqual(RepeatCall.objects.get().call_id, "call_2")
+            self.assertEqual(RepeatCall.objects.get().method, RepeatCall.Method.SEED_EXTEND)
+            self.assertEqual(RepeatCall.objects.get().repeat_residue, "A")
             self.assertEqual(DownloadManifestEntry.objects.get().download_status, "rehydrated")
             self.assertEqual(DownloadManifestEntry.objects.get().notes, "replaced")
             self.assertEqual(NormalizationWarning.objects.get().warning_code, "partial_cds")
+            self.assertEqual(
+                PipelineRun.objects.get().browser_metadata,
+                {
+                    "raw_counts": {
+                        "genomes": 1,
+                        "sequences": 1,
+                        "proteins": 1,
+                        "repeat_calls": 1,
+                        "accession_status_rows": 1,
+                        "accession_call_count_rows": 1,
+                        "download_manifest_entries": 1,
+                        "normalization_warnings": 1,
+                    },
+                    "facets": {
+                        "methods": [RunParameter.Method.SEED_EXTEND],
+                        "residues": ["A"],
+                    },
+                },
+            )
 
     def test_import_run_rolls_back_on_broken_references(self):
         with TemporaryDirectory() as tempdir:

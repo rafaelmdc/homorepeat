@@ -10,6 +10,7 @@ from typing import Iterable
 from django.db import DEFAULT_DB_ALIAS, connections, transaction
 from django.utils import timezone
 
+from apps.browser.metadata import build_browser_metadata
 from apps.browser.models import (
     AccessionCallCount,
     AccessionStatus,
@@ -320,6 +321,11 @@ def process_import_batch(batch_or_id: ImportBatch | int) -> ImportRunResult:
                 replace_existing=batch.replace_existing,
                 reporter=reporter,
             )
+            pipeline_run.browser_metadata = build_browser_metadata(
+                pipeline_run,
+                raw_counts=counts,
+            )
+            pipeline_run.save(update_fields=["browser_metadata"])
         _set_batch_state(
             batch,
             phase=ImportPhase.IMPORTING,

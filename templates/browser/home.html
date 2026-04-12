@@ -79,9 +79,9 @@
             <td><a href="{% url 'browser:run-detail' pipeline_run.pk %}">{{ pipeline_run.run_id }}</a></td>
             <td><span class="badge rounded-pill status-badge">{{ pipeline_run.status }}</span></td>
             <td>{{ pipeline_run.profile|default:"-" }}</td>
-            <td>{{ pipeline_run.genomes_count }}</td>
-            <td>{{ pipeline_run.proteins_count }}</td>
-            <td>{{ pipeline_run.repeat_calls_count }}</td>
+            <td>{{ pipeline_run.genomes_count|default_if_none:"" }}</td>
+            <td>{{ pipeline_run.proteins_count|default_if_none:"" }}</td>
+            <td>{{ pipeline_run.repeat_calls_count|default_if_none:"" }}</td>
           </tr>
         {% empty %}
           <tr>

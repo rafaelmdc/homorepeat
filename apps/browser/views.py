@@ -4,7 +4,7 @@ from urllib.parse import urlencode
 
 from django.http import Http404, JsonResponse
 from django.db.models import Count, Exists, IntegerField, Max, Min, OuterRef, Q, Subquery, Sum, Value
-from django.db.models.functions import Coalesce
+from django.db.models.functions import Cast, Coalesce
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views.generic import DetailView, ListView, TemplateView
@@ -41,7 +41,7 @@ class BrowserHomeView(TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["directory_sections"] = _browser_directory_sections()
-        context["recent_runs"] = _annotated_runs()[:5]
+        context["recent_runs"] = _summary_runs()[:5]
         return context
 
 
@@ -373,9 +373,8 @@ class RunListView(VirtualScrollListView):
             queryset = queryset.filter(status=status)
         return queryset
 
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        return _annotated_runs(queryset)
+    def get_base_queryset(self):
+        return _summary_runs()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -2209,6 +2208,17 @@ def _annotated_runs(queryset=None):
     )
 
 
+def _summary_runs(queryset=None):
+    if queryset is None:
+        queryset = PipelineRun.objects.all()
+    return queryset.annotate(
+        genomes_count=_run_summary_count_annotation("genomes"),
+        sequences_count=_run_summary_count_annotation("sequences"),
+        proteins_count=_run_summary_count_annotation("proteins"),
+        repeat_calls_count=_run_summary_count_annotation("repeat_calls"),
+    )
+
+
 def _annotated_batches(queryset=None):
     if queryset is None:
         queryset = AcquisitionBatch.objects.all()
@@ -2224,6 +2234,25 @@ def _annotated_batches(queryset=None):
         normalization_warnings_count=Coalesce(_count_subquery(NormalizationWarning, "batch"), Value(0)),
         accession_status_rows_count=Coalesce(_count_subquery(AccessionStatus, "batch"), Value(0)),
         accession_call_count_rows_count=Coalesce(_count_subquery(AccessionCallCount, "batch"), Value(0)),
+    )
+
+
+def _run_summary_count_annotation(count_key: str):
+    return Coalesce(
+        Cast(f"browser_metadata__raw_counts__{count_key}", IntegerField()),
+        _latest_completed_import_batch_row_count_subquery(count_key),
+        output_field=IntegerField(),
+    )
+
+
+def _latest_completed_import_batch_row_count_subquery(count_key: str):
+    filters = Q(pipeline_run=OuterRef("pk")) | Q(source_path=OuterRef("publish_root"))
+    return Subquery(
+        ImportBatch.objects.filter(filters, status=ImportBatch.Status.COMPLETED)
+        .order_by("-finished_at", "-started_at", "-pk")
+        .annotate(row_count_value=Cast(f"row_counts__{count_key}", IntegerField()))
+        .values("row_count_value")[:1],
+        output_field=IntegerField(),
     )
 
 

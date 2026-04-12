@@ -27,6 +27,11 @@ class PipelineRunModelTests(TestCase):
             with transaction.atomic():
                 PipelineRun.objects.create(run_id="run-alpha", status="failed")
 
+    def test_browser_metadata_defaults_to_empty_mapping(self):
+        pipeline_run = PipelineRun.objects.create(run_id="run-alpha", status="success")
+
+        self.assertEqual(pipeline_run.browser_metadata, {})
+
 
 class TaxonModelTests(TestCase):
     def test_taxon_can_reference_parent(self):

@@ -21,6 +21,7 @@ class PipelineRun(TimestampedModel):
     manifest_path = models.CharField(max_length=500, blank=True)
     publish_root = models.CharField(max_length=500, blank=True)
     manifest_payload = models.JSONField(default=dict, blank=True)
+    browser_metadata = models.JSONField(default=dict, blank=True)
     imported_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:

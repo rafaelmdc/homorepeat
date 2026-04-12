@@ -71,7 +71,7 @@ Exit criteria:
 
 Status:
 
-- pending
+- skipped
 
 ### Slice 1.2: Add persisted `PipelineRun.browser_metadata`
 

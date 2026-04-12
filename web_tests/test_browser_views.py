@@ -127,6 +127,33 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, "run-alpha")
         self.assertContains(response, "run-beta")
 
+    def test_browser_home_recent_runs_use_browser_metadata_counts(self):
+        self.alpha["pipeline_run"].browser_metadata = {
+            "raw_counts": {
+                "genomes": 17,
+                "sequences": 0,
+                "proteins": 23,
+                "repeat_calls": 31,
+                "accession_status_rows": 0,
+                "accession_call_count_rows": 0,
+                "download_manifest_entries": 0,
+                "normalization_warnings": 0,
+            },
+            "facets": {
+                "methods": [RunParameter.Method.PURE],
+                "residues": ["Q"],
+            },
+        }
+        self.alpha["pipeline_run"].save(update_fields=["browser_metadata"])
+
+        response = self.client.get(reverse("browser:home"))
+
+        self.assertEqual(response.status_code, 200)
+        recent_runs = {pipeline_run.run_id: pipeline_run for pipeline_run in response.context["recent_runs"]}
+        self.assertEqual(recent_runs["run-alpha"].genomes_count, 17)
+        self.assertEqual(recent_runs["run-alpha"].proteins_count, 23)
+        self.assertEqual(recent_runs["run-alpha"].repeat_calls_count, 31)
+
     def test_run_list_renders_imported_runs(self):
         response = self.client.get(reverse("browser:run-list"))
 
@@ -134,6 +161,41 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, "run-alpha")
         self.assertContains(response, "run-beta")
         self.assertContains(response, reverse("browser:run-detail", args=[self.alpha["pipeline_run"].pk]))
+
+    def test_run_list_uses_completed_import_batch_count_fallback(self):
+        pipeline_run = self.alpha["pipeline_run"]
+        ImportBatch.objects.create(
+            source_path=pipeline_run.publish_root,
+            status=ImportBatch.Status.COMPLETED,
+            phase="completed",
+            finished_at=timezone.now(),
+            heartbeat_at=timezone.now(),
+            row_counts={
+                "genomes": 9,
+                "sequences": 8,
+                "proteins": 7,
+                "repeat_calls": 6,
+            },
+        )
+
+        response = self.client.get(reverse("browser:run-list"))
+
+        self.assertEqual(response.status_code, 200)
+        runs = {pipeline_run.run_id: pipeline_run for pipeline_run in response.context["runs"]}
+        self.assertEqual(runs["run-alpha"].genomes_count, 9)
+        self.assertEqual(runs["run-alpha"].sequences_count, 8)
+        self.assertEqual(runs["run-alpha"].proteins_count, 7)
+        self.assertEqual(runs["run-alpha"].repeat_calls_count, 6)
+
+    def test_run_list_leaves_summary_counts_blank_without_metadata_or_import_batch_counts(self):
+        response = self.client.get(reverse("browser:run-list"))
+
+        self.assertEqual(response.status_code, 200)
+        runs = {pipeline_run.run_id: pipeline_run for pipeline_run in response.context["runs"]}
+        self.assertIsNone(runs["run-alpha"].genomes_count)
+        self.assertIsNone(runs["run-alpha"].sequences_count)
+        self.assertIsNone(runs["run-alpha"].proteins_count)
+        self.assertIsNone(runs["run-alpha"].repeat_calls_count)
 
     def test_run_list_search_filters_results(self):
         response = self.client.get(reverse("browser:run-list"), {"q": "run-beta"})
