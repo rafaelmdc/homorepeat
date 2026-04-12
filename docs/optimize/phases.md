@@ -31,11 +31,12 @@ Verified branch facts:
 
 Current baseline artifact:
 
-- `docs/optimize/baseline-2026-04-11.md`
+- `docs/optimize/reprofile-2026-04-12.md`
 
 Current next slice:
 
-- `4.1` re-profile the large imported dataset
+- none; large-run measurements are recorded in
+  `docs/optimize/reprofile-2026-04-12.md`
 
 ## Phase 1: Baseline And Metadata Contract
 
@@ -380,7 +381,7 @@ Exit criteria:
 
 Status:
 
-- pending
+- implemented
 
 ## Separate Track: Merged Redesign
 
