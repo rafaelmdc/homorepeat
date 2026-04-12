@@ -20,13 +20,18 @@ Sequencing rules:
 Verified branch facts:
 
 - `rehaul` already includes `CursorPaginatedListView` and `VirtualScrollListView`
-- raw proteins and repeat calls already enable cursor mode in run mode
+- raw proteins, repeat calls, and sequences now enable cursor mode only on the
+  fast default order
 - fragments are already served through `fragment=virtual-scroll`
 - browser home and run summaries now read metadata-backed counts
 - raw branch filters now use `branch_q` instead of live taxon dropdowns
 - raw protein and repeat-call facet choices now resolve from browser metadata
 - run-detail method and residue inventory now resolves from browser metadata
 - raw sequence, protein, and repeat-call fragments can omit exact `count`
+- large-run reprofile confirms the default raw row fetches use the intended
+  composite browse indexes
+- large-run reprofile also shows exact `COUNT(*)` still dominates the hot raw
+  pages and `/browser/`
 - merged-mode pages still materialize large repeat-call sets in Python
 
 Current baseline artifact:

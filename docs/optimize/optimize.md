@@ -196,6 +196,23 @@ Query-shape rules:
 - avoid unnecessary related-object joins on hot list pages
 - keep detail-link construction on local ids and already selected fields
 
+## Current Measured Outcome
+
+The post-migration large-run profile for `chr_all3_raw_2026_04_09` is recorded
+in [reprofile-2026-04-12.md](/home/rafael/Documents/GitHub/homorepeat/docs/optimize/reprofile-2026-04-12.md).
+
+Current measured state:
+
+- the default raw row fetch plans for proteins, repeat calls, and sequences now
+  use the intended composite browse indexes
+- the trimmed raw list views keep the hot row path narrow and avoid the removed
+  eager joins
+- branch dropdown generation and live `RepeatCall` facet scans are no longer
+  visible in the measured hot raw requests
+- the remaining dominant hot cost is exact `COUNT(*)`, including on cursor
+  follow-up fragments
+- `/browser/` is still dominated by live directory-card counts
+
 ## Acceptance Criteria
 
 The raw optimization pass is complete when all of the following are true on the
