@@ -65,6 +65,14 @@
     return Array.from(state.body.querySelectorAll("tr[data-virtual-row]"));
   }
 
+  function parseOptionalCount(value) {
+    const parsed = Number.parseInt(value ?? "", 10);
+    if (Number.isNaN(parsed)) {
+      return null;
+    }
+    return Math.max(0, parsed);
+  }
+
   function firstMountedRow(state) {
     return mountedRows(state)[0] || null;
   }
@@ -188,6 +196,10 @@
 
   function registerPage(state, payload, direction) {
     const rows = parseRows(payload.rows_html || "");
+    const payloadCount = parseOptionalCount(payload.count);
+    if (payloadCount !== null) {
+      state.totalRows = payloadCount;
+    }
     if (!rows.length) {
       const boundaryPage = direction === "previous" ? currentTopPage(state) : currentBottomPage(state);
       if (boundaryPage) {

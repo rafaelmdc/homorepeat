@@ -22,8 +22,11 @@ Verified branch facts:
 - `rehaul` already includes `CursorPaginatedListView` and `VirtualScrollListView`
 - raw proteins and repeat calls already enable cursor mode in run mode
 - fragments are already served through `fragment=virtual-scroll`
-- browser home and run summaries still rely on live counts and annotations
-- raw branch filters still build live taxon dropdowns
+- browser home and run summaries now read metadata-backed counts
+- raw branch filters now use `branch_q` instead of live taxon dropdowns
+- raw protein and repeat-call facet choices now resolve from browser metadata
+- run-detail method and residue inventory now resolves from browser metadata
+- raw sequence, protein, and repeat-call fragments can omit exact `count`
 - merged-mode pages still materialize large repeat-call sets in Python
 
 Current baseline artifact:
@@ -32,7 +35,7 @@ Current baseline artifact:
 
 Current next slice:
 
-- `1.1` large-run baseline measurement and profiling
+- `3.2` add composite browse indexes for hot raw pages
 
 ## Phase 1: Baseline And Metadata Contract
 
@@ -107,7 +110,7 @@ Exit criteria:
 
 Status:
 
-- pending
+- implemented
 
 ### Slice 1.3: Backfill and fallback path for existing runs
 
@@ -131,7 +134,7 @@ Exit criteria:
 
 Status:
 
-- pending
+- implemented
 
 ## Phase 2: Remove Hot Page-Chrome Work
 
@@ -161,7 +164,7 @@ Exit criteria:
 
 Status:
 
-- pending
+- implemented
 
 ### Slice 2.2: Replace branch dropdowns with `branch_q`
 
@@ -185,7 +188,7 @@ Exit criteria:
 
 Status:
 
-- pending
+- implemented
 
 ### Slice 2.3: Move raw method and residue facets to metadata
 
@@ -215,7 +218,7 @@ Exit criteria:
 
 Status:
 
-- pending
+- implemented
 
 ### Slice 2.4: Make fragment `count` optional and keep fragments row-only
 
@@ -238,7 +241,7 @@ Exit criteria:
 
 Status:
 
-- pending
+- implemented
 
 ## Phase 3: Cursor Contract And Raw Query Path
 
@@ -263,7 +266,7 @@ Exit criteria:
 
 Status:
 
-- pending
+- implemented
 
 ### Slice 3.2: Add composite browse indexes for hot raw pages
 

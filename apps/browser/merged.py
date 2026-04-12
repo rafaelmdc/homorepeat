@@ -16,6 +16,7 @@ def accession_group_queryset(
     accession_query: str = "",
     genome_name: str = "",
     branch_taxon: Taxon | None = None,
+    branch_taxa_ids=None,
 ):
     return source_genome_queryset(
         current_run=current_run,
@@ -23,6 +24,7 @@ def accession_group_queryset(
         accession_query=accession_query,
         genome_name=genome_name,
         branch_taxon=branch_taxon,
+        branch_taxa_ids=branch_taxa_ids,
     ).values("accession").annotate(
         source_genomes_count=Count("pk", distinct=True),
         source_runs_count=Count("pipeline_run", distinct=True),
@@ -95,6 +97,7 @@ def source_genome_queryset(
     accession_query: str = "",
     genome_name: str = "",
     branch_taxon: Taxon | None = None,
+    branch_taxa_ids=None,
 ):
     queryset = Genome.objects.exclude(accession="")
 
@@ -112,8 +115,12 @@ def source_genome_queryset(
     if genome_name:
         queryset = queryset.filter(genome_name__icontains=genome_name)
 
-    if branch_taxon is not None:
-        queryset = queryset.filter(taxon_id__in=_branch_taxon_ids(branch_taxon))
+    resolved_branch_taxa_ids = _resolved_branch_taxa_ids(
+        branch_taxon=branch_taxon,
+        branch_taxa_ids=branch_taxa_ids,
+    )
+    if resolved_branch_taxa_ids is not None:
+        queryset = queryset.filter(taxon_id__in=resolved_branch_taxa_ids)
 
     return queryset
 
@@ -122,6 +129,7 @@ def source_repeat_call_queryset(
     *,
     current_run=None,
     branch_taxon: Taxon | None = None,
+    branch_taxa_ids=None,
     search_query: str = "",
     gene_symbol: str = "",
     accession_query: str = "",
@@ -139,8 +147,12 @@ def source_repeat_call_queryset(
     if current_run is not None:
         queryset = queryset.filter(pipeline_run=current_run)
 
-    if branch_taxon is not None:
-        queryset = queryset.filter(taxon_id__in=_branch_taxon_ids(branch_taxon))
+    resolved_branch_taxa_ids = _resolved_branch_taxa_ids(
+        branch_taxon=branch_taxon,
+        branch_taxa_ids=branch_taxa_ids,
+    )
+    if resolved_branch_taxa_ids is not None:
+        queryset = queryset.filter(taxon_id__in=resolved_branch_taxa_ids)
 
     if search_query:
         queryset = queryset.filter(
@@ -194,6 +206,7 @@ def merged_protein_groups(
     *,
     current_run=None,
     branch_taxon: Taxon | None = None,
+    branch_taxa_ids=None,
     search_query: str = "",
     gene_symbol: str = "",
     accession_query: str = "",
@@ -210,6 +223,7 @@ def merged_protein_groups(
         source_repeat_call_queryset(
             current_run=current_run,
             branch_taxon=branch_taxon,
+            branch_taxa_ids=branch_taxa_ids,
             search_query=search_query,
             gene_symbol=gene_symbol,
             accession_query=accession_query,
@@ -232,6 +246,7 @@ def build_accession_analytics(
     accession_query: str = "",
     genome_name: str = "",
     branch_taxon: Taxon | None = None,
+    branch_taxa_ids=None,
 ):
     accession_groups = list(
         accession_group_queryset(
@@ -240,6 +255,7 @@ def build_accession_analytics(
             accession_query=accession_query,
             genome_name=genome_name,
             branch_taxon=branch_taxon,
+            branch_taxa_ids=branch_taxa_ids,
         )
     )
     source_genomes = source_genome_queryset(
@@ -248,6 +264,7 @@ def build_accession_analytics(
         accession_query=accession_query,
         genome_name=genome_name,
         branch_taxon=branch_taxon,
+        branch_taxa_ids=branch_taxa_ids,
     )
     source_repeat_calls = list(
         _merged_repeat_call_queryset()
@@ -344,6 +361,7 @@ def merged_repeat_call_groups(
     *,
     current_run=None,
     branch_taxon: Taxon | None = None,
+    branch_taxa_ids=None,
     search_query: str = "",
     gene_symbol: str = "",
     accession_query: str = "",
@@ -361,6 +379,7 @@ def merged_repeat_call_groups(
             source_repeat_call_queryset(
                 current_run=current_run,
                 branch_taxon=branch_taxon,
+                branch_taxa_ids=branch_taxa_ids,
                 search_query=search_query,
                 gene_symbol=gene_symbol,
                 accession_query=accession_query,
@@ -426,6 +445,14 @@ def _merged_repeat_call_queryset():
             "aa_sequence",
         )
     )
+
+
+def _resolved_branch_taxa_ids(*, branch_taxon: Taxon | None = None, branch_taxa_ids=None):
+    if branch_taxa_ids is not None:
+        return branch_taxa_ids
+    if branch_taxon is not None:
+        return _branch_taxon_ids(branch_taxon)
+    return None
 
 
 def _trusted_accession(repeat_call):

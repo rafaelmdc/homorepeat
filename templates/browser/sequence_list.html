@@ -18,9 +18,9 @@
       <p class="sheet-label">Current scope</p>
       <p class="mb-2">
         {% if current_run %}
-          Run <strong>{{ current_run.run_id }}</strong>{% if selected_branch_taxon %}, branch <strong>{{ selected_branch_taxon.taxon_name }}</strong>{% endif %}.
-        {% elif selected_branch_taxon %}
-          Branch <strong>{{ selected_branch_taxon.taxon_name }}</strong> across imported sequences.
+          Run <strong>{{ current_run.run_id }}</strong>{% if branch_scope_active %}, {{ branch_scope_noun }} <strong>{{ branch_scope_label }}</strong>{% endif %}.
+        {% elif branch_scope_active %}
+          {{ branch_scope_noun|title }} <strong>{{ branch_scope_label }}</strong> across imported sequences.
         {% else %}
           Browsing all stored call-linked sequence records.
         {% endif %}
@@ -56,13 +56,8 @@
       </select>
     </div>
     <div class="col-md-4 col-lg-2">
-      <label class="form-label" for="id_branch">Branch taxon</label>
-      <select class="form-select" id="id_branch" name="branch">
-        <option value="">All branches</option>
-        {% for branch_taxon in branch_choices %}
-          <option value="{{ branch_taxon.pk }}" {% if current_branch == branch_taxon.pk|stringformat:"s" %}selected{% endif %}>{{ branch_taxon.taxon_name }}</option>
-        {% endfor %}
-      </select>
+      <label class="form-label" for="id_branch_q">Branch search</label>
+      <input class="form-control" id="id_branch_q" type="text" name="branch_q" value="{{ current_branch_input }}" placeholder="Taxonomy ID or name prefix">
     </div>
     <div class="col-md-4 col-lg-2">
       <label class="form-label" for="id_accession">Accession</label>

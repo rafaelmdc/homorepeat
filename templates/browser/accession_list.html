@@ -25,8 +25,8 @@
         {% endif %}
       </p>
       <p class="mb-0">
-        {% if selected_branch_taxon %}
-          Branch <strong>{{ selected_branch_taxon.taxon_name }}</strong>
+        {% if branch_scope_active %}
+          {{ branch_scope_noun|title }} <strong>{{ branch_scope_label }}</strong>
         {% else %}
           All taxonomy branches
         {% endif %}
@@ -60,13 +60,8 @@
       </select>
     </div>
     <div class="col-md-6 col-lg-3">
-      <label class="form-label" for="id_branch">Branch taxon</label>
-      <select class="form-select" id="id_branch" name="branch">
-        <option value="">All branches</option>
-        {% for branch_taxon in branch_choices %}
-          <option value="{{ branch_taxon.pk }}" {% if current_branch == branch_taxon.pk|stringformat:"s" %}selected{% endif %}>{{ branch_taxon.taxon_name }}</option>
-        {% endfor %}
-      </select>
+      <label class="form-label" for="id_branch_q">Branch search</label>
+      <input class="form-control" id="id_branch_q" type="text" name="branch_q" value="{{ current_branch_input }}" placeholder="Taxonomy ID or name prefix">
     </div>
     <div class="col-12">
       <div class="filter-actions">
@@ -91,7 +86,7 @@
     <article class="card h-100 border-0 shadow-sm stat-card">
       <div class="card-body">
         <p class="text-uppercase text-secondary small mb-2">Residue units</p>
-        <a class="display-5 fw-semibold mb-3 d-inline-block text-decoration-none" href="{% url 'browser:repeatcall-list' %}?mode=merged{% if current_run_id %}&amp;run={{ current_run_id|urlencode }}{% endif %}{% if current_branch %}&amp;branch={{ current_branch|urlencode }}{% endif %}">{{ summary.collapsed_repeat_calls_count }}</a>
+        <a class="display-5 fw-semibold mb-3 d-inline-block text-decoration-none" href="{% url 'browser:repeatcall-list' %}?mode=merged{% if current_run_id %}&amp;run={{ current_run_id|urlencode }}{% endif %}{% if current_branch_q %}&amp;branch_q={{ current_branch_q|urlencode }}{% elif current_branch %}&amp;branch={{ current_branch|urlencode }}{% endif %}">{{ summary.collapsed_repeat_calls_count }}</a>
         <p class="text-secondary mb-0">
           {{ summary.duplicate_source_repeat_calls_count }} duplicate source call{{ summary.duplicate_source_repeat_calls_count|pluralize }} removed from
           {{ summary.source_repeat_calls_count }} raw call{{ summary.source_repeat_calls_count|pluralize }}.
@@ -107,7 +102,7 @@
     <article class="card h-100 border-0 shadow-sm stat-card">
       <div class="card-body">
         <p class="text-uppercase text-secondary small mb-2">Repeat-bearing proteins</p>
-        <a class="display-5 fw-semibold mb-3 d-inline-block text-decoration-none" href="{% url 'browser:protein-list' %}?mode=merged{% if current_run_id %}&amp;run={{ current_run_id|urlencode }}{% endif %}{% if current_branch %}&amp;branch={{ current_branch|urlencode }}{% endif %}">{{ summary.merged_repeat_bearing_proteins_count }}</a>
+        <a class="display-5 fw-semibold mb-3 d-inline-block text-decoration-none" href="{% url 'browser:protein-list' %}?mode=merged{% if current_run_id %}&amp;run={{ current_run_id|urlencode }}{% endif %}{% if current_branch_q %}&amp;branch_q={{ current_branch_q|urlencode }}{% elif current_branch %}&amp;branch={{ current_branch|urlencode }}{% endif %}">{{ summary.merged_repeat_bearing_proteins_count }}</a>
         <p class="text-secondary mb-0">
           {% if summary.repeat_bearing_protein_percentage is not None %}
             {{ summary.safe_repeat_bearing_proteins_count }} / {{ summary.analyzed_proteins_total }} = {{ summary.repeat_bearing_protein_percentage|floatformat:2 }}% across conflict-safe accessions.
@@ -154,7 +149,7 @@
             {% for row in summary.method_summary %}
               <tr>
                 <td>{{ row.label }}</td>
-                <td><a href="{% url 'browser:repeatcall-list' %}?mode=merged{% if current_run_id %}&amp;run={{ current_run_id|urlencode }}{% endif %}{% if current_branch %}&amp;branch={{ current_branch|urlencode }}{% endif %}&amp;method={{ row.label|urlencode }}">{{ row.count }}</a></td>
+                <td><a href="{% url 'browser:repeatcall-list' %}?mode=merged{% if current_run_id %}&amp;run={{ current_run_id|urlencode }}{% endif %}{% if current_branch_q %}&amp;branch_q={{ current_branch_q|urlencode }}{% elif current_branch %}&amp;branch={{ current_branch|urlencode }}{% endif %}&amp;method={{ row.label|urlencode }}">{{ row.count }}</a></td>
               </tr>
             {% empty %}
               <tr>
@@ -186,7 +181,7 @@
             {% for row in summary.residue_summary %}
               <tr>
                 <td>{{ row.label }}</td>
-                <td><a href="{% url 'browser:repeatcall-list' %}?mode=merged{% if current_run_id %}&amp;run={{ current_run_id|urlencode }}{% endif %}{% if current_branch %}&amp;branch={{ current_branch|urlencode }}{% endif %}&amp;residue={{ row.label|urlencode }}">{{ row.count }}</a></td>
+                <td><a href="{% url 'browser:repeatcall-list' %}?mode=merged{% if current_run_id %}&amp;run={{ current_run_id|urlencode }}{% endif %}{% if current_branch_q %}&amp;branch_q={{ current_branch_q|urlencode }}{% elif current_branch %}&amp;branch={{ current_branch|urlencode }}{% endif %}&amp;residue={{ row.label|urlencode }}">{{ row.count }}</a></td>
               </tr>
             {% empty %}
               <tr>

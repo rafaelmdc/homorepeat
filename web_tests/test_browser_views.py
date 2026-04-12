@@ -1,7 +1,10 @@
+from unittest.mock import patch
+
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.browser.metadata import BROWSER_METADATA_RAW_COUNT_KEYS
 from apps.browser.models import (
     AccessionCallCount,
     AccessionStatus,
@@ -13,6 +16,7 @@ from apps.browser.models import (
     RunParameter,
     Sequence,
 )
+from apps.browser.views import ProteinListView, RepeatCallListView, SequenceListView
 from apps.imports.models import ImportBatch
 
 from .support import create_imported_run_fixture
@@ -42,6 +46,15 @@ class BrowserViewTests(TestCase):
         )
         self.mammalia = self.alpha["taxa"]["mammalia"]
         self.primates = self.alpha["taxa"]["primates"]
+
+    def _browser_metadata(self, *, methods, residues):
+        return {
+            "raw_counts": {key: 1 for key in BROWSER_METADATA_RAW_COUNT_KEYS},
+            "facets": {
+                "methods": methods,
+                "residues": residues,
+            },
+        }
 
     def _create_repeat_call(
         self,
@@ -315,6 +328,20 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, f"{reverse('browser:repeatcall-list')}?run=run-alpha")
         self.assertContains(response, "terminal_status=completed")
         self.assertContains(response, "method=pure")
+
+    def test_run_detail_uses_browser_metadata_facets(self):
+        pipeline_run = self.alpha["pipeline_run"]
+        pipeline_run.browser_metadata = self._browser_metadata(
+            methods=[RunParameter.Method.SEED_EXTEND],
+            residues=["A"],
+        )
+        pipeline_run.save(update_fields=["browser_metadata"])
+
+        response = self.client.get(reverse("browser:run-detail", args=[pipeline_run.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["methods"], [RunParameter.Method.SEED_EXTEND])
+        self.assertEqual(response.context["repeat_residues"], ["A"])
 
     def test_accession_status_list_filters_by_run_batch_and_status(self):
         pipeline_run = self.alpha["pipeline_run"]
@@ -732,6 +759,25 @@ class BrowserViewTests(TestCase):
         self.assertIn("GCF_ALPHA", payload["rows_html"])
         self.assertEqual(payload["count"], 2)
 
+    def test_branch_filter_forms_use_branch_q_text_input_across_hot_pages(self):
+        urls = [
+            reverse("browser:taxon-list"),
+            reverse("browser:genome-list"),
+            reverse("browser:sequence-list"),
+            reverse("browser:accession-list"),
+            reverse("browser:protein-list"),
+            reverse("browser:repeatcall-list"),
+        ]
+
+        for url in urls:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'name="branch_q"')
+                self.assertContains(response, "Taxonomy ID or name prefix")
+                self.assertNotContains(response, 'name="branch"')
+
     def test_taxon_list_run_filter_keeps_ancestor_path(self):
         response = self.client.get(reverse("browser:taxon-list"), {"run": "run-alpha"})
 
@@ -744,6 +790,16 @@ class BrowserViewTests(TestCase):
         response = self.client.get(reverse("browser:taxon-list"), {"branch": str(self.mammalia.pk)})
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Mammalia")
+        self.assertContains(response, "Primates")
+        self.assertContains(response, "Homo sapiens")
+        self.assertContains(response, "Mus musculus")
+
+    def test_taxon_list_branch_q_name_prefix_filter_includes_descendants(self):
+        response = self.client.get(reverse("browser:taxon-list"), {"branch_q": "Mam"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["page_obj"].paginator.count, 4)
         self.assertContains(response, "Mammalia")
         self.assertContains(response, "Primates")
         self.assertContains(response, "Homo sapiens")
@@ -764,6 +820,13 @@ class BrowserViewTests(TestCase):
 
     def test_genome_list_branch_filter_includes_descendant_taxa(self):
         response = self.client.get(reverse("browser:genome-list"), {"branch": str(self.mammalia.pk)})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "GCF_ALPHA")
+        self.assertContains(response, "GCF_BETA")
+
+    def test_genome_list_branch_q_numeric_taxon_id_filters_descendants(self):
+        response = self.client.get(reverse("browser:genome-list"), {"branch_q": str(self.mammalia.taxon_id)})
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "GCF_ALPHA")
@@ -803,6 +866,12 @@ class BrowserViewTests(TestCase):
         self.assertNotContains(response, "NM_run-beta")
         self.assertContains(response, reverse("browser:sequence-detail", args=[self.alpha["sequence"].pk]))
 
+    def test_sequence_list_default_ordering_matches_optimize_contract(self):
+        self.assertEqual(
+            SequenceListView.default_ordering,
+            ("pipeline_run_id", "assembly_accession", "sequence_name", "id"),
+        )
+
     def test_sequence_detail_shows_linked_records_and_navigation(self):
         response = self.client.get(reverse("browser:sequence-detail", args=[self.alpha["sequence"].pk]))
 
@@ -820,6 +889,30 @@ class BrowserViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "NP_run-alpha")
         self.assertNotContains(response, "NP_run-beta")
+
+    def test_protein_list_default_ordering_matches_optimize_contract(self):
+        self.assertEqual(
+            ProteinListView.default_ordering,
+            ("pipeline_run_id", "accession", "protein_name", "id"),
+        )
+
+    def test_protein_list_run_filter_uses_run_metadata_facets(self):
+        self.alpha["pipeline_run"].browser_metadata = self._browser_metadata(
+            methods=[RunParameter.Method.THRESHOLD],
+            residues=["A"],
+        )
+        self.alpha["pipeline_run"].save(update_fields=["browser_metadata"])
+        self.beta["pipeline_run"].browser_metadata = self._browser_metadata(
+            methods=[RunParameter.Method.SEED_EXTEND],
+            residues=["N"],
+        )
+        self.beta["pipeline_run"].save(update_fields=["browser_metadata"])
+
+        response = self.client.get(reverse("browser:protein-list"), {"run": "run-alpha"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["method_choices"], [RunParameter.Method.THRESHOLD])
+        self.assertEqual(response.context["residue_choices"], ["A"])
 
     def test_protein_list_defers_large_sequence_payloads(self):
         response = self.client.get(reverse("browser:protein-list"), {"run": "run-alpha"})
@@ -878,8 +971,24 @@ class BrowserViewTests(TestCase):
         self.assertIn("rows_html", payload)
         self.assertIn("NP_run-alpha", payload["rows_html"])
         self.assertEqual(payload["row_count"], 1)
-        self.assertEqual(payload["count"], 1)
+        self.assertNotIn("count", payload)
         self.assertEqual(payload["next_query"], "")
+
+    def test_protein_list_raw_virtual_scroll_fragment_skips_page_chrome_context(self):
+        with patch(
+            "apps.browser.views.resolve_browser_facets",
+            side_effect=AssertionError("fragment request should not resolve facets"),
+        ):
+            response = self.client.get(
+                reverse("browser:protein-list"),
+                {"run": "run-alpha", "fragment": "virtual-scroll"},
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("rows_html", payload)
+        self.assertNotIn("count", payload)
 
     def test_protein_list_merged_virtual_scroll_fragment_returns_rows(self):
         response = self.client.get(
@@ -892,6 +1001,21 @@ class BrowserViewTests(TestCase):
         payload = response.json()
         self.assertIn("rows_html", payload)
         self.assertIn("GCF_ALPHA", payload["rows_html"])
+
+    def test_protein_list_merged_branch_q_name_prefix_scopes_groups(self):
+        response = self.client.get(reverse("browser:protein-list"), {"mode": "merged", "branch_q": "Prim"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "GCF_ALPHA")
+        self.assertNotContains(response, "GCF_BETA")
+
+    def test_protein_list_merged_branch_q_without_matches_returns_empty_result_set(self):
+        response = self.client.get(reverse("browser:protein-list"), {"mode": "merged", "branch_q": "NoSuchTaxon"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No merged protein groups matched these filters.")
+        self.assertNotContains(response, "GCF_ALPHA")
+        self.assertNotContains(response, "GCF_BETA")
 
     def test_protein_list_combined_call_filters_match_same_linked_call(self):
         matched = self._create_repeat_call(
@@ -1018,6 +1142,43 @@ class BrowserViewTests(TestCase):
         self.assertNotContains(response, "call_call_filter_low_purity")
         self.assertNotContains(response, "call_call_filter_beta")
 
+    def test_repeatcall_list_all_runs_use_union_of_metadata_facets(self):
+        self.alpha["pipeline_run"].browser_metadata = self._browser_metadata(
+            methods=[RunParameter.Method.THRESHOLD],
+            residues=["A"],
+        )
+        self.alpha["pipeline_run"].save(update_fields=["browser_metadata"])
+        self.beta["pipeline_run"].browser_metadata = self._browser_metadata(
+            methods=[RunParameter.Method.SEED_EXTEND],
+            residues=["N"],
+        )
+        self.beta["pipeline_run"].save(update_fields=["browser_metadata"])
+
+        response = self.client.get(reverse("browser:repeatcall-list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context["method_choices"],
+            [RunParameter.Method.SEED_EXTEND, RunParameter.Method.THRESHOLD],
+        )
+        self.assertEqual(response.context["residue_choices"], ["A", "N"])
+
+    def test_accession_list_branch_q_scopes_analytics_and_links(self):
+        response = self.client.get(reverse("browser:accession-list"), {"branch_q": "Prim"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["summary"]["accession_groups_count"], 1)
+        self.assertContains(response, "GCF_ALPHA")
+        self.assertNotContains(response, "GCF_BETA")
+        self.assertContains(
+            response,
+            f'{reverse("browser:genome-list")}?accession=GCF_ALPHA&amp;branch_q=Prim',
+        )
+        self.assertContains(
+            response,
+            f'{reverse("browser:protein-list")}?mode=merged&amp;accession=GCF_ALPHA&amp;branch_q=Prim',
+        )
+
     def test_repeatcall_list_defers_large_sequence_payloads(self):
         response = self.client.get(reverse("browser:repeatcall-list"), {"run": "run-alpha"})
 
@@ -1026,6 +1187,12 @@ class BrowserViewTests(TestCase):
         self.assertIn("aa_sequence", repeat_call.get_deferred_fields())
         self.assertIn("codon_sequence", repeat_call.get_deferred_fields())
         self.assertIn("amino_acid_sequence", repeat_call.protein.get_deferred_fields())
+
+    def test_repeatcall_list_default_ordering_matches_optimize_contract(self):
+        self.assertEqual(
+            RepeatCallListView.default_ordering,
+            ("pipeline_run_id", "accession", "protein_name", "start", "id"),
+        )
 
     def test_repeatcall_list_uses_cursor_pagination_for_raw_results(self):
         for index in range(25):
@@ -1106,7 +1273,22 @@ class BrowserViewTests(TestCase):
         self.assertIn("rows_html", payload)
         self.assertIn("call_alpha", payload["rows_html"])
         self.assertEqual(payload["row_count"], 1)
-        self.assertEqual(payload["count"], 1)
+        self.assertNotIn("count", payload)
+        self.assertEqual(payload["next_query"], "")
+
+    def test_sequence_list_virtual_scroll_fragment_returns_rows_without_count(self):
+        response = self.client.get(
+            reverse("browser:sequence-list"),
+            {"run": "run-alpha", "fragment": "virtual-scroll"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("rows_html", payload)
+        self.assertIn("NM_run-alpha", payload["rows_html"])
+        self.assertEqual(payload["row_count"], 1)
+        self.assertNotIn("count", payload)
         self.assertEqual(payload["next_query"], "")
 
     def test_repeatcall_list_merged_virtual_scroll_fragment_returns_rows(self):

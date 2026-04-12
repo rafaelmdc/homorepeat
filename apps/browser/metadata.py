@@ -51,6 +51,33 @@ def resolve_run_browser_metadata(pipeline_run: PipelineRun) -> dict[str, object]
     )
 
 
+def resolve_browser_facets(
+    *,
+    pipeline_run: PipelineRun | None = None,
+    pipeline_runs=None,
+) -> dict[str, list[str]]:
+    if pipeline_run is not None:
+        return resolve_run_browser_metadata(pipeline_run)["facets"]
+
+    if pipeline_runs is None:
+        pipeline_runs = PipelineRun.objects.order_by("run_id")
+
+    if hasattr(pipeline_runs, "prefetch_related"):
+        pipeline_runs = pipeline_runs.prefetch_related("run_parameters", "accession_call_count_rows")
+
+    methods: set[str] = set()
+    residues: set[str] = set()
+    for current_run in pipeline_runs:
+        facets = resolve_run_browser_metadata(current_run)["facets"]
+        methods.update(facets["methods"])
+        residues.update(facets["residues"])
+
+    return {
+        "methods": sorted(methods),
+        "residues": sorted(residues),
+    }
+
+
 def backfill_run_browser_metadata(
     pipeline_run: PipelineRun,
     *,

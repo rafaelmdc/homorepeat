@@ -11,6 +11,7 @@ from django.views.generic import DetailView, ListView, TemplateView
 
 from apps.imports.models import ImportBatch
 
+from .metadata import resolve_browser_facets, resolve_run_browser_metadata
 from .merged import (
     accession_group_queryset,
     build_accession_summary,
@@ -263,6 +264,9 @@ class VirtualScrollListView(CursorPaginatedListView):
     def get_virtual_scroll_colspan(self, context):
         return self.virtual_scroll_colspan
 
+    def include_virtual_scroll_count(self, *, context=None, page_obj=None):
+        return True
+
     def _virtual_scroll_base_query(self):
         query = self.request.GET.copy()
         query.pop("fragment", None)
@@ -313,13 +317,15 @@ class VirtualScrollListView(CursorPaginatedListView):
         )
         page_obj = context["page_obj"]
         previous_query, next_query = self.get_virtual_scroll_queries(page_obj)
-        return {
+        payload = {
             "rows_html": rows_html,
             "row_count": len(object_list),
-            "count": page_obj.paginator.count,
             "next_query": next_query,
             "previous_query": previous_query,
         }
+        if self.include_virtual_scroll_count(context=context, page_obj=page_obj):
+            payload["count"] = page_obj.paginator.count
+        return payload
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -452,26 +458,9 @@ class RunDetailView(DetailView):
                 "url_name": "browser:normalizationwarning-list",
             },
         ]
-        method_values = set(pipeline_run.run_parameters.values_list("method", flat=True))
-        method_values.update(pipeline_run.accession_call_count_rows.values_list("method", flat=True))
-        method_values.update(pipeline_run.repeat_calls.values_list("method", flat=True))
-        residue_values = {
-            residue
-            for residue in pipeline_run.run_parameters.values_list("repeat_residue", flat=True)
-            if residue
-        }
-        residue_values.update(
-            residue
-            for residue in pipeline_run.accession_call_count_rows.values_list("repeat_residue", flat=True)
-            if residue
-        )
-        residue_values.update(
-            residue
-            for residue in pipeline_run.repeat_calls.values_list("repeat_residue", flat=True)
-            if residue
-        )
-        context["methods"] = sorted(method_values)
-        context["repeat_residues"] = sorted(residue_values)
+        run_facets = resolve_run_browser_metadata(pipeline_run)["facets"]
+        context["methods"] = run_facets["methods"]
+        context["repeat_residues"] = run_facets["residues"]
         context["method_residue_summary"] = list(
             pipeline_run.accession_call_count_rows.values("method", "repeat_residue")
             .annotate(
@@ -1010,15 +999,15 @@ class TaxonListView(VirtualScrollListView):
 
     def apply_filters(self, queryset):
         self.current_run = _resolve_current_run(self.request)
-        self.selected_branch_taxon = _resolve_branch_taxon(self.request)
+        self.branch_scope = _resolve_branch_scope(self.request)
+        self.selected_branch_taxon = self.branch_scope["selected_branch_taxon"]
         self.current_rank = self.request.GET.get("rank", "").strip()
         self.current_mode = _resolve_browser_mode(self.request)
 
         if self.current_run:
             queryset = queryset.filter(pk__in=_run_taxon_ids(self.current_run))
 
-        if self.selected_branch_taxon:
-            queryset = queryset.filter(pk__in=_branch_taxon_ids(self.selected_branch_taxon))
+        queryset = _apply_branch_scope_filter(queryset, branch_scope=self.branch_scope, field_name="pk")
 
         if self.current_rank:
             queryset = queryset.filter(rank=self.current_rank)
@@ -1040,12 +1029,7 @@ class TaxonListView(VirtualScrollListView):
             .values_list("rank", flat=True)
             .distinct()
         )
-        branch_choices = Taxon.objects.order_by("taxon_name")
-        if current_run:
-            branch_choices = branch_choices.filter(pk__in=_run_taxon_ids(current_run))
-        context["branch_choices"] = branch_choices.distinct()
-        context["current_branch"] = self.request.GET.get("branch", "").strip()
-        context["selected_branch_taxon"] = selected_branch_taxon
+        _update_branch_scope_context(context, getattr(self, "branch_scope", _resolve_branch_scope(self.request)))
         return context
 
 
@@ -1188,7 +1172,8 @@ class GenomeListView(VirtualScrollListView):
 
     def _load_filter_state(self):
         self.current_run = _resolve_current_run(self.request)
-        self.selected_branch_taxon = _resolve_branch_taxon(self.request)
+        self.branch_scope = _resolve_branch_scope(self.request)
+        self.selected_branch_taxon = self.branch_scope["selected_branch_taxon"]
         self.current_accession = self.request.GET.get("accession", "").strip()
         self.current_genome_name = self.request.GET.get("genome_name", "").strip()
         self.current_mode = _resolve_browser_mode(self.request)
@@ -1199,8 +1184,7 @@ class GenomeListView(VirtualScrollListView):
         if self.current_run:
             queryset = queryset.filter(pipeline_run=self.current_run)
 
-        if self.selected_branch_taxon:
-            queryset = queryset.filter(taxon_id__in=_branch_taxon_ids(self.selected_branch_taxon))
+        queryset = _apply_branch_scope_filter(queryset, branch_scope=self.branch_scope, field_name="taxon_id")
 
         if self.current_accession:
             queryset = queryset.filter(accession__istartswith=self.current_accession)
@@ -1218,6 +1202,7 @@ class GenomeListView(VirtualScrollListView):
                 accession_query=self.current_accession,
                 genome_name=self.current_genome_name,
                 branch_taxon=self.selected_branch_taxon,
+                branch_taxa_ids=self.branch_scope["branch_taxa_ids"],
             )
             requested_ordering = self.request.GET.get("order_by", "").strip()
             ordering = self.merged_ordering_map.get(requested_ordering, self.merged_default_ordering)
@@ -1230,17 +1215,11 @@ class GenomeListView(VirtualScrollListView):
         context = super().get_context_data(**kwargs)
         current_run = getattr(self, "current_run", None)
         selected_branch_taxon = getattr(self, "selected_branch_taxon", None)
-        branch_choices = Taxon.objects.filter(genomes__isnull=False)
-        if current_run:
-            branch_choices = branch_choices.filter(genomes__pipeline_run=current_run)
-
         context["current_run"] = current_run
         context["current_run_id"] = current_run.run_id if current_run else ""
         context["current_mode"] = getattr(self, "current_mode", "run")
         context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
-        context["branch_choices"] = branch_choices.distinct().order_by("taxon_name")
-        context["current_branch"] = self.request.GET.get("branch", "").strip()
-        context["selected_branch_taxon"] = selected_branch_taxon
+        _update_branch_scope_context(context, getattr(self, "branch_scope", _resolve_branch_scope(self.request)))
         context["current_accession"] = getattr(self, "current_accession", "")
         context["current_genome_name"] = getattr(self, "current_genome_name", "")
         if context["current_mode"] == "merged":
@@ -1326,7 +1305,7 @@ class SequenceListView(VirtualScrollListView):
         "calls": ("-repeat_calls_count", "pipeline_run__run_id", "sequence_name", "sequence_id"),
         "-calls": ("repeat_calls_count", "pipeline_run__run_id", "sequence_name", "sequence_id"),
     }
-    default_ordering = ("pipeline_run__run_id", "assembly_accession", "sequence_name", "sequence_id")
+    default_ordering = ("pipeline_run_id", "assembly_accession", "sequence_name", "id")
 
     def get_base_queryset(self):
         return _annotated_sequences(
@@ -1352,9 +1331,13 @@ class SequenceListView(VirtualScrollListView):
             )
         )
 
+    def include_virtual_scroll_count(self, *, context=None, page_obj=None):
+        return False
+
     def _load_filter_state(self):
         self.current_run = _resolve_current_run(self.request)
-        self.selected_branch_taxon = _resolve_branch_taxon(self.request)
+        self.branch_scope = _resolve_branch_scope(self.request)
+        self.selected_branch_taxon = self.branch_scope["selected_branch_taxon"]
         self.current_accession = self.request.GET.get("accession", "").strip()
         self.current_gene_symbol = self.request.GET.get("gene_symbol", "").strip()
         self.current_genome = self.request.GET.get("genome", "").strip()
@@ -1377,8 +1360,7 @@ class SequenceListView(VirtualScrollListView):
         if self.current_run:
             queryset = queryset.filter(pipeline_run=self.current_run)
 
-        if self.selected_branch_taxon:
-            queryset = queryset.filter(taxon_id__in=_branch_taxon_ids(self.selected_branch_taxon))
+        queryset = _apply_branch_scope_filter(queryset, branch_scope=self.branch_scope, field_name="taxon_id")
 
         if self.current_accession:
             queryset = queryset.filter(
@@ -1396,18 +1378,14 @@ class SequenceListView(VirtualScrollListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        if self.is_virtual_scroll_fragment_request():
+            return context
         current_run = getattr(self, "current_run", None)
         selected_branch_taxon = getattr(self, "selected_branch_taxon", None)
-        branch_choices = Taxon.objects.filter(sequences__isnull=False)
-        if current_run:
-            branch_choices = branch_choices.filter(sequences__pipeline_run=current_run)
-
         context["current_run"] = current_run
         context["current_run_id"] = current_run.run_id if current_run else ""
         context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
-        context["branch_choices"] = branch_choices.distinct().order_by("taxon_name")
-        context["current_branch"] = self.request.GET.get("branch", "").strip()
-        context["selected_branch_taxon"] = selected_branch_taxon
+        _update_branch_scope_context(context, getattr(self, "branch_scope", _resolve_branch_scope(self.request)))
         context["current_accession"] = getattr(self, "current_accession", "")
         context["current_gene_symbol"] = getattr(self, "current_gene_symbol", "")
         context["current_genome"] = getattr(self, "current_genome", "")
@@ -1486,6 +1464,7 @@ class AccessionsListView(VirtualScrollListView):
                 current_run=getattr(self, "current_run", None),
                 search_query=self.get_search_query(),
                 branch_taxon=getattr(self, "selected_branch_taxon", None),
+                branch_taxa_ids=getattr(self, "branch_scope", {}).get("branch_taxa_ids"),
             )
         return self._analytics_summary
 
@@ -1494,7 +1473,8 @@ class AccessionsListView(VirtualScrollListView):
 
     def _load_filter_state(self):
         self.current_run = _resolve_current_run(self.request)
-        self.selected_branch_taxon = _resolve_branch_taxon(self.request)
+        self.branch_scope = _resolve_branch_scope(self.request)
+        self.selected_branch_taxon = self.branch_scope["selected_branch_taxon"]
 
     def get_ordering(self):
         requested_ordering = self.request.GET.get("order_by", "").strip()
@@ -1541,12 +1521,7 @@ class AccessionsListView(VirtualScrollListView):
             {"value": value, "label": _ordering_label(value)}
             for value in self.ordering_map.keys()
         ]
-        branch_choices = Taxon.objects.filter(genomes__isnull=False)
-        if current_run:
-            branch_choices = branch_choices.filter(genomes__pipeline_run=current_run)
-        context["branch_choices"] = branch_choices.distinct().order_by("taxon_name")
-        context["current_branch"] = self.request.GET.get("branch", "").strip()
-        context["selected_branch_taxon"] = getattr(self, "selected_branch_taxon", None)
+        _update_branch_scope_context(context, getattr(self, "branch_scope", _resolve_branch_scope(self.request)))
         page_query = self.request.GET.copy()
         page_query.pop("page", None)
         context["page_query"] = page_query.urlencode()
@@ -1620,7 +1595,7 @@ class ProteinListView(VirtualScrollListView):
         "calls": ("-repeat_calls_count", "pipeline_run__run_id", "accession", "protein_name", "protein_id"),
         "-calls": ("repeat_calls_count", "pipeline_run__run_id", "accession", "protein_name", "protein_id"),
     }
-    default_ordering = ("pipeline_run__run_id", "accession", "protein_name", "protein_id")
+    default_ordering = ("pipeline_run_id", "accession", "protein_name", "id")
 
     def get_base_queryset(self):
         return _annotated_proteins(
@@ -1648,7 +1623,8 @@ class ProteinListView(VirtualScrollListView):
 
     def _load_filter_state(self):
         self.current_run = _resolve_current_run(self.request)
-        self.selected_branch_taxon = _resolve_branch_taxon(self.request)
+        self.branch_scope = _resolve_branch_scope(self.request)
+        self.selected_branch_taxon = self.branch_scope["selected_branch_taxon"]
         self.current_accession = self.request.GET.get("accession", "").strip()
         self.current_gene_symbol = self.request.GET.get("gene_symbol", "").strip()
         self.current_method = self.request.GET.get("method", "").strip()
@@ -1663,6 +1639,9 @@ class ProteinListView(VirtualScrollListView):
 
     def use_cursor_pagination(self, queryset):
         return self.current_mode == "run" and hasattr(queryset, "filter")
+
+    def include_virtual_scroll_count(self, *, context=None, page_obj=None):
+        return getattr(self, "current_mode", "run") != "run"
 
     def apply_search(self, queryset):
         query = self.get_search_query()
@@ -1682,8 +1661,7 @@ class ProteinListView(VirtualScrollListView):
         if self.current_run:
             queryset = queryset.filter(pipeline_run=self.current_run)
 
-        if self.selected_branch_taxon:
-            queryset = queryset.filter(taxon_id__in=_branch_taxon_ids(self.selected_branch_taxon))
+        queryset = _apply_branch_scope_filter(queryset, branch_scope=self.branch_scope, field_name="taxon_id")
 
         if self.current_accession:
             queryset = queryset.filter(accession__istartswith=self.current_accession)
@@ -1717,6 +1695,7 @@ class ProteinListView(VirtualScrollListView):
             records = merged_protein_groups(
                 current_run=self.current_run,
                 branch_taxon=self.selected_branch_taxon,
+                branch_taxa_ids=self.branch_scope["branch_taxa_ids"],
                 search_query=self.get_search_query(),
                 gene_symbol=self.current_gene_symbol,
                 accession_query=self.current_accession,
@@ -1754,26 +1733,20 @@ class ProteinListView(VirtualScrollListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        if self.is_virtual_scroll_fragment_request() and getattr(self, "current_mode", "run") == "run":
+            return context
         current_run = getattr(self, "current_run", None)
-        selected_branch_taxon = getattr(self, "selected_branch_taxon", None)
-        branch_choices = Taxon.objects.filter(proteins__isnull=False)
-        if current_run:
-            branch_choices = branch_choices.filter(proteins__pipeline_run=current_run)
-
-        scoped_repeat_calls = _scoped_repeat_calls(
-            current_run=current_run,
-            selected_branch_taxon=selected_branch_taxon,
-            genome_id=getattr(self, "current_genome", ""),
-            sequence_id=getattr(self, "current_sequence", ""),
+        run_choices = PipelineRun.objects.order_by("-imported_at", "run_id")
+        facet_choices = resolve_browser_facets(
+            pipeline_run=current_run,
+            pipeline_runs=run_choices,
         )
 
         context["current_run"] = current_run
         context["current_run_id"] = current_run.run_id if current_run else ""
         context["current_mode"] = getattr(self, "current_mode", "run")
-        context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
-        context["branch_choices"] = branch_choices.distinct().order_by("taxon_name")
-        context["current_branch"] = self.request.GET.get("branch", "").strip()
-        context["selected_branch_taxon"] = selected_branch_taxon
+        context["run_choices"] = run_choices
+        _update_branch_scope_context(context, getattr(self, "branch_scope", _resolve_branch_scope(self.request)))
         context["current_accession"] = getattr(self, "current_accession", "")
         context["current_gene_symbol"] = getattr(self, "current_gene_symbol", "")
         context["current_method"] = getattr(self, "current_method", "")
@@ -1786,13 +1759,8 @@ class ProteinListView(VirtualScrollListView):
         context["current_sequence"] = getattr(self, "current_sequence", "")
         context["selected_genome"] = _resolve_genome_filter(current_run, context["current_genome"])
         context["selected_sequence"] = _resolve_sequence_filter(current_run, context["current_sequence"])
-        context["method_choices"] = scoped_repeat_calls.order_by("method").values_list("method", flat=True).distinct()
-        context["residue_choices"] = (
-            scoped_repeat_calls.exclude(repeat_residue="")
-            .order_by("repeat_residue")
-            .values_list("repeat_residue", flat=True)
-            .distinct()
-        )
+        context["method_choices"] = facet_choices["methods"]
+        context["residue_choices"] = facet_choices["residues"]
         if context["current_mode"] == "merged":
             context["sort_links"] = self.build_sort_links(
                 self.merged_ordering_map,
@@ -1898,7 +1866,7 @@ class RepeatCallListView(VirtualScrollListView):
         "run": ("pipeline_run__run_id", "accession", "protein_name", "start", "call_id"),
         "-run": ("-pipeline_run__run_id", "accession", "protein_name", "start", "call_id"),
     }
-    default_ordering = ("pipeline_run__run_id", "accession", "protein_name", "start", "call_id")
+    default_ordering = ("pipeline_run_id", "accession", "protein_name", "start", "id")
 
     def get_base_queryset(self):
         return (
@@ -1939,7 +1907,8 @@ class RepeatCallListView(VirtualScrollListView):
 
     def _load_filter_state(self):
         self.current_run = _resolve_current_run(self.request)
-        self.selected_branch_taxon = _resolve_branch_taxon(self.request)
+        self.branch_scope = _resolve_branch_scope(self.request)
+        self.selected_branch_taxon = self.branch_scope["selected_branch_taxon"]
         self.current_accession = self.request.GET.get("accession", "").strip()
         self.current_method = self.request.GET.get("method", "").strip()
         self.current_residue = self.request.GET.get("residue", "").strip().upper()
@@ -1955,6 +1924,9 @@ class RepeatCallListView(VirtualScrollListView):
 
     def use_cursor_pagination(self, queryset):
         return self.current_mode == "run" and hasattr(queryset, "filter")
+
+    def include_virtual_scroll_count(self, *, context=None, page_obj=None):
+        return getattr(self, "current_mode", "run") != "run"
 
     def apply_search(self, queryset):
         query = self.get_search_query()
@@ -1974,8 +1946,7 @@ class RepeatCallListView(VirtualScrollListView):
         if self.current_run:
             queryset = queryset.filter(pipeline_run=self.current_run)
 
-        if self.selected_branch_taxon:
-            queryset = queryset.filter(taxon_id__in=_branch_taxon_ids(self.selected_branch_taxon))
+        queryset = _apply_branch_scope_filter(queryset, branch_scope=self.branch_scope, field_name="taxon_id")
 
         if self.current_accession:
             queryset = queryset.filter(accession__istartswith=self.current_accession)
@@ -2022,6 +1993,7 @@ class RepeatCallListView(VirtualScrollListView):
             records = merged_repeat_call_groups(
                 current_run=self.current_run,
                 branch_taxon=self.selected_branch_taxon,
+                branch_taxa_ids=self.branch_scope["branch_taxa_ids"],
                 search_query=self.get_search_query(),
                 gene_symbol=self.current_gene_symbol,
                 accession_query=self.current_accession,
@@ -2112,27 +2084,20 @@ class RepeatCallListView(VirtualScrollListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        if self.is_virtual_scroll_fragment_request() and getattr(self, "current_mode", "run") == "run":
+            return context
         current_run = getattr(self, "current_run", None)
-        selected_branch_taxon = getattr(self, "selected_branch_taxon", None)
-        branch_choices = Taxon.objects.filter(repeat_calls__isnull=False)
-        if current_run:
-            branch_choices = branch_choices.filter(repeat_calls__pipeline_run=current_run)
-
-        scoped_repeat_calls = _scoped_repeat_calls(
-            current_run=current_run,
-            selected_branch_taxon=selected_branch_taxon,
-            genome_id=getattr(self, "current_genome", ""),
-            sequence_id=getattr(self, "current_sequence", ""),
-            protein_id=getattr(self, "current_protein", ""),
+        run_choices = PipelineRun.objects.order_by("-imported_at", "run_id")
+        facet_choices = resolve_browser_facets(
+            pipeline_run=current_run,
+            pipeline_runs=run_choices,
         )
 
         context["current_run"] = current_run
         context["current_run_id"] = current_run.run_id if current_run else ""
         context["current_mode"] = getattr(self, "current_mode", "run")
-        context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
-        context["branch_choices"] = branch_choices.distinct().order_by("taxon_name")
-        context["current_branch"] = self.request.GET.get("branch", "").strip()
-        context["selected_branch_taxon"] = selected_branch_taxon
+        context["run_choices"] = run_choices
+        _update_branch_scope_context(context, getattr(self, "branch_scope", _resolve_branch_scope(self.request)))
         context["current_accession"] = getattr(self, "current_accession", "")
         context["current_method"] = getattr(self, "current_method", "")
         context["current_residue"] = getattr(self, "current_residue", "")
@@ -2147,13 +2112,8 @@ class RepeatCallListView(VirtualScrollListView):
         context["selected_genome"] = _resolve_genome_filter(current_run, context["current_genome"])
         context["selected_sequence"] = _resolve_sequence_filter(current_run, context["current_sequence"])
         context["selected_protein"] = _resolve_protein_filter(current_run, context["current_protein"])
-        context["method_choices"] = scoped_repeat_calls.order_by("method").values_list("method", flat=True).distinct()
-        context["residue_choices"] = (
-            scoped_repeat_calls.exclude(repeat_residue="")
-            .order_by("repeat_residue")
-            .values_list("repeat_residue", flat=True)
-            .distinct()
-        )
+        context["method_choices"] = facet_choices["methods"]
+        context["residue_choices"] = facet_choices["residues"]
         if context["current_mode"] == "merged":
             context["sort_links"] = self.build_sort_links(
                 self.merged_ordering_map,
@@ -2297,6 +2257,63 @@ def _resolve_branch_taxon(request):
     return Taxon.objects.filter(pk=branch).first()
 
 
+def _match_branch_taxa(branch_q: str):
+    if branch_q.isdigit():
+        return Taxon.objects.filter(taxon_id=int(branch_q)).order_by("taxon_name", "taxon_id")
+    return Taxon.objects.filter(taxon_name__istartswith=branch_q).order_by("taxon_name", "taxon_id")
+
+
+def _resolve_branch_scope(request):
+    current_branch = request.GET.get("branch", "").strip()
+    current_branch_q = request.GET.get("branch_q", "").strip()
+
+    if current_branch_q:
+        matched_taxa = _match_branch_taxa(current_branch_q)
+        return {
+            "current_branch": current_branch,
+            "current_branch_q": current_branch_q,
+            "current_branch_input": current_branch_q,
+            "selected_branch_taxon": None,
+            "branch_taxa_ids": TaxonClosure.objects.filter(ancestor_id__in=matched_taxa.values("pk"))
+            .order_by()
+            .values_list("descendant_id", flat=True)
+            .distinct(),
+            "branch_scope_active": True,
+            "branch_scope_label": current_branch_q,
+            "branch_scope_noun": "branch search",
+        }
+
+    selected_branch_taxon = Taxon.objects.filter(pk=current_branch).first() if current_branch else None
+    return {
+        "current_branch": current_branch,
+        "current_branch_q": "",
+        "current_branch_input": str(selected_branch_taxon.taxon_id) if selected_branch_taxon else "",
+        "selected_branch_taxon": selected_branch_taxon,
+        "branch_taxa_ids": _branch_taxon_ids(selected_branch_taxon) if selected_branch_taxon else None,
+        "branch_scope_active": bool(selected_branch_taxon),
+        "branch_scope_label": selected_branch_taxon.taxon_name if selected_branch_taxon else "",
+        "branch_scope_noun": "branch",
+    }
+
+
+def _apply_branch_scope_filter(queryset, *, branch_scope, field_name: str):
+    branch_taxa_ids = branch_scope["branch_taxa_ids"]
+    if branch_taxa_ids is None:
+        return queryset
+    return queryset.filter(**{f"{field_name}__in": branch_taxa_ids})
+
+
+def _update_branch_scope_context(context, branch_scope):
+    context["current_branch"] = branch_scope["current_branch"]
+    context["current_branch_q"] = branch_scope["current_branch_q"]
+    context["current_branch_input"] = branch_scope["current_branch_input"]
+    context["selected_branch_taxon"] = branch_scope["selected_branch_taxon"]
+    context["branch_scope_active"] = branch_scope["branch_scope_active"]
+    context["branch_scope_label"] = branch_scope["branch_scope_label"]
+    context["branch_scope_noun"] = branch_scope["branch_scope_noun"]
+    return context
+
+
 def _resolve_batch_filter(current_run, batch_pk):
     if not batch_pk:
         return None
@@ -2389,11 +2406,21 @@ def _repeat_call_filter_q(
     return filters
 
 
-def _scoped_repeat_calls(*, current_run=None, selected_branch_taxon=None, genome_id="", sequence_id="", protein_id=""):
+def _scoped_repeat_calls(
+    *,
+    current_run=None,
+    selected_branch_taxon=None,
+    branch_taxa_ids=None,
+    genome_id="",
+    sequence_id="",
+    protein_id="",
+):
     queryset = RepeatCall.objects.all()
     if current_run:
         queryset = queryset.filter(pipeline_run=current_run)
-    if selected_branch_taxon:
+    if branch_taxa_ids is not None:
+        queryset = queryset.filter(taxon_id__in=branch_taxa_ids)
+    elif selected_branch_taxon:
         queryset = queryset.filter(taxon_id__in=_branch_taxon_ids(selected_branch_taxon))
     if genome_id:
         queryset = queryset.filter(genome__genome_id=genome_id)
