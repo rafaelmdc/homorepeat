@@ -20,8 +20,9 @@ Verified cleanup pressure points:
   2206 lines
 - `apps/imports/services/published_run.py` still mixes contract resolution,
   manifest handling, and row iteration at 889 lines
-- `apps/browser/merged.py` still mixes merged query helpers, identity logic,
-  and aggregation flow at 845 lines
+- `apps/browser/merged.py` has been replaced by `apps/browser/merged/`, with
+  merged query helpers, identity logic, and aggregation flow split into domain
+  modules
 - `apps/browser/models.py` is large enough that model ownership is no longer
   obvious at 607 lines
 - `web_tests/test_browser_views.py` and related test files still mirror the old
@@ -39,7 +40,7 @@ Stable public surfaces that must keep working during cleanup:
 
 Current next phase:
 
-- Phase 3
+- Phase 4
 
 ## Phase 1: Split Browser View Foundations
 
@@ -130,7 +131,7 @@ Exit criteria:
 
 Status:
 
-- pending
+- implemented
 
 ## Phase 4: Split Published-Run Parsing
 
