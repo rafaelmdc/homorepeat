@@ -190,6 +190,10 @@ class Sequence(TimestampedModel):
         ]
         indexes = [
             models.Index(
+                fields=["pipeline_run", "assembly_accession", "sequence_name", "id"],
+                name="brw_seq_run_asm_name_id",
+            ),
+            models.Index(
                 fields=["pipeline_run", "genome"],
                 name="brw_seq_run_genome_idx",
             ),
@@ -250,6 +254,10 @@ class Protein(TimestampedModel):
             ),
         ]
         indexes = [
+            models.Index(
+                fields=["pipeline_run", "accession", "protein_name", "id"],
+                name="brw_prot_run_acc_name_id",
+            ),
             models.Index(
                 fields=["pipeline_run", "genome"],
                 name="brw_protein_run_genome_idx",
@@ -372,6 +380,10 @@ class RepeatCall(TimestampedModel):
             ),
         ]
         indexes = [
+            models.Index(
+                fields=["pipeline_run", "accession", "protein_name", "start", "id"],
+                name="brw_rc_run_acc_pn_start_id",
+            ),
             models.Index(
                 fields=["pipeline_run", "method"],
                 name="brw_rcall_run_method_idx",

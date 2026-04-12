@@ -35,7 +35,7 @@ Current baseline artifact:
 
 Current next slice:
 
-- `3.2` add composite browse indexes for hot raw pages
+- `3.3` restrict cursor virtual scroll to fast default orders only
 
 ## Phase 1: Baseline And Metadata Contract
 
@@ -288,7 +288,7 @@ Exit criteria:
 
 Status:
 
-- pending
+- implemented
 
 ### Slice 3.3: Restrict cursor virtual scroll to fast default orders only
 

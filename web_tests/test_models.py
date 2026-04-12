@@ -212,6 +212,18 @@ class BiologicalModelTests(TestCase):
         self.assertEqual(genome.accession, self.genome.accession)
         self.assertNotEqual(genome.pipeline_run_id, self.genome.pipeline_run_id)
 
+    def test_sequence_model_defines_hot_raw_browse_index(self):
+        self.assertIn(
+            ("pipeline_run", "assembly_accession", "sequence_name", "id"),
+            [tuple(index.fields) for index in Sequence._meta.indexes],
+        )
+
+    def test_protein_model_defines_hot_raw_browse_index(self):
+        self.assertIn(
+            ("pipeline_run", "accession", "protein_name", "id"),
+            [tuple(index.fields) for index in Protein._meta.indexes],
+        )
+
     def test_sequence_is_unique_within_run(self):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
@@ -321,6 +333,12 @@ class BiologicalModelTests(TestCase):
                     purity=0.8,
                     aa_sequence="QQQAQQ",
                 )
+
+    def test_repeat_call_model_defines_hot_raw_browse_index(self):
+        self.assertIn(
+            ("pipeline_run", "accession", "protein_name", "start", "id"),
+            [tuple(index.fields) for index in RepeatCall._meta.indexes],
+        )
 
     def test_repeat_call_enforces_purity_bounds(self):
         with self.assertRaises(IntegrityError):
