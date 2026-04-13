@@ -24,6 +24,10 @@ Verified branch facts:
   only rematerialize raw evidence for the active page of merged identities
 - merged accession analytics, accession detail counters, and taxon-detail
   merged counts now read from summary and occurrence rows
+- exact evidence filters now preserve merged inclusion semantics by matching raw
+  evidence within the active merged identity and scope
+- merged list pages now trim first-page provenance payloads to bounded previews
+  while keeping representative evidence and raw drill-down links live
 - accession detail still rematerializes raw evidence for its merged residue
   table because full provenance drill-down remains live
 - raw browser optimization is already separated from this work
@@ -36,10 +40,11 @@ Current baseline notes:
 - `docs/django/merged.md`
 - `docs/merge_optimzied/baseline-2026-04-13.md`
 - `docs/merge_optimzied/contract.md`
+- `docs/merge_optimzied/reprofile-2026-04-13.md`
 
-Current next slice:
+Current status:
 
-- `4.1` preserve exact evidence filters
+- `4.1`, `4.2`, and `5.1` implemented on the small sibling dataset
 
 ## Phase 1: Baseline And Serving Contract
 
@@ -264,7 +269,7 @@ Exit criteria:
 
 Status:
 
-- pending
+- implemented
 
 ### Slice 4.2: Shrink first-page provenance payloads
 
@@ -288,7 +293,7 @@ Exit criteria:
 
 Status:
 
-- pending
+- implemented
 
 ## Phase 5: Validation And Profile Pass
 
@@ -318,4 +323,4 @@ Exit criteria:
 
 Status:
 
-- pending
+- implemented

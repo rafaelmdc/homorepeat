@@ -29,6 +29,8 @@ Current artifacts for this track:
   [baseline-2026-04-13.md](/home/rafael/Documents/GitHub/homorepeat/docs/merge_optimzied/baseline-2026-04-13.md)
 - serving contract:
   [contract.md](/home/rafael/Documents/GitHub/homorepeat/docs/merge_optimzied/contract.md)
+- reprofile:
+  [reprofile-2026-04-13.md](/home/rafael/Documents/GitHub/homorepeat/docs/merge_optimzied/reprofile-2026-04-13.md)
 
 ## Scope And Defaults
 
@@ -73,8 +75,8 @@ Current merged behavior still depends on Python-side materialization:
 - `apps/browser/views/proteins.py` and `apps/browser/views/repeat_calls.py`
   - merged mode now paginates over summary querysets, then rematerializes
     exact display groups for just the current page
-- merged templates currently expand many provenance backlinks inline per row,
-  which further increases page weight even after grouping
+- merged list pages now render bounded provenance previews and drill-down links
+  instead of expanding the full backlink set inline on the first page
 
 Current implementation status:
 
@@ -90,8 +92,12 @@ Current implementation status:
 - merged protein and repeat-call list reads now use those tables
 - accession analytics, accession detail counters, and taxon merged counts now
   use those tables
-- exact evidence filters and large inline provenance payloads are the
-  remaining merged performance concerns
+- exact evidence filters now preserve raw-evidence inclusion semantics
+- first-page merged provenance payloads are now bounded in both rendered HTML
+  and page-scoped view context
+- the remaining small-dataset hotspot is accession detail, which still
+  rematerializes accession-scoped raw evidence for its residue table because
+  full provenance drill-down remains live
 
 This architecture is useful for validating semantics, but it will not scale
 well because:
