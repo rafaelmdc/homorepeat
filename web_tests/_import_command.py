@@ -79,6 +79,8 @@ class ImportRunCommandTests(TestCase):
             self.assertEqual(CanonicalProtein.objects.get().repeat_call_count, 1)
             self.assertEqual(CanonicalRepeatCall.objects.get().latest_repeat_call.call_id, "call_1")
             self.assertEqual(CanonicalRepeatCall.objects.get().source_call_id, "call_1")
+            self.assertEqual(pipeline_run.canonical_sync_batch, batch)
+            self.assertIsNotNone(pipeline_run.canonical_synced_at)
 
     def test_import_run_keeps_only_repeat_linked_sequences_and_proteins(self):
         with TemporaryDirectory() as tempdir:

@@ -2,10 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 
-from django.db.models import Q
-
-from apps.imports.models import ImportBatch
-
+from .import_batches import latest_completed_import_batch_for_run
 from .models import PipelineRun
 
 
@@ -130,14 +127,7 @@ def _build_browser_facets(pipeline_run: PipelineRun) -> dict[str, list[str]]:
 
 
 def _latest_completed_import_batch(pipeline_run: PipelineRun) -> ImportBatch | None:
-    filters = Q(pipeline_run=pipeline_run)
-    if pipeline_run.publish_root:
-        filters |= Q(source_path=pipeline_run.publish_root)
-    return (
-        ImportBatch.objects.filter(filters, status=ImportBatch.Status.COMPLETED)
-        .order_by("-finished_at", "-started_at", "-pk")
-        .first()
-    )
+    return latest_completed_import_batch_for_run(pipeline_run)
 
 
 def _normalize_raw_counts(raw_counts: Mapping[str, object] | None) -> dict[str, int]:

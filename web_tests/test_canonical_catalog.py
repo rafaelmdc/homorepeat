@@ -1,3 +1,6 @@
+from io import StringIO
+
+from django.core.management import CommandError, call_command
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.utils import timezone
@@ -210,6 +213,8 @@ class CatalogSyncTests(TestCase):
         self.assertEqual(canonical_protein.latest_import_batch, raw["import_batch"])
         self.assertEqual(canonical_repeat_call.latest_repeat_call, raw["repeat_calls"][0])
         self.assertEqual(canonical_repeat_call.source_call_id, "call_alpha")
+        self.assertEqual(raw["pipeline_run"].canonical_sync_batch, raw["import_batch"])
+        self.assertIsNotNone(raw["pipeline_run"].canonical_synced_at)
 
     def test_sync_updates_canonical_rows_in_place_for_same_identity(self):
         first = self._create_raw_run(
@@ -267,6 +272,7 @@ class CatalogSyncTests(TestCase):
         self.assertEqual(canonical_genome.latest_pipeline_run, second["pipeline_run"])
         self.assertEqual(canonical_repeat_call.source_call_id, "call_beta")
         self.assertEqual((canonical_repeat_call.start, canonical_repeat_call.end), (12, 24))
+        self.assertEqual(second["pipeline_run"].canonical_sync_batch, second["import_batch"])
 
     def test_sync_replaces_only_touched_method_scope(self):
         first = self._create_raw_run(
@@ -481,4 +487,179 @@ class CatalogSyncTests(TestCase):
             "sequence": sequence,
             "protein": protein,
             "repeat_calls": repeat_calls,
+        }
+
+
+class CanonicalCatalogBackfillCommandTests(TestCase):
+    def setUp(self):
+        self.taxa = ensure_test_taxonomy()
+
+    def test_backfill_canonical_catalog_populates_missing_rows(self):
+        raw = self._create_backfill_raw_run(run_id="run-backfill")
+        raw["pipeline_run"].canonical_sync_batch = None
+        raw["pipeline_run"].canonical_synced_at = None
+        raw["pipeline_run"].save(update_fields=["canonical_sync_batch", "canonical_synced_at"])
+        stdout = StringIO()
+
+        self.assertEqual(CanonicalGenome.objects.count(), 0)
+        self.assertEqual(CanonicalSequence.objects.count(), 0)
+        self.assertEqual(CanonicalProtein.objects.count(), 0)
+        self.assertEqual(CanonicalRepeatCall.objects.count(), 0)
+
+        call_command("backfill_canonical_catalog", run_id="run-backfill", stdout=stdout)
+
+        raw["pipeline_run"].refresh_from_db()
+        self.assertEqual(CanonicalGenome.objects.count(), 1)
+        self.assertEqual(CanonicalSequence.objects.count(), 1)
+        self.assertEqual(CanonicalProtein.objects.count(), 1)
+        self.assertEqual(CanonicalRepeatCall.objects.count(), 1)
+        self.assertEqual(raw["pipeline_run"].canonical_sync_batch, raw["import_batch"])
+        self.assertIsNotNone(raw["pipeline_run"].canonical_synced_at)
+        self.assertEqual(RepeatCall.objects.count(), 1)
+        self.assertIn("Backfilled run-backfill", stdout.getvalue())
+        self.assertIn("updated: 1", stdout.getvalue())
+        self.assertIn("skipped: 0", stdout.getvalue())
+
+    def test_backfill_canonical_catalog_skips_currently_synced_run_without_force(self):
+        raw = self._create_backfill_raw_run(run_id="run-skip")
+        sync_canonical_catalog_for_run(raw["pipeline_run"], import_batch=raw["import_batch"])
+        synced_at = raw["pipeline_run"].canonical_synced_at
+        stdout = StringIO()
+
+        call_command("backfill_canonical_catalog", run_id="run-skip", stdout=stdout)
+
+        raw["pipeline_run"].refresh_from_db()
+        self.assertEqual(raw["pipeline_run"].canonical_synced_at, synced_at)
+        self.assertEqual(CanonicalGenome.objects.count(), 1)
+        self.assertIn("Skipped run-skip", stdout.getvalue())
+        self.assertIn("updated: 0", stdout.getvalue())
+        self.assertIn("skipped: 1", stdout.getvalue())
+
+    def test_backfill_canonical_catalog_force_resyncs_rows(self):
+        raw = self._create_backfill_raw_run(run_id="run-force")
+        sync_canonical_catalog_for_run(raw["pipeline_run"], import_batch=raw["import_batch"])
+        repeat_call = raw["repeat_calls"][0]
+        repeat_call.method = RunParameter.Method.THRESHOLD
+        repeat_call.repeat_residue = "A"
+        repeat_call.save(update_fields=["method", "repeat_residue"])
+        protein = raw["protein"]
+        protein.protein_name = "Protein forced"
+        protein.save(update_fields=["protein_name"])
+        stdout = StringIO()
+
+        call_command("backfill_canonical_catalog", run_id="run-force", force=True, stdout=stdout)
+
+        canonical_repeat_call = CanonicalRepeatCall.objects.get()
+        canonical_protein = CanonicalProtein.objects.get()
+        self.assertEqual(canonical_repeat_call.method, RunParameter.Method.THRESHOLD)
+        self.assertEqual(canonical_repeat_call.repeat_residue, "A")
+        self.assertEqual(canonical_protein.protein_name, "Protein forced")
+        self.assertIn("Backfilled run-force", stdout.getvalue())
+        self.assertIn("updated: 1", stdout.getvalue())
+
+    def test_backfill_canonical_catalog_errors_for_missing_run(self):
+        with self.assertRaises(CommandError):
+            call_command("backfill_canonical_catalog", run_id="no-such-run")
+
+    def _create_backfill_raw_run(self, *, run_id):
+        pipeline_run = PipelineRun.objects.create(
+            run_id=run_id,
+            status="success",
+            acquisition_publish_mode="raw",
+            publish_root=f"/tmp/{run_id}/publish",
+        )
+        import_batch = ImportBatch.objects.create(
+            pipeline_run=pipeline_run,
+            source_path=pipeline_run.publish_root,
+            status=ImportBatch.Status.COMPLETED,
+            finished_at=timezone.now(),
+            phase="completed",
+            row_counts={
+                "genomes": 1,
+                "sequences": 1,
+                "proteins": 1,
+                "repeat_calls": 1,
+                "accession_status_rows": 0,
+                "accession_call_count_rows": 0,
+                "download_manifest_entries": 0,
+                "normalization_warnings": 0,
+            },
+        )
+        batch = AcquisitionBatch.objects.create(
+            pipeline_run=pipeline_run,
+            batch_id="batch_0001",
+        )
+        genome = Genome.objects.create(
+            pipeline_run=pipeline_run,
+            batch=batch,
+            genome_id="genome_1",
+            source="ncbi_datasets",
+            accession="GCF_000001405.40",
+            genome_name="Genome backfill",
+            assembly_type="haploid",
+            taxon=self.taxa["human"],
+            assembly_level="Chromosome",
+            species_name="Homo sapiens",
+            analyzed_protein_count=1,
+        )
+        sequence = Sequence.objects.create(
+            pipeline_run=pipeline_run,
+            genome=genome,
+            taxon=self.taxa["human"],
+            sequence_id="seq_1",
+            sequence_name="NM_000001.1",
+            sequence_length=900,
+            nucleotide_sequence="CAG" * 30,
+            gene_symbol="GENE1",
+            assembly_accession=genome.accession,
+        )
+        protein = Protein.objects.create(
+            pipeline_run=pipeline_run,
+            genome=genome,
+            sequence=sequence,
+            taxon=self.taxa["human"],
+            protein_id="prot_1",
+            protein_name="Protein backfill",
+            protein_length=300,
+            accession=genome.accession,
+            amino_acid_sequence="Q" * 30,
+            gene_symbol="GENE1",
+            repeat_call_count=1,
+        )
+        RunParameter.objects.create(
+            pipeline_run=pipeline_run,
+            method=RunParameter.Method.PURE,
+            repeat_residue="Q",
+            param_name="min_repeat_count",
+            param_value="6",
+        )
+        repeat_call = RepeatCall.objects.create(
+            pipeline_run=pipeline_run,
+            genome=genome,
+            sequence=sequence,
+            protein=protein,
+            taxon=self.taxa["human"],
+            call_id=f"{run_id}-call",
+            method=RunParameter.Method.PURE,
+            accession=genome.accession,
+            gene_symbol="GENE1",
+            protein_name=protein.protein_name,
+            protein_length=protein.protein_length,
+            start=10,
+            end=20,
+            length=11,
+            repeat_residue="Q",
+            repeat_count=11,
+            non_repeat_count=0,
+            purity=1.0,
+            aa_sequence="Q" * 11,
+        )
+        return {
+            "pipeline_run": pipeline_run,
+            "import_batch": import_batch,
+            "batch": batch,
+            "genome": genome,
+            "sequence": sequence,
+            "protein": protein,
+            "repeat_calls": [repeat_call],
         }

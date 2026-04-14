@@ -15,6 +15,14 @@ class PipelineRun(TimestampedModel):
     publish_root = models.CharField(max_length=500, blank=True)
     manifest_payload = models.JSONField(default=dict, blank=True)
     browser_metadata = models.JSONField(default=dict, blank=True)
+    canonical_sync_batch = models.ForeignKey(
+        "imports.ImportBatch",
+        on_delete=models.SET_NULL,
+        related_name="canonical_synced_runs",
+        blank=True,
+        null=True,
+    )
+    canonical_synced_at = models.DateTimeField(blank=True, null=True, db_index=True)
     imported_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:

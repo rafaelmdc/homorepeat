@@ -18,6 +18,7 @@ from apps.browser.models import (
 )
 from apps.browser.models.genomes import Genome
 from apps.imports.models import ImportBatch
+from apps.browser.import_batches import latest_completed_import_batch_for_run
 
 
 @dataclass(frozen=True)
@@ -107,6 +108,11 @@ def sync_canonical_catalog_for_run(
         _refresh_canonical_protein_repeat_call_counts(
             canonical_proteins_by_raw_pk.values(),
         )
+        _record_pipeline_run_canonical_sync(
+            pipeline_run,
+            import_batch=import_batch,
+            synced_at=last_seen_at,
+        )
 
     return CatalogSyncResult(
         genomes=len(raw_genomes),
@@ -115,6 +121,25 @@ def sync_canonical_catalog_for_run(
         repeat_calls=len(raw_repeat_calls),
         replaced_repeat_calls=replaced_repeat_calls,
     )
+
+
+def backfill_canonical_catalog_for_run(
+    pipeline_run: PipelineRun,
+    *,
+    force: bool = False,
+) -> tuple[CatalogSyncResult | None, bool]:
+    latest_batch = latest_completed_import_batch_for_run(pipeline_run)
+    if latest_batch is None:
+        raise ValueError(f"Run {pipeline_run.run_id!r} does not have a completed import batch.")
+
+    if not force and _pipeline_run_has_current_canonical_sync(pipeline_run, latest_batch=latest_batch):
+        return None, False
+
+    result = sync_canonical_catalog_for_run(
+        pipeline_run,
+        import_batch=latest_batch,
+    )
+    return result, True
 
 
 def _sync_canonical_genomes(
@@ -169,6 +194,28 @@ def _sync_canonical_genomes(
         field_name="accession",
     )
     return {genome.pk: canonical_by_accession[genome.accession] for genome in raw_genomes}
+
+
+def _pipeline_run_has_current_canonical_sync(
+    pipeline_run: PipelineRun,
+    *,
+    latest_batch: ImportBatch,
+) -> bool:
+    return (
+        pipeline_run.canonical_sync_batch_id == latest_batch.pk
+        and pipeline_run.canonical_synced_at is not None
+    )
+
+
+def _record_pipeline_run_canonical_sync(
+    pipeline_run: PipelineRun,
+    *,
+    import_batch: ImportBatch,
+    synced_at,
+) -> None:
+    pipeline_run.canonical_sync_batch = import_batch
+    pipeline_run.canonical_synced_at = synced_at
+    pipeline_run.save(update_fields=["canonical_sync_batch", "canonical_synced_at"])
 
 
 def _prune_stale_canonical_genomes(
