@@ -7,22 +7,22 @@
 <section class="landing-band mb-4">
   <div class="landing-band-shell">
     <div class="landing-copy">
-      <span class="section-kicker mb-3">Sequences</span>
-      <h1 class="landing-title mb-3">Sequence browsing over the imported call-linked subset.</h1>
+      <span class="section-kicker mb-3">Current sequences</span>
+      <h1 class="landing-title mb-3">Canonical sequence browsing with links back to the latest imported evidence.</h1>
       <p class="landing-lead mb-0">
-        Filter stored CDS rows by run, branch, accession, gene, or sequence identifier and
-        keep the linked genome, protein, and repeat-call provenance visible.
+        Filter current CDS rows by latest run, branch, accession, gene, or sequence identifier and move directly into
+        the linked genome, protein, and repeat-call browsers for the current catalog state.
       </p>
     </div>
     <aside class="landing-aside">
       <p class="sheet-label">Current scope</p>
       <p class="mb-2">
         {% if current_run %}
-          Run <strong>{{ current_run.run_id }}</strong>{% if branch_scope_active %}, {{ branch_scope_noun }} <strong>{{ branch_scope_label }}</strong>{% endif %}.
+          Latest state imported by run <strong>{{ current_run.run_id }}</strong>{% if branch_scope_active %}, {{ branch_scope_noun }} <strong>{{ branch_scope_label }}</strong>{% endif %}.
         {% elif branch_scope_active %}
-          {{ branch_scope_noun|title }} <strong>{{ branch_scope_label }}</strong> across imported sequences.
+          {{ branch_scope_noun|title }} <strong>{{ branch_scope_label }}</strong> across canonical sequences.
         {% else %}
-          Browsing all stored call-linked sequence records.
+          Browsing all canonical sequence records.
         {% endif %}
       </p>
       {% if selected_genome %}
@@ -47,7 +47,7 @@
       <input class="form-control" id="id_q" type="text" name="q" value="{{ current_query }}" placeholder="Sequence name or ID prefix">
     </div>
     <div class="col-md-4 col-lg-2">
-      <label class="form-label" for="id_run">Run</label>
+      <label class="form-label" for="id_run">Latest run</label>
       <select class="form-select" id="id_run" name="run">
         <option value="">All runs</option>
         {% for pipeline_run in run_choices %}
@@ -79,7 +79,7 @@
 <section class="surface-card surface-card-wide" {% if virtual_scroll_enabled %}data-virtual-scroll-surface{% endif %}>
   <div class="section-header">
     <div>
-      <p class="section-kicker mb-2">Stored sequence inventory</p>
+      <p class="section-kicker mb-2">Current sequence inventory</p>
       <h2>{{ page_obj.paginator.count }} sequence{{ page_obj.paginator.count|pluralize }}</h2>
     </div>
   </div>
@@ -104,7 +104,7 @@
           {% include "browser/includes/sortable_th.html" with label="Gene" header=sort_links.gene_symbol %}
           {% include "browser/includes/sortable_th.html" with label="Genome" header=sort_links.genome %}
           {% include "browser/includes/sortable_th.html" with label="Taxon" header=sort_links.taxon %}
-          {% include "browser/includes/sortable_th.html" with label="Run" header=sort_links.run %}
+          {% include "browser/includes/sortable_th.html" with label="Latest run" header=sort_links.run %}
           {% include "browser/includes/sortable_th.html" with label="Proteins" header=sort_links.proteins %}
           {% include "browser/includes/sortable_th.html" with label="Repeat calls" header=sort_links.calls %}
         </tr>
@@ -114,7 +114,7 @@
           {% include "browser/includes/sequence_list_rows.html" %}
         {% else %}
           <tr>
-            <td colspan="7" class="empty-cell">No sequences matched these filters.</td>
+            <td colspan="7" class="empty-cell">No canonical sequences matched these filters.</td>
           </tr>
         {% endif %}
       </tbody>

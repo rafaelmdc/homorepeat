@@ -7,33 +7,22 @@
 <section class="landing-band mb-4">
   <div class="landing-band-shell">
     <div class="landing-copy">
-      <span class="section-kicker mb-3">Proteins</span>
-      <h1 class="landing-title mb-3">Protein browsing over imported repeat-bearing records.</h1>
+      <span class="section-kicker mb-3">Current proteins</span>
+      <h1 class="landing-title mb-3">Canonical protein browsing over the current repeat-bearing catalog.</h1>
       <p class="landing-lead mb-0">
-        Filter proteins by run, branch, gene, or linked repeat-call features and move
-        directly into genomes, taxa, and individual call records. This browser covers
-        the call-linked subset stored for runtime provenance rather than the full raw
-        protein inventory.
+        Filter proteins by latest run, branch, gene, or linked repeat-call features and move directly into genomes,
+        sequences, taxa, and current repeat-call records while keeping the latest imported evidence linked.
       </p>
     </div>
     <aside class="landing-aside">
       <p class="sheet-label">Current scope</p>
       <p class="mb-2">
-        {% if current_mode == "merged" %}
-          {% if current_run %}
-            Run <strong>{{ current_run.run_id }}</strong>{% if branch_scope_active %}, {{ branch_scope_noun }} <strong>{{ branch_scope_label }}</strong>{% endif %}, using merged protein groups.
-          {% elif branch_scope_active %}
-            {{ branch_scope_noun|title }} <strong>{{ branch_scope_label }}</strong> across merged protein groups.
-          {% else %}
-            Browsing merged protein groups across imported runs.
-          {% endif %}
-          Representative evidence links below are convenience backlinks to raw rows, not canonical merged truth.
-        {% elif current_run %}
-          Run <strong>{{ current_run.run_id }}</strong>{% if branch_scope_active %}, {{ branch_scope_noun }} <strong>{{ branch_scope_label }}</strong>{% endif %}.
+        {% if current_run %}
+          Latest state imported by run <strong>{{ current_run.run_id }}</strong>{% if branch_scope_active %}, {{ branch_scope_noun }} <strong>{{ branch_scope_label }}</strong>{% endif %}.
         {% elif branch_scope_active %}
-          {{ branch_scope_noun|title }} <strong>{{ branch_scope_label }}</strong> across imported proteins.
+          {{ branch_scope_noun|title }} <strong>{{ branch_scope_label }}</strong> across canonical proteins.
         {% else %}
-          Browsing all imported protein records.
+          Browsing all canonical protein records.
         {% endif %}
       </p>
       {% if selected_genome %}
@@ -58,7 +47,6 @@
     {% if current_sequence %}
       <input type="hidden" name="sequence" value="{{ current_sequence }}">
     {% endif %}
-    <input type="hidden" name="mode" value="{{ current_mode }}">
     {% if current_order_by %}
       <input type="hidden" name="order_by" value="{{ current_order_by }}">
     {% endif %}
@@ -67,7 +55,7 @@
       <input class="form-control" id="id_q" type="text" name="q" value="{{ current_query }}" placeholder="Protein name or ID prefix">
     </div>
     <div class="col-md-4 col-lg-2">
-      <label class="form-label" for="id_run">Run</label>
+      <label class="form-label" for="id_run">Latest run</label>
       <select class="form-select" id="id_run" name="run">
         <option value="">All runs</option>
         {% for pipeline_run in run_choices %}
@@ -122,16 +110,9 @@
       <input class="form-control" id="id_purity_max" type="number" min="0" max="1" step="0.01" name="purity_max" value="{{ current_purity_max }}">
     </div>
     <div class="col-12">
-      <div class="filter-toolbar">
-        <div class="mode-switch">
-          <span class="mode-switch-label">Mode</span>
-          <button class="btn {% if current_mode == 'run' %}btn-primary{% else %}btn-outline-secondary{% endif %}" type="submit" name="mode" value="run">Run</button>
-          <button class="btn {% if current_mode == 'merged' %}btn-primary{% else %}btn-outline-secondary{% endif %}" type="submit" name="mode" value="merged">Merged</button>
-        </div>
-        <div class="filter-actions">
-          <button class="btn btn-primary" type="submit">Apply</button>
-          <a class="btn btn-outline-secondary" href="{% url 'browser:protein-list' %}{% if current_mode == 'merged' %}?mode=merged{% endif %}">Reset</a>
-        </div>
+      <div class="filter-actions">
+        <button class="btn btn-primary" type="submit">Apply</button>
+        <a class="btn btn-outline-secondary" href="{% url 'browser:protein-list' %}">Reset</a>
       </div>
     </div>
   </form>
@@ -140,11 +121,8 @@
 <section class="surface-card surface-card-wide" {% if virtual_scroll_enabled %}data-virtual-scroll-surface{% endif %}>
   <div class="section-header">
     <div>
-      <p class="section-kicker mb-2">{% if current_mode == "merged" %}Merged protein inventory{% else %}Protein inventory{% endif %}</p>
-      <h2>
-        {{ page_obj.paginator.count }}
-        {% if current_mode == "merged" %}protein group{{ page_obj.paginator.count|pluralize }}{% else %}protein{{ page_obj.paginator.count|pluralize }}{% endif %}
-      </h2>
+      <p class="section-kicker mb-2">Current protein inventory</p>
+      <h2>{{ page_obj.paginator.count }} protein{{ page_obj.paginator.count|pluralize }}</h2>
     </div>
   </div>
 
@@ -163,38 +141,21 @@
   <div class="table-responsive">
     <table class="table align-middle mb-0 data-table">
       <thead>
-        {% if current_mode == "merged" %}
-          <tr>
-            {% include "browser/includes/sortable_th.html" with label="Protein" header=sort_links.protein_name %}
-            {% include "browser/includes/sortable_th.html" with label="Gene" header=sort_links.gene_symbol %}
-            {% include "browser/includes/sortable_th.html" with label="Accession" header=sort_links.accession %}
-            {% include "browser/includes/sortable_th.html" with label="Source runs" header=sort_links.run %}
-            {% include "browser/includes/sortable_th.html" with label="Source proteins" header=sort_links.source_proteins %}
-            {% include "browser/includes/sortable_th.html" with label="Collapsed calls" header=sort_links.calls %}
-          </tr>
-        {% else %}
-          <tr>
-            {% include "browser/includes/sortable_th.html" with label="Protein" header=sort_links.protein_name %}
-            {% include "browser/includes/sortable_th.html" with label="Gene" header=sort_links.gene_symbol %}
-            {% include "browser/includes/sortable_th.html" with label="Genome" header=sort_links.accession %}
-            {% include "browser/includes/sortable_th.html" with label="Taxon" header=sort_links.taxon %}
-            {% include "browser/includes/sortable_th.html" with label="Run" header=sort_links.run %}
-            {% include "browser/includes/sortable_th.html" with label="Repeat calls" header=sort_links.calls %}
-          </tr>
-        {% endif %}
+        <tr>
+          {% include "browser/includes/sortable_th.html" with label="Protein" header=sort_links.protein_name %}
+          {% include "browser/includes/sortable_th.html" with label="Gene" header=sort_links.gene_symbol %}
+          {% include "browser/includes/sortable_th.html" with label="Genome" header=sort_links.accession %}
+          {% include "browser/includes/sortable_th.html" with label="Taxon" header=sort_links.taxon %}
+          {% include "browser/includes/sortable_th.html" with label="Latest run" header=sort_links.run %}
+          {% include "browser/includes/sortable_th.html" with label="Repeat calls" header=sort_links.calls %}
+        </tr>
       </thead>
       <tbody {% if virtual_scroll_enabled %}data-virtual-scroll-body{% endif %}>
         {% if proteins %}
           {% include "browser/includes/protein_list_rows.html" %}
         {% else %}
           <tr>
-            <td colspan="6" class="empty-cell">
-              {% if current_mode == "merged" %}
-                No merged protein groups matched these filters.
-              {% else %}
-                No proteins matched these filters.
-              {% endif %}
-            </td>
+            <td colspan="6" class="empty-cell">No canonical proteins matched these filters.</td>
           </tr>
         {% endif %}
       </tbody>

@@ -1,95 +1,22 @@
 {% for repeat_call in repeat_calls %}
-  {% if current_mode == "merged" %}
-    <tr data-virtual-row="1">
-      <td><a href="{% url 'browser:accession-detail' repeat_call.accession %}">{{ repeat_call.accession }}</a></td>
-      <td>
-        <div>{{ repeat_call.protein_name }}</div>
-        <div class="small text-secondary">ID {{ repeat_call.protein_id }}{% if repeat_call.protein_length_label != "-" %} | Protein {{ repeat_call.protein_length_label }} aa{% endif %}</div>
-        <div class="small text-secondary">
-          Representative evidence:
-          <a href="{% url 'browser:repeatcall-detail' repeat_call.representative_repeat_call.pk %}">
-            {{ repeat_call.representative_repeat_call.pipeline_run.run_id }}:{{ repeat_call.representative_repeat_call.call_id }}
-          </a>
-        </div>
-      </td>
-      <td>
-        <div>{{ repeat_call.gene_symbol_label }}</div>
-        <div class="small text-secondary">{{ repeat_call.source_proteins_count }} source protein row{{ repeat_call.source_proteins_count|pluralize }}</div>
-        <div class="d-flex flex-wrap gap-1 mt-1">
-          {% for source_protein in repeat_call.source_proteins|slice:":2" %}
-            <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:protein-detail' source_protein.pk %}">
-              {{ source_protein.run_id }}:{{ source_protein.protein_id }}
-            </a>
-          {% endfor %}
-        </div>
-        {% if repeat_call.source_proteins_count > 2 %}
-          <div class="small text-secondary mt-1">
-            +{{ repeat_call.source_proteins_count|add:"-2" }} more protein row{{ repeat_call.source_proteins_count|add:"-2"|pluralize }}
-          </div>
-        {% endif %}
-      </td>
-      <td>{{ repeat_call.methods_label }}</td>
-      <td>{{ repeat_call.coordinate_label }}</td>
-      <td>{{ repeat_call.repeat_residue }}</td>
-      <td>
-        <div>{{ repeat_call.length_label }}</div>
-        {% if repeat_call.protein_length_label != "-" %}
-          <div class="small text-secondary">Protein {{ repeat_call.protein_length_label }} aa</div>
-        {% endif %}
-      </td>
-      <td title="{{ repeat_call.purity_label }}">{{ repeat_call.purity_label }}</td>
-      <td>
-        <div>{{ repeat_call.source_count }}</div>
-        <div class="d-flex flex-wrap gap-1 mt-1">
-          {% for source_call in repeat_call.source_repeat_calls|slice:":2" %}
-            <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:repeatcall-detail' source_call.pk %}">
-              {{ source_call.pipeline_run.run_id }}:{{ source_call.call_id }}
-            </a>
-          {% endfor %}
-        </div>
-        {% if repeat_call.source_count > 2 %}
-          <div class="small text-secondary mt-1">
-            +{{ repeat_call.source_count|add:"-2" }} more raw call{{ repeat_call.source_count|add:"-2"|pluralize }}
-          </div>
-        {% endif %}
-        <div class="small mt-2">
-          <a href="{% url 'browser:repeatcall-list' %}?accession={{ repeat_call.accession|urlencode }}{% if current_run_id %}&amp;run={{ current_run_id|urlencode }}{% endif %}{% if current_branch_q %}&amp;branch_q={{ current_branch_q|urlencode }}{% elif current_branch %}&amp;branch={{ current_branch|urlencode }}{% endif %}&amp;protein={{ repeat_call.protein_id|urlencode }}&amp;method={{ repeat_call.method|urlencode }}&amp;residue={{ repeat_call.repeat_residue|urlencode }}">Open raw calls</a>
-        </div>
-      </td>
-      <td>
-        <div>{{ repeat_call.source_runs_count }}</div>
-        <div class="d-flex flex-wrap gap-1 mt-1">
-          {% for source_run in repeat_call.source_run_records|slice:":2" %}
-            <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:run-detail' source_run.pk %}">{{ source_run.run_id }}</a>
-          {% endfor %}
-        </div>
-        {% if repeat_call.source_runs_count > 2 %}
-          <div class="small text-secondary mt-1">
-            +{{ repeat_call.source_runs_count|add:"-2" }} more run{{ repeat_call.source_runs_count|add:"-2"|pluralize }}
-          </div>
-        {% endif %}
-      </td>
-    </tr>
-  {% else %}
-    <tr data-virtual-row="1">
-      <td>
-        <a href="{% url 'browser:repeatcall-detail' repeat_call.pk %}" title="{{ repeat_call.call_id }}">
-          {{ repeat_call.call_id|truncatechars:30 }}
-        </a>
-      </td>
-      <td><a href="{% url 'browser:protein-detail' repeat_call.protein_id %}">{{ repeat_call.protein_name }}</a></td>
-      <td>{{ repeat_call.gene_symbol|default:"-" }}</td>
-      <td><a href="{% url 'browser:genome-detail' repeat_call.genome_id %}">{{ repeat_call.accession }}</a></td>
-      <td>
-        <a href="{% url 'browser:taxon-detail' repeat_call.taxon_id %}?run={{ repeat_call.pipeline_run.run_id|urlencode }}">
-          {{ repeat_call.taxon.taxon_name }}
-        </a>
-      </td>
-      <td>{{ repeat_call.method }}</td>
-      <td>{{ repeat_call.repeat_residue }}</td>
-      <td>{{ repeat_call.length }}</td>
-      <td title="{{ repeat_call.purity }}">{{ repeat_call.purity|stringformat:"s"|slice:":4" }}</td>
-      <td><a href="{% url 'browser:run-detail' repeat_call.pipeline_run_id %}">{{ repeat_call.pipeline_run.run_id }}</a></td>
-    </tr>
-  {% endif %}
+  <tr data-virtual-row="1">
+    <td>
+      <a href="{% url 'browser:repeatcall-detail' repeat_call.latest_repeat_call.pk %}" title="{{ repeat_call.source_call_id|default:repeat_call.latest_repeat_call.call_id }}">
+        {{ repeat_call.source_call_id|default:repeat_call.latest_repeat_call.call_id|truncatechars:30 }}
+      </a>
+    </td>
+    <td><a href="{% url 'browser:protein-detail' repeat_call.latest_repeat_call.protein_id %}">{{ repeat_call.protein_name }}</a></td>
+    <td>{{ repeat_call.gene_symbol|default:"-" }}</td>
+    <td><a href="{% url 'browser:genome-detail' repeat_call.latest_repeat_call.genome_id %}">{{ repeat_call.accession }}</a></td>
+    <td>
+      <a href="{% url 'browser:taxon-detail' repeat_call.taxon_id %}?run={{ repeat_call.latest_pipeline_run.run_id|urlencode }}">
+        {{ repeat_call.taxon.taxon_name }}
+      </a>
+    </td>
+    <td>{{ repeat_call.method }}</td>
+    <td>{{ repeat_call.repeat_residue }}</td>
+    <td>{{ repeat_call.length }}</td>
+    <td title="{{ repeat_call.purity }}">{{ repeat_call.purity|stringformat:"s"|slice:":4" }}</td>
+    <td><a href="{% url 'browser:run-detail' repeat_call.latest_pipeline_run_id %}">{{ repeat_call.latest_pipeline_run.run_id }}</a></td>
+  </tr>
 {% endfor %}

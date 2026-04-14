@@ -1,85 +1,18 @@
 {% for protein in proteins %}
-  {% if current_mode == "merged" %}
-    <tr data-virtual-row="1">
-      <td>
-        <div>{{ protein.protein_name }}</div>
-        <div class="small text-secondary">ID {{ protein.protein_id }}{% if protein.protein_length_label != "-" %} | {{ protein.protein_length_label }} aa{% endif %}</div>
-        <div class="small text-secondary">
-          Representative evidence:
-          <a href="{% url 'browser:repeatcall-detail' protein.representative_repeat_call.pk %}">
-            {{ protein.representative_repeat_call.pipeline_run.run_id }}:{{ protein.representative_repeat_call.call_id }}
-          </a>
-        </div>
-      </td>
-      <td>
-        <div>{{ protein.gene_symbol_label }}</div>
-        <div class="small text-secondary">Residues {{ protein.repeat_residues_label }} | Methods {{ protein.methods_label }}</div>
-        <div class="small text-secondary">Coordinate evidence {{ protein.coordinate_label }}</div>
-      </td>
-      <td><a href="{% url 'browser:accession-detail' protein.accession %}">{{ protein.accession }}</a></td>
-      <td>
-        <div>{{ protein.source_runs_count }}</div>
-        <div class="d-flex flex-wrap gap-1 mt-1">
-          {% for source_run in protein.source_run_records|slice:":2" %}
-            <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:run-detail' source_run.pk %}">{{ source_run.run_id }}</a>
-          {% endfor %}
-        </div>
-        {% if protein.source_runs_count > 2 %}
-          <div class="small text-secondary mt-1">
-            +{{ protein.source_runs_count|add:"-2" }} more run{{ protein.source_runs_count|add:"-2"|pluralize }}
-          </div>
-        {% endif %}
-      </td>
-      <td>
-        <div>{{ protein.source_proteins_count }}</div>
-        <div class="d-flex flex-wrap gap-1 mt-1">
-          {% for source_protein in protein.source_proteins|slice:":2" %}
-            <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:protein-detail' source_protein.pk %}">
-              {{ source_protein.run_id }}:{{ source_protein.protein_id }}
-            </a>
-          {% endfor %}
-        </div>
-        {% if protein.source_proteins_count > 2 %}
-          <div class="small text-secondary mt-1">
-            +{{ protein.source_proteins_count|add:"-2" }} more protein row{{ protein.source_proteins_count|add:"-2"|pluralize }}
-          </div>
-        {% endif %}
-      </td>
-      <td>
-        <div>{{ protein.collapsed_repeat_calls_count }} residue unit{{ protein.collapsed_repeat_calls_count|pluralize }} from {{ protein.source_repeat_calls_count }} raw call{{ protein.source_repeat_calls_count|pluralize }}</div>
-        <div class="d-flex flex-wrap gap-1 mt-1">
-          {% for repeat_call in protein.source_repeat_calls|slice:":2" %}
-            <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:repeatcall-detail' repeat_call.pk %}">
-              {{ repeat_call.pipeline_run.run_id }}:{{ repeat_call.call_id }}
-            </a>
-          {% endfor %}
-        </div>
-        {% if protein.source_repeat_calls_count > 2 %}
-          <div class="small text-secondary mt-1">
-            +{{ protein.source_repeat_calls_count|add:"-2" }} more raw call{{ protein.source_repeat_calls_count|add:"-2"|pluralize }}
-          </div>
-        {% endif %}
-        <div class="small mt-2">
-          <a href="{% url 'browser:repeatcall-list' %}?accession={{ protein.accession|urlencode }}{% if current_run_id %}&amp;run={{ current_run_id|urlencode }}{% endif %}{% if current_branch_q %}&amp;branch_q={{ current_branch_q|urlencode }}{% elif current_branch %}&amp;branch={{ current_branch|urlencode }}{% endif %}&amp;protein={{ protein.protein_id|urlencode }}&amp;method={{ protein.method|urlencode }}">Open raw calls</a>
-        </div>
-      </td>
-    </tr>
-  {% else %}
-    <tr data-virtual-row="1">
-      <td><a href="{% url 'browser:protein-detail' protein.pk %}">{{ protein.protein_name }}</a></td>
-      <td>{{ protein.gene_symbol|default:"-" }}</td>
-      <td><a href="{% url 'browser:genome-detail' protein.genome_id %}">{{ protein.accession }}</a></td>
-      <td>
-        <a href="{% url 'browser:taxon-detail' protein.taxon_id %}?run={{ protein.pipeline_run.run_id|urlencode }}">
-          {{ protein.taxon.taxon_name }}
-        </a>
-      </td>
-      <td><a href="{% url 'browser:run-detail' protein.pipeline_run_id %}">{{ protein.pipeline_run.run_id }}</a></td>
-      <td>
-        <a href="{% url 'browser:repeatcall-list' %}?run={{ protein.pipeline_run.run_id|urlencode }}&amp;protein={{ protein.protein_id|urlencode }}">
-          {{ protein.repeat_calls_count }}
-        </a>
-      </td>
-    </tr>
-  {% endif %}
+  <tr data-virtual-row="1">
+    <td><a href="{% url 'browser:protein-detail' protein.latest_source_protein_pk %}">{{ protein.protein_name }}</a></td>
+    <td>{{ protein.gene_symbol|default:"-" }}</td>
+    <td><a href="{% url 'browser:genome-detail' protein.latest_source_genome_pk %}">{{ protein.accession }}</a></td>
+    <td>
+      <a href="{% url 'browser:taxon-detail' protein.taxon_id %}?run={{ protein.latest_pipeline_run.run_id|urlencode }}">
+        {{ protein.taxon.taxon_name }}
+      </a>
+    </td>
+    <td><a href="{% url 'browser:run-detail' protein.latest_pipeline_run_id %}">{{ protein.latest_pipeline_run.run_id }}</a></td>
+    <td>
+      <a href="{% url 'browser:repeatcall-list' %}?run={{ protein.latest_pipeline_run.run_id|urlencode }}&amp;protein={{ protein.protein_id|urlencode }}">
+        {{ protein.repeat_call_count }}
+      </a>
+    </td>
+  </tr>
 {% endfor %}

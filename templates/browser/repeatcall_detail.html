@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ repeat_call.call_id }}{% endblock %}
+{% block title %}{{ repeat_call.source_call_id|default:repeat_call.latest_repeat_call.call_id }}{% endblock %}
 {% block body_class %}repeatcall-detail-page{% endblock %}
 
 {% block content %}
@@ -8,16 +8,16 @@
   <div class="landing-band-shell">
     <div class="landing-copy">
       <span class="section-kicker mb-3">Repeat call</span>
-      <h1 class="landing-title mb-3">{{ repeat_call.call_id }}</h1>
+      <h1 class="landing-title mb-3">{{ repeat_call.source_call_id|default:repeat_call.latest_repeat_call.call_id }}</h1>
       <p class="landing-lead mb-3">
         {{ repeat_call.method }} detection for residue <strong>{{ repeat_call.repeat_residue }}</strong>
-        on protein <strong>{{ repeat_call.protein.protein_name }}</strong>, imported in run <strong>{{ repeat_call.pipeline_run.run_id }}</strong>.
+        on protein <strong>{{ repeat_call.protein.protein_name }}</strong>, last imported in run <strong>{{ repeat_call.latest_pipeline_run.run_id }}</strong>.
       </p>
       <div class="d-flex flex-wrap gap-2">
         <a class="btn btn-outline-dark" href="{{ repeatcall_list_url }}">Back to repeat calls</a>
         <a class="btn btn-outline-dark" href="{{ run_detail_url }}">Open run</a>
-        <a class="btn btn-outline-dark" href="{% url 'browser:protein-detail' repeat_call.protein.pk %}">Open protein</a>
-        <a class="btn btn-brand" href="{% url 'browser:genome-detail' repeat_call.genome.pk %}">Open genome</a>
+        <a class="btn btn-outline-dark" href="{{ protein_detail_url }}">Open protein</a>
+        <a class="btn btn-brand" href="{{ genome_detail_url }}">Open genome</a>
         <a class="btn btn-outline-dark" href="{{ taxon_detail_url }}">Open taxon</a>
       </div>
     </div>
@@ -26,7 +26,7 @@
       <p class="mb-2">Coordinates {{ repeat_call.start }}-{{ repeat_call.end }}</p>
       <p class="mb-2">Length {{ repeat_call.length }}</p>
       <p class="mb-2">Purity {{ repeat_call.purity }}</p>
-      <p class="mb-0">Residue {{ repeat_call.repeat_residue }}</p>
+      <p class="mb-0">{{ source_repeat_calls_count }} imported observation{{ source_repeat_calls_count|pluralize }} across {{ source_runs_count }} run{{ source_runs_count|pluralize }}</p>
     </aside>
   </div>
 </section>
@@ -34,7 +34,7 @@
 <section class="row g-4 mb-4">
   <div class="col-lg-6">
     <div class="surface-card info-sheet h-100">
-      <p class="sheet-label">Call metadata</p>
+      <p class="sheet-label">Current call metadata</p>
       <dl class="info-grid">
         <dt>Method</dt>
         <dd>{{ repeat_call.method }}</dd>
@@ -52,6 +52,8 @@
         <dd>{{ repeat_call.repeat_count }}</dd>
         <dt>Non-repeat count</dt>
         <dd>{{ repeat_call.non_repeat_count }}</dd>
+        <dt>Latest import batch</dt>
+        <dd>{{ repeat_call.latest_import_batch_id }}</dd>
       </dl>
     </div>
   </div>
@@ -61,13 +63,13 @@
       <p class="sheet-label">Linked parents</p>
       <dl class="info-grid">
         <dt>Protein</dt>
-        <dd><a href="{% url 'browser:protein-detail' repeat_call.protein.pk %}">{{ repeat_call.protein.protein_name }}</a></dd>
+        <dd><a href="{{ protein_detail_url }}">{{ repeat_call.protein.protein_name }}</a></dd>
         <dt>Genome</dt>
-        <dd><a href="{% url 'browser:genome-detail' repeat_call.genome.pk %}">{{ repeat_call.genome.accession }}</a></dd>
+        <dd><a href="{{ genome_detail_url }}">{{ repeat_call.genome.accession }}</a></dd>
         <dt>Taxon</dt>
         <dd><a href="{{ taxon_detail_url }}">{{ repeat_call.taxon.taxon_name }}</a></dd>
-        <dt>Run</dt>
-        <dd><a href="{% url 'browser:run-detail' repeat_call.pipeline_run.pk %}">{{ repeat_call.pipeline_run.run_id }}</a></dd>
+        <dt>Latest run</dt>
+        <dd><a href="{{ run_detail_url }}">{{ repeat_call.latest_pipeline_run.run_id }}</a></dd>
         <dt>Sequence</dt>
         <dd><a href="{{ sequence_detail_url }}">{{ repeat_call.sequence.sequence_name }}</a></dd>
         <dt>Gene symbol</dt>
@@ -77,7 +79,7 @@
   </div>
 </section>
 
-<section class="row g-4">
+<section class="row g-4 mb-4">
   <div class="col-lg-6">
     <div class="surface-card info-sheet h-100">
       <p class="sheet-label">Tract sequence</p>
@@ -101,10 +103,42 @@
         <dd>{{ repeat_call.merge_rule|default:"-" }}</dd>
         <dt>Score</dt>
         <dd>{{ repeat_call.score|default:"-" }}</dd>
-        <dt>Acquisition batch</dt>
-        <dd>{{ repeat_call.genome.batch.batch_id|default:"-" }}</dd>
       </dl>
     </div>
+  </div>
+</section>
+
+<section class="surface-card surface-card-wide">
+  <div class="section-header">
+    <div>
+      <p class="section-kicker mb-2">Imported observations</p>
+      <h2>Supporting raw call rows</h2>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table align-middle mb-0 data-table">
+      <thead>
+        <tr>
+          <th>Run</th>
+          <th>Call</th>
+          <th>Protein</th>
+          <th>Sequence</th>
+          <th>Genome</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for source_repeat_call in source_repeat_calls %}
+          <tr>
+            <td><a href="{% url 'browser:run-detail' source_repeat_call.pipeline_run.pk %}">{{ source_repeat_call.pipeline_run.run_id }}</a></td>
+            <td><a href="{% url 'browser:repeatcall-detail' source_repeat_call.pk %}">{{ source_repeat_call.call_id }}</a></td>
+            <td><a href="{% url 'browser:protein-detail' source_repeat_call.protein_id %}">{{ source_repeat_call.protein.protein_name }}</a></td>
+            <td><a href="{% url 'browser:sequence-detail' source_repeat_call.sequence_id %}">{{ source_repeat_call.sequence.sequence_name }}</a></td>
+            <td><a href="{% url 'browser:genome-detail' source_repeat_call.genome_id %}">{{ source_repeat_call.genome.accession }}</a></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 </section>
 {% endblock %}

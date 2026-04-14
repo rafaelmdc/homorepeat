@@ -4,6 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.browser.catalog import sync_canonical_catalog_for_run
 from apps.browser.metadata import BROWSER_METADATA_RAW_COUNT_KEYS
 from apps.browser.merged.build import rebuild_merged_summaries_for_run
 from apps.browser.models import (
@@ -127,6 +128,12 @@ class BrowserViewTests(TestCase):
             non_repeat_count=non_repeat_count,
             purity=purity,
             aa_sequence=aa_sequence,
+        )
+        sync_canonical_catalog_for_run(
+            pipeline_run,
+            import_batch=pipeline_run.canonical_sync_batch,
+            last_seen_at=timezone.now(),
+            replace_all_repeat_call_methods=True,
         )
         rebuild_merged_summaries_for_run(pipeline_run)
         return {"sequence": sequence, "protein": protein, "repeat_call": repeat_call}
@@ -567,9 +574,7 @@ class BrowserViewTests(TestCase):
             (reverse("browser:genome-list"), {}),
             (reverse("browser:sequence-list"), {}),
             (reverse("browser:protein-list"), {}),
-            (reverse("browser:protein-list"), {"mode": "merged"}),
             (reverse("browser:repeatcall-list"), {}),
-            (reverse("browser:repeatcall-list"), {"mode": "merged"}),
             (reverse("browser:accession-list"), {}),
         ]
 
@@ -648,15 +653,6 @@ class BrowserViewTests(TestCase):
                 ],
             ),
             (
-                reverse("browser:genome-list"),
-                {},
-                [
-                    "order_by=-taxon",
-                    "order_by=-sequences",
-                    "order_by=-repeat_calls",
-                ],
-            ),
-            (
                 reverse("browser:sequence-list"),
                 {},
                 [
@@ -666,10 +662,10 @@ class BrowserViewTests(TestCase):
             ),
             (
                 reverse("browser:protein-list"),
-                {"mode": "merged"},
+                {},
                 [
                     "order_by=-accession",
-                    "order_by=-source_proteins",
+                    "order_by=-taxon",
                 ],
             ),
             (
@@ -869,7 +865,7 @@ class BrowserViewTests(TestCase):
     def test_sequence_list_default_ordering_matches_optimize_contract(self):
         self.assertEqual(
             SequenceListView.default_ordering,
-            ("pipeline_run_id", "assembly_accession", "sequence_name", "id"),
+            ("latest_pipeline_run_id", "assembly_accession", "sequence_name", "id"),
         )
 
     def test_sequence_list_keeps_raw_rows_narrow(self):
@@ -878,7 +874,7 @@ class BrowserViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         sequence = response.context["page_obj"].object_list[0]
         self.assertIn("nucleotide_sequence", sequence.get_deferred_fields())
-        self.assertIn("pipeline_run", sequence._state.fields_cache)
+        self.assertIn("latest_pipeline_run", sequence._state.fields_cache)
         self.assertIn("taxon", sequence._state.fields_cache)
         self.assertNotIn("genome", sequence._state.fields_cache)
 
@@ -980,7 +976,7 @@ class BrowserViewTests(TestCase):
     def test_protein_list_default_ordering_matches_optimize_contract(self):
         self.assertEqual(
             ProteinListView.default_ordering,
-            ("pipeline_run_id", "accession", "protein_name", "id"),
+            ("latest_pipeline_run_id", "accession", "protein_name", "id"),
         )
 
     def test_protein_list_run_filter_uses_run_metadata_facets(self):
@@ -1007,7 +1003,7 @@ class BrowserViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         protein = response.context["page_obj"].object_list[0]
         self.assertIn("amino_acid_sequence", protein.get_deferred_fields())
-        self.assertIn("pipeline_run", protein._state.fields_cache)
+        self.assertIn("latest_pipeline_run", protein._state.fields_cache)
         self.assertIn("taxon", protein._state.fields_cache)
         self.assertNotIn("genome", protein._state.fields_cache)
 
@@ -1125,33 +1121,6 @@ class BrowserViewTests(TestCase):
         payload = response.json()
         self.assertIn("rows_html", payload)
         self.assertNotIn("count", payload)
-
-    def test_protein_list_merged_virtual_scroll_fragment_returns_rows(self):
-        response = self.client.get(
-            reverse("browser:protein-list"),
-            {"mode": "merged", "fragment": "virtual-scroll"},
-            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
-        )
-
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertIn("rows_html", payload)
-        self.assertIn("GCF_ALPHA", payload["rows_html"])
-
-    def test_protein_list_merged_branch_q_name_prefix_scopes_groups(self):
-        response = self.client.get(reverse("browser:protein-list"), {"mode": "merged", "branch_q": "Prim"})
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "GCF_ALPHA")
-        self.assertNotContains(response, "GCF_BETA")
-
-    def test_protein_list_merged_branch_q_without_matches_returns_empty_result_set(self):
-        response = self.client.get(reverse("browser:protein-list"), {"mode": "merged", "branch_q": "NoSuchTaxon"})
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "No merged protein groups matched these filters.")
-        self.assertNotContains(response, "GCF_ALPHA")
-        self.assertNotContains(response, "GCF_BETA")
 
     def test_protein_list_combined_call_filters_match_same_linked_call(self):
         matched = self._create_repeat_call(
@@ -1318,7 +1287,7 @@ class BrowserViewTests(TestCase):
         repeat_call = response.context["page_obj"].object_list[0]
         self.assertIn("aa_sequence", repeat_call.get_deferred_fields())
         self.assertIn("codon_sequence", repeat_call.get_deferred_fields())
-        self.assertIn("pipeline_run", repeat_call._state.fields_cache)
+        self.assertIn("latest_pipeline_run", repeat_call._state.fields_cache)
         self.assertIn("taxon", repeat_call._state.fields_cache)
         self.assertNotIn("genome", repeat_call._state.fields_cache)
         self.assertNotIn("protein", repeat_call._state.fields_cache)
@@ -1340,7 +1309,7 @@ class BrowserViewTests(TestCase):
     def test_repeatcall_list_default_ordering_matches_optimize_contract(self):
         self.assertEqual(
             RepeatCallListView.default_ordering,
-            ("pipeline_run_id", "accession", "protein_name", "start", "id"),
+            ("latest_pipeline_run_id", "accession", "protein_name", "start", "id"),
         )
 
     def test_repeatcall_list_uses_cursor_pagination_for_raw_results(self):
@@ -1360,7 +1329,7 @@ class BrowserViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         first_page = response.context["page_obj"]
-        first_ids = [repeat_call.call_id for repeat_call in first_page.object_list]
+        first_ids = [repeat_call.source_call_id for repeat_call in first_page.object_list]
         self.assertTrue(first_page.cursor_pagination)
         self.assertTrue(first_page.has_next())
         self.assertIn("after=", first_page.next_query)
@@ -1369,7 +1338,7 @@ class BrowserViewTests(TestCase):
 
         self.assertEqual(next_response.status_code, 200)
         second_page = next_response.context["page_obj"]
-        second_ids = [repeat_call.call_id for repeat_call in second_page.object_list]
+        second_ids = [repeat_call.source_call_id for repeat_call in second_page.object_list]
         self.assertTrue(second_page.has_previous())
         self.assertTrue(set(first_ids).isdisjoint(second_ids))
 
@@ -1430,21 +1399,6 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, "order_by=-purity")
         self.assertContains(response, "order_by=-run")
 
-    def test_repeatcall_list_merged_renders_sort_links_for_all_visible_headers(self):
-        response = self.client.get(reverse("browser:repeatcall-list"), {"mode": "merged"})
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "order_by=-accession")
-        self.assertContains(response, "order_by=-protein_name")
-        self.assertContains(response, "order_by=-gene_symbol")
-        self.assertContains(response, "order_by=-method")
-        self.assertContains(response, "order_by=-coordinates")
-        self.assertContains(response, "order_by=-residue")
-        self.assertContains(response, "order_by=-length")
-        self.assertContains(response, "order_by=-purity")
-        self.assertContains(response, "order_by=-source_rows")
-        self.assertContains(response, "order_by=-run")
-
     def test_repeatcall_list_virtual_scroll_fragment_returns_rows(self):
         response = self.client.get(
             reverse("browser:repeatcall-list"),
@@ -1474,18 +1428,6 @@ class BrowserViewTests(TestCase):
         self.assertEqual(payload["row_count"], 1)
         self.assertNotIn("count", payload)
         self.assertEqual(payload["next_query"], "")
-
-    def test_repeatcall_list_merged_virtual_scroll_fragment_returns_rows(self):
-        response = self.client.get(
-            reverse("browser:repeatcall-list"),
-            {"mode": "merged", "fragment": "virtual-scroll"},
-            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
-        )
-
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertIn("rows_html", payload)
-        self.assertIn("GCF_ALPHA", payload["rows_html"])
 
     def test_repeatcall_detail_shows_linked_parents_and_coordinates(self):
         matched = self._create_repeat_call(

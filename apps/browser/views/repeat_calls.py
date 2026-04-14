@@ -1,14 +1,15 @@
 from importlib import import_module
 
-from django.db.models import Q
+from django.http import Http404
 from django.urls import reverse
-from django.views.generic import DetailView
+from django.views.generic import TemplateView
 
-from ..merged import materialize_merged_repeat_call_groups, merged_repeat_call_group_queryset
-from ..models import PipelineRun, RepeatCall
+from ..models import CanonicalRepeatCall, PipelineRun, RepeatCall
+from .canonical_entities import (
+    build_canonical_repeat_call_detail_context,
+    scoped_canonical_repeat_calls,
+)
 from .filters import (
-    _apply_branch_scope_filter,
-    _resolve_browser_mode,
     _resolve_branch_scope,
     _resolve_current_run,
     _resolve_genome_filter,
@@ -16,7 +17,7 @@ from .filters import (
     _resolve_sequence_filter,
     _update_branch_scope_context,
 )
-from .formatting import _ordering_label, _parse_float, _parse_positive_int, _sort_dict_records
+from .formatting import _parse_float, _parse_positive_int
 from .navigation import _url_with_query
 from .pagination import VirtualScrollListView
 
@@ -29,88 +30,40 @@ def resolve_browser_facets(*, pipeline_run=None, pipeline_runs=None):
 
 
 class RepeatCallListView(VirtualScrollListView):
-    model = RepeatCall
+    model = CanonicalRepeatCall
     template_name = "browser/repeatcall_list.html"
     context_object_name = "repeat_calls"
     virtual_scroll_row_template_name = "browser/includes/repeatcall_list_rows.html"
     virtual_scroll_colspan = 10
-    merged_ordering_map = {
-        "accession": ("accession", "protein_name", "start", "end"),
-        "-accession": ("-accession", "protein_name", "start", "end"),
-        "protein_name": ("protein_name", "accession", "start", "end"),
-        "-protein_name": ("-protein_name", "accession", "start", "end"),
-        "gene_symbol": ("gene_symbol_label", "protein_name", "accession", "start"),
-        "-gene_symbol": ("-gene_symbol_label", "protein_name", "accession", "start"),
-        "method": ("method", "accession", "protein_name", "start"),
-        "-method": ("-method", "accession", "protein_name", "start"),
-        "coordinates": ("start", "end", "accession", "protein_name"),
-        "-coordinates": ("-start", "-end", "accession", "protein_name"),
-        "residue": ("repeat_residue", "accession", "protein_name", "start"),
-        "-residue": ("-repeat_residue", "accession", "protein_name", "start"),
-        "length": ("length", "accession", "protein_name", "start"),
-        "-length": ("-length", "accession", "protein_name", "start"),
-        "purity": ("normalized_purity", "accession", "protein_name", "start"),
-        "-purity": ("-normalized_purity", "accession", "protein_name", "start"),
-        "source_rows": ("scoped_source_count", "accession", "protein_name", "start"),
-        "-source_rows": ("-scoped_source_count", "accession", "protein_name", "start"),
-        "run": ("scoped_source_runs_count", "accession", "protein_name", "start"),
-        "-run": ("-scoped_source_runs_count", "accession", "protein_name", "start"),
-    }
-    merged_default_ordering = ("accession", "protein_name", "start", "end", "method")
     ordering_map = {
-        "call_id": ("pipeline_run__run_id", "call_id"),
-        "-call_id": ("pipeline_run__run_id", "-call_id"),
-        "protein_name": ("pipeline_run__run_id", "protein_name", "accession", "start", "call_id"),
-        "-protein_name": ("pipeline_run__run_id", "-protein_name", "accession", "start", "call_id"),
-        "gene_symbol": ("pipeline_run__run_id", "gene_symbol", "accession", "protein_name", "start", "call_id"),
-        "-gene_symbol": ("pipeline_run__run_id", "-gene_symbol", "accession", "protein_name", "start", "call_id"),
-        "genome": ("pipeline_run__run_id", "accession", "protein_name", "start", "call_id"),
-        "-genome": ("pipeline_run__run_id", "-accession", "protein_name", "start", "call_id"),
-        "taxon": ("pipeline_run__run_id", "taxon__taxon_name", "accession", "protein_name", "start", "call_id"),
-        "-taxon": ("pipeline_run__run_id", "-taxon__taxon_name", "accession", "protein_name", "start", "call_id"),
-        "method": ("method", "pipeline_run__run_id", "accession", "protein_name", "start", "call_id"),
-        "-method": ("-method", "pipeline_run__run_id", "accession", "protein_name", "start", "call_id"),
-        "residue": ("repeat_residue", "pipeline_run__run_id", "accession", "protein_name", "start", "call_id"),
-        "-residue": ("-repeat_residue", "pipeline_run__run_id", "accession", "protein_name", "start", "call_id"),
-        "length": ("length", "pipeline_run__run_id", "accession", "protein_name", "start", "call_id"),
-        "-length": ("-length", "pipeline_run__run_id", "accession", "protein_name", "start", "call_id"),
-        "purity": ("purity", "pipeline_run__run_id", "accession", "protein_name", "start", "call_id"),
-        "-purity": ("-purity", "pipeline_run__run_id", "accession", "protein_name", "start", "call_id"),
-        "run": ("pipeline_run__run_id", "accession", "protein_name", "start", "call_id"),
-        "-run": ("-pipeline_run__run_id", "accession", "protein_name", "start", "call_id"),
+        "call_id": ("latest_pipeline_run__run_id", "source_call_id", "id"),
+        "-call_id": ("latest_pipeline_run__run_id", "-source_call_id", "id"),
+        "protein_name": ("latest_pipeline_run__run_id", "protein_name", "accession", "start", "id"),
+        "-protein_name": ("latest_pipeline_run__run_id", "-protein_name", "accession", "start", "id"),
+        "gene_symbol": ("latest_pipeline_run__run_id", "gene_symbol", "accession", "protein_name", "start", "id"),
+        "-gene_symbol": ("latest_pipeline_run__run_id", "-gene_symbol", "accession", "protein_name", "start", "id"),
+        "genome": ("latest_pipeline_run__run_id", "accession", "protein_name", "start", "id"),
+        "-genome": ("latest_pipeline_run__run_id", "-accession", "protein_name", "start", "id"),
+        "taxon": ("latest_pipeline_run__run_id", "taxon__taxon_name", "accession", "protein_name", "start", "id"),
+        "-taxon": ("latest_pipeline_run__run_id", "-taxon__taxon_name", "accession", "protein_name", "start", "id"),
+        "method": ("method", "latest_pipeline_run__run_id", "accession", "protein_name", "start", "id"),
+        "-method": ("-method", "latest_pipeline_run__run_id", "accession", "protein_name", "start", "id"),
+        "residue": ("repeat_residue", "latest_pipeline_run__run_id", "accession", "protein_name", "start", "id"),
+        "-residue": ("-repeat_residue", "latest_pipeline_run__run_id", "accession", "protein_name", "start", "id"),
+        "length": ("length", "latest_pipeline_run__run_id", "accession", "protein_name", "start", "id"),
+        "-length": ("-length", "latest_pipeline_run__run_id", "accession", "protein_name", "start", "id"),
+        "purity": ("purity", "latest_pipeline_run__run_id", "accession", "protein_name", "start", "id"),
+        "-purity": ("-purity", "latest_pipeline_run__run_id", "accession", "protein_name", "start", "id"),
+        "run": ("latest_pipeline_run__run_id", "accession", "protein_name", "start", "id"),
+        "-run": ("-latest_pipeline_run__run_id", "accession", "protein_name", "start", "id"),
     }
-    default_ordering = ("pipeline_run_id", "accession", "protein_name", "start", "id")
+    default_ordering = ("latest_pipeline_run_id", "accession", "protein_name", "start", "id")
 
-    def get_base_queryset(self):
-        return (
-            RepeatCall.objects.select_related("pipeline_run", "taxon")
-            .defer(
-                "aa_sequence",
-                "codon_sequence",
-            )
-            .only(
-                "id",
-                "pipeline_run_id",
-                "pipeline_run__id",
-                "pipeline_run__run_id",
-                "genome_id",
-                "protein_id",
-                "taxon_id",
-                "taxon__id",
-                "taxon__taxon_name",
-                "call_id",
-                "method",
-                "accession",
-                "gene_symbol",
-                "protein_name",
-                "protein_length",
-                "start",
-                "end",
-                "length",
-                "repeat_residue",
-                "purity",
-            )
-        )
+    def include_virtual_scroll_count(self, *, context=None, page_obj=None):
+        return False
+
+    def use_cursor_pagination(self, queryset):
+        return hasattr(queryset, "filter") and self.uses_fast_default_ordering()
 
     def _load_filter_state(self):
         self.current_run = _resolve_current_run(self.request)
@@ -127,126 +80,34 @@ class RepeatCallListView(VirtualScrollListView):
         self.current_genome = self.request.GET.get("genome", "").strip()
         self.current_sequence = self.request.GET.get("sequence", "").strip()
         self.current_protein = self.request.GET.get("protein", "").strip()
-        self.current_mode = _resolve_browser_mode(self.request)
-
-    def use_cursor_pagination(self, queryset):
-        return self.current_mode == "run" and hasattr(queryset, "filter") and self.uses_fast_default_ordering()
-
-    def include_virtual_scroll_count(self, *, context=None, page_obj=None):
-        return getattr(self, "current_mode", "run") != "run"
-
-    def apply_search(self, queryset):
-        query = self.get_search_query()
-        if not query:
-            return queryset
-
-        return queryset.filter(
-            Q(call_id__istartswith=query)
-            | Q(accession__istartswith=query)
-            | Q(protein_name__istartswith=query)
-            | Q(gene_symbol__istartswith=query)
-        )
-
-    def apply_filters(self, queryset):
-        self._load_filter_state()
-
-        if self.current_run:
-            queryset = queryset.filter(pipeline_run=self.current_run)
-
-        queryset = _apply_branch_scope_filter(queryset, branch_scope=self.branch_scope, field_name="taxon_id")
-
-        if self.current_accession:
-            queryset = queryset.filter(accession__istartswith=self.current_accession)
-
-        if self.current_genome:
-            queryset = queryset.filter(genome__genome_id=self.current_genome)
-
-        if self.current_sequence:
-            queryset = queryset.filter(sequence__sequence_id=self.current_sequence)
-
-        if self.current_protein:
-            queryset = queryset.filter(protein__protein_id=self.current_protein)
-
-        if self.current_method:
-            queryset = queryset.filter(method=self.current_method)
-
-        if self.current_residue:
-            queryset = queryset.filter(repeat_residue=self.current_residue)
-
-        if self.current_gene_symbol:
-            queryset = queryset.filter(gene_symbol__istartswith=self.current_gene_symbol)
-
-        length_min = _parse_positive_int(self.current_length_min)
-        if length_min is not None:
-            queryset = queryset.filter(length__gte=length_min)
-
-        length_max = _parse_positive_int(self.current_length_max)
-        if length_max is not None:
-            queryset = queryset.filter(length__lte=length_max)
-
-        purity_min = _parse_float(self.current_purity_min)
-        if purity_min is not None:
-            queryset = queryset.filter(purity__gte=purity_min)
-
-        purity_max = _parse_float(self.current_purity_max)
-        if purity_max is not None:
-            queryset = queryset.filter(purity__lte=purity_max)
-
-        return queryset
 
     def get_queryset(self):
         self._load_filter_state()
-        if self.current_mode == "merged":
-            queryset = merged_repeat_call_group_queryset(
-                current_run=self.current_run,
-                branch_taxon=self.selected_branch_taxon,
-                branch_taxa_ids=self.branch_scope["branch_taxa_ids"],
-                search_query=self.get_search_query(),
-                gene_symbol=self.current_gene_symbol,
-                accession_query=self.current_accession,
-                genome_id=self.current_genome,
-                protein_id=self.current_protein,
-                method=self.current_method,
-                residue=self.current_residue,
-                length_min=self.current_length_min,
-                length_max=self.current_length_max,
-                purity_min=self.current_purity_min,
-                purity_max=self.current_purity_max,
-            )
-            requested_ordering = self.request.GET.get("order_by", "").strip()
-            ordering = self.merged_ordering_map.get(requested_ordering, self.merged_default_ordering)
-            return queryset.order_by(*ordering, "id")
-        return super().get_queryset()
+        queryset = scoped_canonical_repeat_calls(
+            current_run=self.current_run,
+            search_query=self.get_search_query(),
+            accession_query=self.current_accession,
+            gene_symbol=self.current_gene_symbol,
+            genome_id=self.current_genome,
+            sequence_id=self.current_sequence,
+            protein_id=self.current_protein,
+            branch_taxa_ids=self.branch_scope["branch_taxa_ids"],
+            method=self.current_method,
+            residue=self.current_residue,
+            length_min=_parse_positive_int(self.current_length_min),
+            length_max=_parse_positive_int(self.current_length_max),
+            purity_min=_parse_float(self.current_purity_min),
+            purity_max=_parse_float(self.current_purity_max),
+        )
+        ordering = self.get_ordering()
+        if ordering:
+            queryset = queryset.order_by(*ordering)
+        return queryset
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        if self.is_virtual_scroll_fragment_request() and getattr(self, "current_mode", "run") == "run":
+        if self.is_virtual_scroll_fragment_request():
             return context
-        if getattr(self, "current_mode", "run") == "merged":
-            page_obj = context.get("page_obj")
-            page_summaries = list(getattr(page_obj, "object_list", []))
-            merged_groups = materialize_merged_repeat_call_groups(
-                page_summaries,
-                current_run=getattr(self, "current_run", None),
-                branch_taxon=getattr(self, "selected_branch_taxon", None),
-                branch_taxa_ids=getattr(self, "branch_scope", {}).get("branch_taxa_ids"),
-                search_query=self.get_search_query(),
-                gene_symbol=getattr(self, "current_gene_symbol", ""),
-                accession_query=getattr(self, "current_accession", ""),
-                genome_id=getattr(self, "current_genome", ""),
-                protein_id=getattr(self, "current_protein", ""),
-                method=getattr(self, "current_method", ""),
-                residue=getattr(self, "current_residue", ""),
-                length_min=getattr(self, "current_length_min", ""),
-                length_max=getattr(self, "current_length_max", ""),
-                purity_min=getattr(self, "current_purity_min", ""),
-                purity_max=getattr(self, "current_purity_max", ""),
-                provenance_preview_limit=2,
-            )
-            if page_obj is not None:
-                page_obj.object_list = merged_groups
-            context["object_list"] = merged_groups
-            context[self.context_object_name] = merged_groups
         current_run = getattr(self, "current_run", None)
         run_choices = PipelineRun.objects.order_by("-imported_at", "run_id")
         facet_choices = resolve_browser_facets(
@@ -256,7 +117,6 @@ class RepeatCallListView(VirtualScrollListView):
 
         context["current_run"] = current_run
         context["current_run_id"] = current_run.run_id if current_run else ""
-        context["current_mode"] = getattr(self, "current_mode", "run")
         context["run_choices"] = run_choices
         _update_branch_scope_context(context, getattr(self, "branch_scope", _resolve_branch_scope(self.request)))
         context["current_accession"] = getattr(self, "current_accession", "")
@@ -275,38 +135,88 @@ class RepeatCallListView(VirtualScrollListView):
         context["selected_protein"] = _resolve_protein_filter(current_run, context["current_protein"])
         context["method_choices"] = facet_choices["methods"]
         context["residue_choices"] = facet_choices["residues"]
-        if context["current_mode"] == "merged":
-            context["sort_links"] = self.build_sort_links(
-                self.merged_ordering_map,
-                current_order_by=context["current_order_by"],
-            )
-            context["ordering_options"] = [
-                {"value": value, "label": _ordering_label(value)}
-                for value in self.merged_ordering_map.keys()
-            ]
         return context
 
 
-class RepeatCallDetailView(DetailView):
-    model = RepeatCall
+class RepeatCallDetailView(TemplateView):
     template_name = "browser/repeatcall_detail.html"
-    context_object_name = "repeat_call"
 
-    def get_queryset(self):
-        return RepeatCall.objects.select_related("pipeline_run", "genome", "sequence", "protein", "taxon")
+    def _resolve_identity(self):
+        raw_repeat_call = (
+            RepeatCall.objects.select_related("sequence", "protein")
+            .only(
+                "accession",
+                "sequence__sequence_id",
+                "protein__protein_id",
+                "method",
+                "repeat_residue",
+                "start",
+                "end",
+            )
+            .filter(pk=self.kwargs["pk"])
+            .first()
+        )
+        if raw_repeat_call is not None:
+            return {
+                "accession": raw_repeat_call.accession,
+                "sequence_id": raw_repeat_call.sequence.sequence_id,
+                "protein_id": raw_repeat_call.protein.protein_id,
+                "method": raw_repeat_call.method,
+                "repeat_residue": raw_repeat_call.repeat_residue,
+                "start": raw_repeat_call.start,
+                "end": raw_repeat_call.end,
+            }
+
+        canonical_repeat_call = (
+            CanonicalRepeatCall.objects.select_related("sequence", "protein")
+            .only(
+                "accession",
+                "sequence__sequence_id",
+                "protein__protein_id",
+                "method",
+                "repeat_residue",
+                "start",
+                "end",
+            )
+            .filter(pk=self.kwargs["pk"])
+            .first()
+        )
+        if canonical_repeat_call is not None:
+            return {
+                "accession": canonical_repeat_call.accession,
+                "sequence_id": canonical_repeat_call.sequence.sequence_id,
+                "protein_id": canonical_repeat_call.protein.protein_id,
+                "method": canonical_repeat_call.method,
+                "repeat_residue": canonical_repeat_call.repeat_residue,
+                "start": canonical_repeat_call.start,
+                "end": canonical_repeat_call.end,
+            }
+
+        raise Http404("No repeat call found for the requested identifier.")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        repeat_call = self.object
+        identity = self._resolve_identity()
+
+        try:
+            detail_context = build_canonical_repeat_call_detail_context(**identity)
+        except CanonicalRepeatCall.DoesNotExist as exc:
+            raise Http404(str(exc)) from exc
+
+        repeat_call = detail_context["repeat_call"]
+        latest_repeat_call = repeat_call.latest_repeat_call
+        context.update(detail_context)
         context["taxon_detail_url"] = _url_with_query(
             reverse("browser:taxon-detail", args=[repeat_call.taxon.pk]),
-            run=repeat_call.pipeline_run.run_id,
+            run=repeat_call.latest_pipeline_run.run_id,
         )
         context["repeatcall_list_url"] = _url_with_query(
             reverse("browser:repeatcall-list"),
-            run=repeat_call.pipeline_run.run_id,
+            run=repeat_call.latest_pipeline_run.run_id,
             protein=repeat_call.protein.protein_id,
         )
-        context["sequence_detail_url"] = reverse("browser:sequence-detail", args=[repeat_call.sequence.pk])
-        context["run_detail_url"] = reverse("browser:run-detail", args=[repeat_call.pipeline_run.pk])
+        context["sequence_detail_url"] = reverse("browser:sequence-detail", args=[latest_repeat_call.sequence_id])
+        context["run_detail_url"] = reverse("browser:run-detail", args=[repeat_call.latest_pipeline_run.pk])
+        context["protein_detail_url"] = reverse("browser:protein-detail", args=[latest_repeat_call.protein_id])
+        context["genome_detail_url"] = reverse("browser:genome-detail", args=[latest_repeat_call.genome_id])
         return context

@@ -1,15 +1,15 @@
 {% for sequence in sequences %}
   <tr data-virtual-row="1">
-    <td><a href="{% url 'browser:sequence-detail' sequence.pk %}">{{ sequence.sequence_name }}</a></td>
+    <td><a href="{% url 'browser:sequence-detail' sequence.latest_source_sequence_pk %}">{{ sequence.sequence_name }}</a></td>
     <td>{{ sequence.gene_symbol|default:"-" }}</td>
-    <td><a href="{% url 'browser:genome-detail' sequence.genome_id %}">{{ sequence.assembly_accession|default:"-" }}</a></td>
+    <td><a href="{% url 'browser:genome-detail' sequence.latest_source_genome_pk %}">{{ sequence.assembly_accession|default:"-" }}</a></td>
     <td>
-      <a href="{% url 'browser:taxon-detail' sequence.taxon_id %}?run={{ sequence.pipeline_run.run_id|urlencode }}">
+      <a href="{% url 'browser:taxon-detail' sequence.taxon_id %}?run={{ sequence.latest_pipeline_run.run_id|urlencode }}">
         {{ sequence.taxon.taxon_name }}
       </a>
     </td>
-    <td><a href="{% url 'browser:run-detail' sequence.pipeline_run_id %}">{{ sequence.pipeline_run.run_id }}</a></td>
-    <td><a href="{% url 'browser:protein-list' %}?run={{ sequence.pipeline_run.run_id|urlencode }}&amp;sequence={{ sequence.sequence_id|urlencode }}">{{ sequence.proteins_count }}</a></td>
-    <td><a href="{% url 'browser:repeatcall-list' %}?run={{ sequence.pipeline_run.run_id|urlencode }}&amp;sequence={{ sequence.sequence_id|urlencode }}">{{ sequence.repeat_calls_count }}</a></td>
+    <td><a href="{% url 'browser:run-detail' sequence.latest_pipeline_run_id %}">{{ sequence.latest_pipeline_run.run_id }}</a></td>
+    <td><a href="{% url 'browser:protein-list' %}?run={{ sequence.latest_pipeline_run.run_id|urlencode }}&amp;sequence={{ sequence.sequence_id|urlencode }}">{{ sequence.proteins_count }}</a></td>
+    <td><a href="{% url 'browser:repeatcall-list' %}?run={{ sequence.latest_pipeline_run.run_id|urlencode }}&amp;sequence={{ sequence.sequence_id|urlencode }}">{{ sequence.repeat_calls_count }}</a></td>
   </tr>
 {% endfor %}

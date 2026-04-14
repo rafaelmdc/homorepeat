@@ -7,31 +7,22 @@
 <section class="landing-band mb-4">
   <div class="landing-band-shell">
     <div class="landing-copy">
-      <span class="section-kicker mb-3">Repeat calls</span>
-      <h1 class="landing-title mb-3">Run-aware browsing over canonical repeat-call records.</h1>
+      <span class="section-kicker mb-3">Current repeat calls</span>
+      <h1 class="landing-title mb-3">Canonical repeat-call browsing over the current catalog.</h1>
       <p class="landing-lead mb-0">
-        Combine lineage, method, residue, gene, tract length, and purity filters and
-        jump directly to the linked protein, genome, sequence, and taxon records.
+        Combine lineage, method, residue, gene, tract length, and purity filters and move directly to the linked
+        protein, genome, sequence, and taxon records for the current canonical call set.
       </p>
     </div>
     <aside class="landing-aside">
       <p class="sheet-label">Current scope</p>
       <p class="mb-2">
-        {% if current_mode == "merged" %}
-          {% if current_run %}
-            Run <strong>{{ current_run.run_id }}</strong>{% if branch_scope_active %}, {{ branch_scope_noun }} <strong>{{ branch_scope_label }}</strong>{% endif %}, using merged residue groups.
-          {% elif branch_scope_active %}
-            {{ branch_scope_noun|title }} <strong>{{ branch_scope_label }}</strong> across merged residue groups.
-          {% else %}
-            Browsing merged residue groups across imported runs.
-          {% endif %}
-          Representative evidence links below are convenience backlinks to raw rows, not canonical merged truth.
-        {% elif current_run %}
-          Run <strong>{{ current_run.run_id }}</strong>{% if branch_scope_active %}, {{ branch_scope_noun }} <strong>{{ branch_scope_label }}</strong>{% endif %}.
+        {% if current_run %}
+          Latest state imported by run <strong>{{ current_run.run_id }}</strong>{% if branch_scope_active %}, {{ branch_scope_noun }} <strong>{{ branch_scope_label }}</strong>{% endif %}.
         {% elif branch_scope_active %}
-          {{ branch_scope_noun|title }} <strong>{{ branch_scope_label }}</strong> across imported repeat calls.
+          {{ branch_scope_noun|title }} <strong>{{ branch_scope_label }}</strong> across canonical repeat calls.
         {% else %}
-          Browsing all imported repeat-call records.
+          Browsing all canonical repeat-call records.
         {% endif %}
       </p>
       {% if selected_genome %}
@@ -64,7 +55,6 @@
     {% if current_protein %}
       <input type="hidden" name="protein" value="{{ current_protein }}">
     {% endif %}
-    <input type="hidden" name="mode" value="{{ current_mode }}">
     {% if current_order_by %}
       <input type="hidden" name="order_by" value="{{ current_order_by }}">
     {% endif %}
@@ -73,7 +63,7 @@
       <input class="form-control" id="id_q" type="text" name="q" value="{{ current_query }}" placeholder="Call, protein, or accession prefix">
     </div>
     <div class="col-md-4 col-lg-2">
-      <label class="form-label" for="id_run">Run</label>
+      <label class="form-label" for="id_run">Latest run</label>
       <select class="form-select" id="id_run" name="run">
         <option value="">All runs</option>
         {% for pipeline_run in run_choices %}
@@ -128,16 +118,9 @@
       <input class="form-control" id="id_purity_max" type="number" min="0" max="1" step="0.01" name="purity_max" value="{{ current_purity_max }}">
     </div>
     <div class="col-12">
-      <div class="filter-toolbar">
-        <div class="mode-switch">
-          <span class="mode-switch-label">Mode</span>
-          <button class="btn {% if current_mode == 'run' %}btn-primary{% else %}btn-outline-secondary{% endif %}" type="submit" name="mode" value="run">Run</button>
-          <button class="btn {% if current_mode == 'merged' %}btn-primary{% else %}btn-outline-secondary{% endif %}" type="submit" name="mode" value="merged">Merged</button>
-        </div>
-        <div class="filter-actions">
-          <button class="btn btn-primary" type="submit">Apply</button>
-          <a class="btn btn-outline-secondary" href="{% url 'browser:repeatcall-list' %}{% if current_mode == 'merged' %}?mode=merged{% endif %}">Reset</a>
-        </div>
+      <div class="filter-actions">
+        <button class="btn btn-primary" type="submit">Apply</button>
+        <a class="btn btn-outline-secondary" href="{% url 'browser:repeatcall-list' %}">Reset</a>
       </div>
     </div>
   </form>
@@ -146,11 +129,8 @@
 <section class="surface-card surface-card-wide" {% if virtual_scroll_enabled %}data-virtual-scroll-surface{% endif %}>
   <div class="section-header">
     <div>
-      <p class="section-kicker mb-2">{% if current_mode == "merged" %}Merged residue inventory{% else %}Repeat-call inventory{% endif %}</p>
-      <h2>
-        {{ page_obj.paginator.count }}
-        {% if current_mode == "merged" %}residue unit{{ page_obj.paginator.count|pluralize }}{% else %}repeat call{{ page_obj.paginator.count|pluralize }}{% endif %}
-      </h2>
+      <p class="section-kicker mb-2">Current repeat-call inventory</p>
+      <h2>{{ page_obj.paginator.count }} repeat call{{ page_obj.paginator.count|pluralize }}</h2>
     </div>
   </div>
 
@@ -169,46 +149,25 @@
   <div class="table-responsive">
     <table class="table align-middle mb-0 data-table">
       <thead>
-        {% if current_mode == "merged" %}
-          <tr>
-            {% include "browser/includes/sortable_th.html" with label="Accession" header=sort_links.accession %}
-            {% include "browser/includes/sortable_th.html" with label="Protein" header=sort_links.protein_name %}
-            {% include "browser/includes/sortable_th.html" with label="Gene" header=sort_links.gene_symbol %}
-            {% include "browser/includes/sortable_th.html" with label="Methods" header=sort_links.method %}
-            {% include "browser/includes/sortable_th.html" with label="Coordinates" header=sort_links.coordinates %}
-            {% include "browser/includes/sortable_th.html" with label="Residue" header=sort_links.residue %}
-            {% include "browser/includes/sortable_th.html" with label="Lengths" header=sort_links.length %}
-            {% include "browser/includes/sortable_th.html" with label="Purity" header=sort_links.purity %}
-            {% include "browser/includes/sortable_th.html" with label="Source rows" header=sort_links.source_rows %}
-            {% include "browser/includes/sortable_th.html" with label="Source runs" header=sort_links.run %}
-          </tr>
-        {% else %}
-          <tr>
-            {% include "browser/includes/sortable_th.html" with label="Call" header=sort_links.call_id %}
-            {% include "browser/includes/sortable_th.html" with label="Protein" header=sort_links.protein_name %}
-            {% include "browser/includes/sortable_th.html" with label="Gene" header=sort_links.gene_symbol %}
-            {% include "browser/includes/sortable_th.html" with label="Genome" header=sort_links.genome %}
-            {% include "browser/includes/sortable_th.html" with label="Taxon" header=sort_links.taxon %}
-            {% include "browser/includes/sortable_th.html" with label="Method" header=sort_links.method %}
-            {% include "browser/includes/sortable_th.html" with label="Residue" header=sort_links.residue %}
-            {% include "browser/includes/sortable_th.html" with label="Length" header=sort_links.length %}
-            {% include "browser/includes/sortable_th.html" with label="Purity" header=sort_links.purity %}
-            {% include "browser/includes/sortable_th.html" with label="Run" header=sort_links.run %}
-          </tr>
-        {% endif %}
+        <tr>
+          {% include "browser/includes/sortable_th.html" with label="Call" header=sort_links.call_id %}
+          {% include "browser/includes/sortable_th.html" with label="Protein" header=sort_links.protein_name %}
+          {% include "browser/includes/sortable_th.html" with label="Gene" header=sort_links.gene_symbol %}
+          {% include "browser/includes/sortable_th.html" with label="Genome" header=sort_links.genome %}
+          {% include "browser/includes/sortable_th.html" with label="Taxon" header=sort_links.taxon %}
+          {% include "browser/includes/sortable_th.html" with label="Method" header=sort_links.method %}
+          {% include "browser/includes/sortable_th.html" with label="Residue" header=sort_links.residue %}
+          {% include "browser/includes/sortable_th.html" with label="Length" header=sort_links.length %}
+          {% include "browser/includes/sortable_th.html" with label="Purity" header=sort_links.purity %}
+          {% include "browser/includes/sortable_th.html" with label="Latest run" header=sort_links.run %}
+        </tr>
       </thead>
       <tbody {% if virtual_scroll_enabled %}data-virtual-scroll-body{% endif %}>
         {% if repeat_calls %}
           {% include "browser/includes/repeatcall_list_rows.html" %}
         {% else %}
           <tr>
-            <td colspan="10" class="empty-cell">
-              {% if current_mode == "merged" %}
-                No merged residue groups matched these filters.
-              {% else %}
-                No repeat calls matched these filters.
-              {% endif %}
-            </td>
+            <td colspan="10" class="empty-cell">No canonical repeat calls matched these filters.</td>
           </tr>
         {% endif %}
       </tbody>
