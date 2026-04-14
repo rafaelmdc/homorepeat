@@ -36,17 +36,18 @@ Verified branch facts:
 - merged behavior is still a first-class product path via `mode=merged` on the
   existing list and detail pages
 - merged serving tables still exist in `apps/browser/models/merged.py`
-- import completion still enters `ImportPhase.SUMMARIZING_MERGED`
-- `apps/imports/services/import_run/api.py` still rebuilds merged summary rows
-  before batch completion and still analyzes the merged summary models
-- `backfill_merged_summaries` still exists as the rebuild command for existing
-  imported runs
+- import completion now enters `ImportPhase.CATALOG_SYNC`
+- `apps/imports/services/import_run/api.py` now syncs canonical catalog rows
+  before batch completion and analyzes the canonical serving models
+- `backfill_canonical_catalog` exists as the active backfill command for
+  existing imported runs
+- `backfill_merged_summaries` remains only as an explicit legacy/debug command
 - `PipelineRun`, `ImportBatch`, and the current run-scoped biological models
   remain the only stored scientific entities the browser reads directly
 
 Current next slice:
 
-- `1.1` define and migrate the canonical catalog schema
+- `3.1` move accession and genome pages to canonical reads
 
 ## Phase 1: Canonical Catalog Contract
 

@@ -200,13 +200,20 @@ class BrowserMetadataTests(TestCase):
             rebuild_merged=False,
         )
         stdout = StringIO()
+        stderr = StringIO()
 
         self.assertEqual(MergedProteinSummary.objects.count(), 0)
         self.assertEqual(MergedResidueSummary.objects.count(), 0)
         self.assertEqual(MergedProteinOccurrence.objects.count(), 0)
         self.assertEqual(MergedResidueOccurrence.objects.count(), 0)
 
-        call_command("backfill_merged_summaries", run_id="run-merged-backfill", stdout=stdout)
+        call_command(
+            "backfill_merged_summaries",
+            run_id="run-merged-backfill",
+            legacy_allow=True,
+            stdout=stdout,
+            stderr=stderr,
+        )
 
         self.assertEqual(MergedProteinSummary.objects.count(), 1)
         self.assertEqual(MergedResidueSummary.objects.count(), 1)
@@ -217,6 +224,7 @@ class BrowserMetadataTests(TestCase):
         self.assertIn("Backfilled run-merged-backfill", stdout.getvalue())
         self.assertIn("updated: 1", stdout.getvalue())
         self.assertIn("skipped: 0", stdout.getvalue())
+        self.assertIn("Use backfill_canonical_catalog", stderr.getvalue())
 
     def test_backfill_merged_summaries_command_skips_existing_run_without_force(self):
         create_imported_run_fixture(
@@ -228,10 +236,23 @@ class BrowserMetadataTests(TestCase):
             accession="GCF_MERGED_SKIP",
             taxon_key="human",
         )
-        call_command("backfill_merged_summaries", run_id="run-merged-skip")
+        call_command(
+            "backfill_merged_summaries",
+            run_id="run-merged-skip",
+            legacy_allow=True,
+            stdout=StringIO(),
+            stderr=StringIO(),
+        )
         stdout = StringIO()
+        stderr = StringIO()
 
-        call_command("backfill_merged_summaries", run_id="run-merged-skip", stdout=stdout)
+        call_command(
+            "backfill_merged_summaries",
+            run_id="run-merged-skip",
+            legacy_allow=True,
+            stdout=stdout,
+            stderr=stderr,
+        )
 
         self.assertEqual(MergedProteinSummary.objects.count(), 1)
         self.assertEqual(MergedResidueSummary.objects.count(), 1)
@@ -240,6 +261,7 @@ class BrowserMetadataTests(TestCase):
         self.assertIn("Skipped run-merged-skip", stdout.getvalue())
         self.assertIn("updated: 0", stdout.getvalue())
         self.assertIn("skipped: 1", stdout.getvalue())
+        self.assertIn("Use backfill_canonical_catalog", stderr.getvalue())
 
     def test_backfill_merged_summaries_command_force_rebuilds_rows(self):
         fixture = create_imported_run_fixture(
@@ -251,7 +273,13 @@ class BrowserMetadataTests(TestCase):
             accession="GCF_MERGED_FORCE",
             taxon_key="human",
         )
-        call_command("backfill_merged_summaries", run_id="run-merged-force")
+        call_command(
+            "backfill_merged_summaries",
+            run_id="run-merged-force",
+            legacy_allow=True,
+            stdout=StringIO(),
+            stderr=StringIO(),
+        )
 
         repeat_call = fixture["repeat_call"]
         repeat_call.method = RunParameter.Method.THRESHOLD
@@ -266,8 +294,16 @@ class BrowserMetadataTests(TestCase):
         accession_call_count.repeat_residue = "A"
         accession_call_count.save(update_fields=["method", "repeat_residue"])
         stdout = StringIO()
+        stderr = StringIO()
 
-        call_command("backfill_merged_summaries", run_id="run-merged-force", force=True, stdout=stdout)
+        call_command(
+            "backfill_merged_summaries",
+            run_id="run-merged-force",
+            force=True,
+            legacy_allow=True,
+            stdout=stdout,
+            stderr=stderr,
+        )
 
         self.assertEqual(MergedProteinSummary.objects.count(), 1)
         self.assertEqual(MergedResidueSummary.objects.count(), 1)
@@ -278,7 +314,21 @@ class BrowserMetadataTests(TestCase):
         self.assertEqual(MergedResidueSummary.objects.get().repeat_residue, "A")
         self.assertIn("Backfilled run-merged-force", stdout.getvalue())
         self.assertIn("updated: 1", stdout.getvalue())
+        self.assertIn("Use backfill_canonical_catalog", stderr.getvalue())
 
     def test_backfill_merged_summaries_command_errors_for_missing_run(self):
         with self.assertRaises(CommandError):
-            call_command("backfill_merged_summaries", run_id="no-such-run")
+            call_command(
+                "backfill_merged_summaries",
+                run_id="no-such-run",
+                legacy_allow=True,
+                stdout=StringIO(),
+                stderr=StringIO(),
+            )
+
+    def test_backfill_merged_summaries_command_requires_explicit_legacy_allow(self):
+        with self.assertRaises(CommandError) as exc_info:
+            call_command("backfill_merged_summaries", run_id="run-any")
+
+        self.assertIn("legacy merged-only workflow", str(exc_info.exception))
+        self.assertIn("backfill_canonical_catalog", str(exc_info.exception))

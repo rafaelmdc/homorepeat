@@ -4,8 +4,17 @@ from apps.browser.merged.build import backfill_merged_summaries_for_run
 from apps.browser.models import PipelineRun
 
 
+LEGACY_MERGED_BACKFILL_MESSAGE = (
+    "backfill_merged_summaries is a legacy merged-only workflow. "
+    "Use backfill_canonical_catalog for the active operator path."
+)
+
+
 class Command(BaseCommand):
-    help = "Backfill merged summary and occurrence rows for existing imported runs."
+    help = (
+        "Legacy: rebuild merged summary and occurrence rows for stage-2 cleanup/debug only. "
+        "Prefer backfill_canonical_catalog."
+    )
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -17,8 +26,21 @@ class Command(BaseCommand):
             action="store_true",
             help="Rebuild merged summaries even if run-scoped occurrences already exist.",
         )
+        parser.add_argument(
+            "--legacy-allow",
+            action="store_true",
+            help="Acknowledge that this merged-only command is legacy and run it anyway.",
+        )
 
     def handle(self, *args, **options):
+        if not options.get("legacy_allow"):
+            raise CommandError(
+                f"{LEGACY_MERGED_BACKFILL_MESSAGE} "
+                "Re-run with --legacy-allow only if you explicitly need merged rows."
+            )
+
+        self.stderr.write(self.style.WARNING(LEGACY_MERGED_BACKFILL_MESSAGE))
+
         queryset = PipelineRun.objects.order_by("run_id")
         run_id = (options.get("run_id") or "").strip()
         if run_id:
