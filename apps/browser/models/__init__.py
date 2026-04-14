@@ -1,4 +1,10 @@
 from .base import TimestampedModel
+from .canonical import (
+    CanonicalGenome,
+    CanonicalProtein,
+    CanonicalRepeatCall,
+    CanonicalSequence,
+)
 from .runs import AcquisitionBatch, PipelineRun
 from .taxonomy import Taxon, TaxonClosure
 from .genomes import Genome, Protein, Sequence
@@ -20,6 +26,10 @@ __all__ = [
     "AccessionCallCount",
     "AccessionStatus",
     "AcquisitionBatch",
+    "CanonicalGenome",
+    "CanonicalProtein",
+    "CanonicalRepeatCall",
+    "CanonicalSequence",
     "DownloadManifestEntry",
     "Genome",
     "MergedProteinOccurrence",
