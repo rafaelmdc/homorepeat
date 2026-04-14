@@ -5,8 +5,8 @@ from django.urls import reverse
 from ..models import (
     AccessionCallCount,
     AccessionStatus,
+    CanonicalGenome,
     DownloadManifestEntry,
-    Genome,
     NormalizationWarning,
     PipelineRun,
     Protein,
@@ -54,9 +54,9 @@ def _browser_directory_sections():
                 ),
                 _nav_item(
                     "Genomes",
-                    "Accession-aware genome rows linked to taxa, runs, proteins, and calls.",
+                    "Current canonical genome catalog with links back to latest-run evidence.",
                     url_name="browser:genome-list",
-                    count=Genome.objects.count(),
+                    count=CanonicalGenome.objects.count(),
                 ),
                 _nav_item(
                     "Sequences",
@@ -79,14 +79,14 @@ def _browser_directory_sections():
             ],
         },
         {
-            "title": "Derived and merged",
-            "description": "Use the collapsed cross-run layer when accession-group analysis is the main task.",
+            "title": "Current catalog",
+            "description": "Current accession records with imported observations still visible as provenance.",
             "items": [
                 _nav_item(
-                    "Merged accession analytics",
-                    "Derived accession groups, collapsed calls, and denominator-safe merged percentages.",
+                    "Accessions",
+                    "Canonical accession records with current counts and supporting import history.",
                     url_name="browser:accession-list",
-                    count=Genome.objects.exclude(accession="").order_by().values("accession").distinct().count(),
+                    count=CanonicalGenome.objects.count(),
                 ),
             ],
         },

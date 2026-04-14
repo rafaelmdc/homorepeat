@@ -1,27 +1,26 @@
 {% extends "base.html" %}
 
-{% block title %}Merged Accession Analytics{% endblock %}
+{% block title %}Accessions{% endblock %}
 {% block body_class %}accession-list-page{% endblock %}
 
 {% block content %}
 <section class="landing-band mb-4">
   <div class="landing-band-shell">
     <div class="landing-copy">
-      <span class="section-kicker mb-3">Merged accession analytics</span>
-      <h1 class="landing-title mb-3">Derived merged summaries over accession groups, protein units, and residue-specific units.</h1>
+      <span class="section-kicker mb-3">Current accessions</span>
+      <h1 class="landing-title mb-3">Canonical accession records with import provenance kept visible.</h1>
       <p class="landing-lead mb-0">
-        This page summarizes the merged layer directly: accession groups are derived by shared accession,
-        protein counts deduplicate on accession plus protein ID, residue counts deduplicate on accession plus protein ID plus residue,
-        and percentages use only conflict-safe analyzed-protein denominators.
+        Current canonical state comes first on this page. Each row represents the current canonical accession state. Supporting imported genome rows and runs stay visible as provenance,
+        but the counts on this page describe the current catalog rather than merged cross-run collapse.
       </p>
     </div>
     <aside class="landing-aside">
       <p class="sheet-label">Current scope</p>
       <p class="mb-2">
         {% if current_run %}
-          Run <strong>{{ current_run.run_id }}</strong>
+          Latest state imported by run <strong>{{ current_run.run_id }}</strong>
         {% else %}
-          All imported runs
+          Latest state across all imported runs
         {% endif %}
       </p>
       <p class="mb-0">
@@ -31,12 +30,6 @@
           All taxonomy branches
         {% endif %}
       </p>
-      {% if summary.excluded_residue_identity_repeat_calls_count %}
-        <p class="mt-2 mb-0">
-          {{ summary.excluded_residue_identity_repeat_calls_count }} raw call{{ summary.excluded_residue_identity_repeat_calls_count|pluralize }}
-          excluded from residue-unit counts because merged identity keys were incomplete.
-        </p>
-      {% endif %}
     </aside>
   </div>
 </section>
@@ -51,7 +44,7 @@
       <input class="form-control" id="id_q" type="text" name="q" value="{{ current_query }}" placeholder="Accession or genome name">
     </div>
     <div class="col-md-6 col-lg-3">
-      <label class="form-label" for="id_run">Run</label>
+      <label class="form-label" for="id_run">Latest run</label>
       <select class="form-select" id="id_run" name="run">
         <option value="">All runs</option>
         {% for run in run_choices %}
@@ -76,53 +69,36 @@
   <div class="col-sm-6 col-xl-3">
     <article class="card h-100 border-0 shadow-sm stat-card">
       <div class="card-body">
-        <p class="text-uppercase text-secondary small mb-2">Accession groups</p>
+        <p class="text-uppercase text-secondary small mb-2">Canonical accessions</p>
         <p class="display-5 fw-semibold mb-3">{{ summary.accession_groups_count }}</p>
-        <p class="text-secondary mb-0">{{ summary.source_genomes_count }} source genome row{{ summary.source_genomes_count|pluralize }} across {{ summary.source_runs_count }} run{{ summary.source_runs_count|pluralize }}.</p>
+        <p class="text-secondary mb-0">{{ summary.source_genomes_count }} imported genome row{{ summary.source_genomes_count|pluralize }} still support these accessions across {{ summary.source_runs_count }} run{{ summary.source_runs_count|pluralize }}.</p>
       </div>
     </article>
   </div>
   <div class="col-sm-6 col-xl-3">
     <article class="card h-100 border-0 shadow-sm stat-card">
       <div class="card-body">
-        <p class="text-uppercase text-secondary small mb-2">Residue units</p>
-        <a class="display-5 fw-semibold mb-3 d-inline-block text-decoration-none" href="{% url 'browser:repeatcall-list' %}?mode=merged{% if current_run_id %}&amp;run={{ current_run_id|urlencode }}{% endif %}{% if current_branch_q %}&amp;branch_q={{ current_branch_q|urlencode }}{% elif current_branch %}&amp;branch={{ current_branch|urlencode }}{% endif %}">{{ summary.collapsed_repeat_calls_count }}</a>
-        <p class="text-secondary mb-0">
-          {{ summary.duplicate_source_repeat_calls_count }} duplicate source call{{ summary.duplicate_source_repeat_calls_count|pluralize }} removed from
-          {{ summary.source_repeat_calls_count }} raw call{{ summary.source_repeat_calls_count|pluralize }}.
-          {% if summary.excluded_residue_identity_repeat_calls_count %}
-            {{ summary.excluded_residue_identity_repeat_calls_count }} raw call{{ summary.excluded_residue_identity_repeat_calls_count|pluralize }}
-            excluded instead of being treated as duplicates.
-          {% endif %}
-        </p>
+        <p class="text-uppercase text-secondary small mb-2">Current repeat calls</p>
+        <p class="display-5 fw-semibold mb-3">{{ summary.current_repeat_calls_count }}</p>
+        <p class="text-secondary mb-0">Current canonical repeat-call rows attached to the filtered accession set.</p>
       </div>
     </article>
   </div>
   <div class="col-sm-6 col-xl-3">
     <article class="card h-100 border-0 shadow-sm stat-card">
       <div class="card-body">
-        <p class="text-uppercase text-secondary small mb-2">Repeat-bearing proteins</p>
-        <a class="display-5 fw-semibold mb-3 d-inline-block text-decoration-none" href="{% url 'browser:protein-list' %}?mode=merged{% if current_run_id %}&amp;run={{ current_run_id|urlencode }}{% endif %}{% if current_branch_q %}&amp;branch_q={{ current_branch_q|urlencode }}{% elif current_branch %}&amp;branch={{ current_branch|urlencode }}{% endif %}">{{ summary.merged_repeat_bearing_proteins_count }}</a>
-        <p class="text-secondary mb-0">
-          {% if summary.repeat_bearing_protein_percentage is not None %}
-            {{ summary.safe_repeat_bearing_proteins_count }} / {{ summary.analyzed_proteins_total }} = {{ summary.repeat_bearing_protein_percentage|floatformat:2 }}% across conflict-safe accessions.
-          {% else %}
-            Percentage withheld because no conflict-safe analyzed-protein denominator is available.
-          {% endif %}
-          {% if summary.excluded_protein_identity_repeat_calls_count %}
-            {{ summary.excluded_protein_identity_repeat_calls_count }} raw call{{ summary.excluded_protein_identity_repeat_calls_count|pluralize }}
-            with missing accession or protein ID stayed visible only in raw evidence views.
-          {% endif %}
-        </p>
+        <p class="text-uppercase text-secondary small mb-2">Current proteins</p>
+        <p class="display-5 fw-semibold mb-3">{{ summary.current_proteins_count }}</p>
+        <p class="text-secondary mb-0">Canonical proteins retained in the current catalog for these accessions.</p>
       </div>
     </article>
   </div>
   <div class="col-sm-6 col-xl-3">
     <article class="card h-100 border-0 shadow-sm stat-card">
       <div class="card-body">
-        <p class="text-uppercase text-secondary small mb-2">Denominator conflicts</p>
-        <p class="display-5 fw-semibold mb-3">{{ summary.conflict_accessions_count }}</p>
-        <p class="text-secondary mb-0">{{ summary.safe_accessions_count }} accession group{{ summary.safe_accessions_count|pluralize }} currently contribute to merged percentages.</p>
+        <p class="text-uppercase text-secondary small mb-2">Current sequences</p>
+        <p class="display-5 fw-semibold mb-3">{{ summary.current_sequences_count }}</p>
+        <p class="text-secondary mb-0">Canonical sequence rows currently linked to these accessions.</p>
       </div>
     </article>
   </div>
@@ -133,7 +109,7 @@
     <div class="surface-card surface-card-wide h-100">
       <div class="section-header">
         <div>
-          <p class="section-kicker mb-2">Residue units</p>
+          <p class="section-kicker mb-2">Current repeat calls</p>
           <h2>By method</h2>
         </div>
       </div>
@@ -142,18 +118,18 @@
           <thead>
             <tr>
               <th>Method</th>
-              <th>Collapsed calls</th>
+              <th>Current calls</th>
             </tr>
           </thead>
           <tbody>
             {% for row in summary.method_summary %}
               <tr>
                 <td>{{ row.label }}</td>
-                <td><a href="{% url 'browser:repeatcall-list' %}?mode=merged{% if current_run_id %}&amp;run={{ current_run_id|urlencode }}{% endif %}{% if current_branch_q %}&amp;branch_q={{ current_branch_q|urlencode }}{% elif current_branch %}&amp;branch={{ current_branch|urlencode }}{% endif %}&amp;method={{ row.label|urlencode }}">{{ row.count }}</a></td>
+                <td>{{ row.count }}</td>
               </tr>
             {% empty %}
               <tr>
-                <td colspan="2" class="empty-cell">No merged residue units matched these filters.</td>
+                <td colspan="2" class="empty-cell">No canonical repeat calls matched these filters.</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -165,7 +141,7 @@
     <div class="surface-card surface-card-wide h-100">
       <div class="section-header">
         <div>
-          <p class="section-kicker mb-2">Residue units</p>
+          <p class="section-kicker mb-2">Current repeat calls</p>
           <h2>By residue</h2>
         </div>
       </div>
@@ -174,18 +150,18 @@
           <thead>
             <tr>
               <th>Residue</th>
-              <th>Collapsed calls</th>
+              <th>Current calls</th>
             </tr>
           </thead>
           <tbody>
             {% for row in summary.residue_summary %}
               <tr>
                 <td>{{ row.label }}</td>
-                <td><a href="{% url 'browser:repeatcall-list' %}?mode=merged{% if current_run_id %}&amp;run={{ current_run_id|urlencode }}{% endif %}{% if current_branch_q %}&amp;branch_q={{ current_branch_q|urlencode }}{% elif current_branch %}&amp;branch={{ current_branch|urlencode }}{% endif %}&amp;residue={{ row.label|urlencode }}">{{ row.count }}</a></td>
+                <td>{{ row.count }}</td>
               </tr>
             {% empty %}
               <tr>
-                <td colspan="2" class="empty-cell">No merged residue units matched these filters.</td>
+                <td colspan="2" class="empty-cell">No canonical repeat calls matched these filters.</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -198,8 +174,8 @@
 <section class="surface-card surface-card-wide" {% if virtual_scroll_enabled %}data-virtual-scroll-surface{% endif %}>
   <div class="section-header">
     <div>
-      <p class="section-kicker mb-2">Supporting accession table</p>
-      <h2>{{ page_obj.paginator.count }} accession group{{ page_obj.paginator.count|pluralize }}</h2>
+      <p class="section-kicker mb-2">Accession inventory</p>
+      <h2>{{ page_obj.paginator.count }} accession{{ page_obj.paginator.count|pluralize }}</h2>
     </div>
   </div>
 
@@ -220,11 +196,10 @@
       <thead>
         <tr>
           {% include "browser/includes/sortable_th.html" with label="Accession" header=sort_links.accession %}
-          {% include "browser/includes/sortable_th.html" with label="Source genomes" header=sort_links.genomes %}
-          {% include "browser/includes/sortable_th.html" with label="Source runs" header=sort_links.runs %}
-          {% include "browser/includes/sortable_th.html" with label="Raw calls" header=sort_links.calls %}
-          {% include "browser/includes/sortable_th.html" with label="Residue units" header=sort_links.collapsed_calls %}
-          {% include "browser/includes/sortable_th.html" with label="Derived proteins" header=sort_links.derived_proteins %}
+          {% include "browser/includes/sortable_th.html" with label="Imported observations" header=sort_links.genomes %}
+          {% include "browser/includes/sortable_th.html" with label="Supporting runs" header=sort_links.runs %}
+          {% include "browser/includes/sortable_th.html" with label="Current repeat calls" header=sort_links.calls %}
+          {% include "browser/includes/sortable_th.html" with label="Current proteins" header=sort_links.proteins %}
           {% include "browser/includes/sortable_th.html" with label="Analyzed proteins" header=sort_links.analyzed_proteins %}
         </tr>
       </thead>
@@ -233,7 +208,7 @@
           {% include "browser/includes/accession_list_rows.html" %}
         {% else %}
           <tr>
-            <td colspan="7" class="empty-cell">No merged accession groups matched these filters.</td>
+            <td colspan="6" class="empty-cell">No canonical accessions matched these filters.</td>
           </tr>
         {% endif %}
       </tbody>

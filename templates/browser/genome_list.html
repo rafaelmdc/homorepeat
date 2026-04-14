@@ -7,32 +7,22 @@
 <section class="landing-band mb-4">
   <div class="landing-band-shell">
     <div class="landing-copy">
-      <span class="section-kicker mb-3">Genomes</span>
-      <h1 class="landing-title mb-3">Accession-aware genome browsing across imported runs.</h1>
+      <span class="section-kicker mb-3">Current genomes</span>
+      <h1 class="landing-title mb-3">Canonical genome browsing with the latest run and historical observations kept explicit.</h1>
       <p class="landing-lead mb-0">
-        Filter genomes by run, branch, accession, or genome name and keep the
-        taxonomic lineage and run provenance explicit. Sequence and protein counts
-        reflect the call-linked subset stored for browsing, while full raw inventories
-        remain on run and batch provenance.
+        Genome rows now represent the current canonical catalog. Sequence, protein, and repeat-call counts come from the current accession state,
+        while detail pages keep the imported run history and supporting genome rows visible.
       </p>
     </div>
     <aside class="landing-aside">
       <p class="sheet-label">Current scope</p>
       <p class="mb-0">
-        {% if current_mode == "merged" %}
-          {% if current_run %}
-            Run <strong>{{ current_run.run_id }}</strong>{% if branch_scope_active %}, {{ branch_scope_noun }} <strong>{{ branch_scope_label }}</strong>{% endif %}, using merged accession groups.
-          {% elif branch_scope_active %}
-            {{ branch_scope_noun|title }} <strong>{{ branch_scope_label }}</strong> across merged accession groups.
-          {% else %}
-            Browsing merged accession groups across imported genomes.
-          {% endif %}
-        {% elif current_run %}
-          Run <strong>{{ current_run.run_id }}</strong>{% if branch_scope_active %}, {{ branch_scope_noun }} <strong>{{ branch_scope_label }}</strong>{% endif %}.
+        {% if current_run %}
+          Latest state imported by run <strong>{{ current_run.run_id }}</strong>{% if branch_scope_active %}, {{ branch_scope_noun }} <strong>{{ branch_scope_label }}</strong>{% endif %}.
         {% elif branch_scope_active %}
-          {{ branch_scope_noun|title }} <strong>{{ branch_scope_label }}</strong> across imported genomes.
+          {{ branch_scope_noun|title }} <strong>{{ branch_scope_label }}</strong> across canonical genomes.
         {% else %}
-          Browsing all imported genome records.
+          Browsing the current canonical genome catalog.
         {% endif %}
       </p>
     </aside>
@@ -41,12 +31,11 @@
 
 <section class="filter-card mb-4">
   <form class="row g-3 align-items-end" method="get">
-    <input type="hidden" name="mode" value="{{ current_mode }}">
     {% if current_order_by %}
       <input type="hidden" name="order_by" value="{{ current_order_by }}">
     {% endif %}
     <div class="col-md-4 col-lg-3">
-      <label class="form-label" for="id_run">Run</label>
+      <label class="form-label" for="id_run">Latest run</label>
       <select class="form-select" id="id_run" name="run">
         <option value="">All runs</option>
         {% for pipeline_run in run_choices %}
@@ -67,16 +56,9 @@
       <input class="form-control" id="id_genome_name" type="text" name="genome_name" value="{{ current_genome_name }}" placeholder="Genome name">
     </div>
     <div class="col-12">
-      <div class="filter-toolbar">
-        <div class="mode-switch">
-          <span class="mode-switch-label">Mode</span>
-          <button class="btn {% if current_mode == 'run' %}btn-primary{% else %}btn-outline-secondary{% endif %}" type="submit" name="mode" value="run">Run</button>
-          <button class="btn {% if current_mode == 'merged' %}btn-primary{% else %}btn-outline-secondary{% endif %}" type="submit" name="mode" value="merged">Merged</button>
-        </div>
-        <div class="filter-actions">
-          <button class="btn btn-primary" type="submit">Apply</button>
-          <a class="btn btn-outline-secondary" href="{% url 'browser:genome-list' %}{% if current_mode == 'merged' %}?mode=merged{% endif %}">Reset</a>
-        </div>
+      <div class="filter-actions">
+        <button class="btn btn-primary" type="submit">Apply</button>
+        <a class="btn btn-outline-secondary" href="{% url 'browser:genome-list' %}">Reset</a>
       </div>
     </div>
   </form>
@@ -85,11 +67,8 @@
 <section class="surface-card surface-card-wide" {% if virtual_scroll_enabled %}data-virtual-scroll-surface{% endif %}>
   <div class="section-header">
     <div>
-      <p class="section-kicker mb-2">{% if current_mode == "merged" %}Merged accession inventory{% else %}Genome inventory{% endif %}</p>
-      <h2>
-        {{ page_obj.paginator.count }}
-        {% if current_mode == "merged" %}accession group{{ page_obj.paginator.count|pluralize }}{% else %}genome{{ page_obj.paginator.count|pluralize }}{% endif %}
-      </h2>
+      <p class="section-kicker mb-2">Genome inventory</p>
+      <h2>{{ page_obj.paginator.count }} genome{{ page_obj.paginator.count|pluralize }}</h2>
     </div>
   </div>
 
@@ -108,38 +87,22 @@
   <div class="table-responsive">
     <table class="table align-middle mb-0 data-table">
       <thead>
-        {% if current_mode == "merged" %}
-          <tr>
-            {% include "browser/includes/sortable_th.html" with label="Accession" header=sort_links.accession %}
-            {% include "browser/includes/sortable_th.html" with label="Source genomes" header=sort_links.source_genomes %}
-            {% include "browser/includes/sortable_th.html" with label="Source runs" header=sort_links.source_runs %}
-            {% include "browser/includes/sortable_th.html" with label="Raw repeat calls" header=sort_links.raw_repeat_calls %}
-            {% include "browser/includes/sortable_th.html" with label="Analyzed proteins" header=sort_links.analyzed_proteins %}
-          </tr>
-        {% else %}
-          <tr>
-            {% include "browser/includes/sortable_th.html" with label="Accession" header=sort_links.accession %}
-            {% include "browser/includes/sortable_th.html" with label="Genome" header=sort_links.genome_name %}
-            {% include "browser/includes/sortable_th.html" with label="Taxon" header=sort_links.taxon %}
-            {% include "browser/includes/sortable_th.html" with label="Run" header=sort_links.run %}
-            {% include "browser/includes/sortable_th.html" with label="Sequences" header=sort_links.sequences %}
-            {% include "browser/includes/sortable_th.html" with label="Proteins" header=sort_links.proteins %}
-            {% include "browser/includes/sortable_th.html" with label="Repeat calls" header=sort_links.repeat_calls %}
-          </tr>
-        {% endif %}
+        <tr>
+          {% include "browser/includes/sortable_th.html" with label="Accession" header=sort_links.accession %}
+          {% include "browser/includes/sortable_th.html" with label="Genome" header=sort_links.genome_name %}
+          {% include "browser/includes/sortable_th.html" with label="Taxon" header=sort_links.taxon %}
+          {% include "browser/includes/sortable_th.html" with label="Latest run" header=sort_links.run %}
+          {% include "browser/includes/sortable_th.html" with label="Sequences" header=sort_links.sequences %}
+          {% include "browser/includes/sortable_th.html" with label="Proteins" header=sort_links.proteins %}
+          {% include "browser/includes/sortable_th.html" with label="Repeat calls" header=sort_links.repeat_calls %}
+        </tr>
       </thead>
       <tbody {% if virtual_scroll_enabled %}data-virtual-scroll-body{% endif %}>
         {% if genomes %}
           {% include "browser/includes/genome_list_rows.html" %}
         {% else %}
           <tr>
-            <td colspan="{% if current_mode == 'merged' %}5{% else %}7{% endif %}" class="empty-cell">
-              {% if current_mode == "merged" %}
-                No merged accession groups matched these filters.
-              {% else %}
-                No genomes matched these filters.
-              {% endif %}
-            </td>
+            <td colspan="7" class="empty-cell">No canonical genomes matched these filters.</td>
           </tr>
         {% endif %}
       </tbody>

@@ -546,10 +546,15 @@ class BrowserViewTests(TestCase):
         response = self.client.get(reverse("browser:accession-list"), {"run": "run-alpha"})
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, f"{reverse('browser:repeatcall-list')}?mode=merged&amp;accession=GCF_ALPHA&amp;run=run-alpha")
-        self.assertContains(response, f"{reverse('browser:protein-list')}?mode=merged&amp;accession=GCF_ALPHA&amp;run=run-alpha")
-        self.assertContains(response, "method=pure")
-        self.assertContains(response, "accession=GCF_ALPHA")
+        self.assertContains(
+            response,
+            f"{reverse('browser:repeatcall-list')}?run=run-alpha&amp;genome=genome_alpha",
+        )
+        self.assertContains(
+            response,
+            f"{reverse('browser:protein-list')}?run=run-alpha&amp;genome=genome_alpha",
+        )
+        self.assertContains(response, "Current canonical state")
 
     def test_sort_headers_render_across_browser_lists(self):
         cases = [
@@ -560,7 +565,6 @@ class BrowserViewTests(TestCase):
             (reverse("browser:downloadmanifest-list"), {}),
             (reverse("browser:taxon-list"), {}),
             (reverse("browser:genome-list"), {}),
-            (reverse("browser:genome-list"), {"mode": "merged"}),
             (reverse("browser:sequence-list"), {}),
             (reverse("browser:protein-list"), {}),
             (reverse("browser:protein-list"), {"mode": "merged"}),
@@ -645,12 +649,11 @@ class BrowserViewTests(TestCase):
             ),
             (
                 reverse("browser:genome-list"),
-                {"mode": "merged"},
+                {},
                 [
-                    "order_by=-source_genomes",
-                    "order_by=-source_runs",
-                    "order_by=-raw_repeat_calls",
-                    "order_by=-analyzed_proteins",
+                    "order_by=-taxon",
+                    "order_by=-sequences",
+                    "order_by=-repeat_calls",
                 ],
             ),
             (
@@ -658,14 +661,6 @@ class BrowserViewTests(TestCase):
                 {},
                 [
                     "order_by=-genome",
-                    "order_by=-taxon",
-                ],
-            ),
-            (
-                reverse("browser:protein-list"),
-                {},
-                [
-                    "order_by=-accession",
                     "order_by=-taxon",
                 ],
             ),
@@ -681,8 +676,8 @@ class BrowserViewTests(TestCase):
                 reverse("browser:accession-list"),
                 {},
                 [
-                    "order_by=-collapsed_calls",
-                    "order_by=-derived_proteins",
+                    "order_by=-calls",
+                    "order_by=-proteins",
                     "order_by=-analyzed_proteins",
                 ],
             ),
@@ -856,9 +851,12 @@ class BrowserViewTests(TestCase):
         response = self.client.get(reverse("browser:accession-detail", args=["GCF_ALPHA"]))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Open source proteins")
-        self.assertContains(response, f"{reverse('browser:protein-list')}?accession=GCF_ALPHA")
-        self.assertContains(response, f"{reverse('browser:repeatcall-list')}?accession=GCF_ALPHA")
+        self.assertContains(response, "Open current proteins")
+        self.assertContains(response, f"{reverse('browser:protein-list')}?run=run-alpha&amp;genome=genome_alpha")
+        self.assertContains(
+            response,
+            f"{reverse('browser:repeatcall-list')}?run=run-alpha&amp;genome=genome_alpha",
+        )
 
     def test_sequence_list_run_filter_scopes_results(self):
         response = self.client.get(reverse("browser:sequence-list"), {"run": "run-alpha"})
@@ -1310,11 +1308,7 @@ class BrowserViewTests(TestCase):
         self.assertNotContains(response, "GCF_BETA")
         self.assertContains(
             response,
-            f'{reverse("browser:genome-list")}?accession=GCF_ALPHA&amp;branch_q=Prim',
-        )
-        self.assertContains(
-            response,
-            f'{reverse("browser:protein-list")}?mode=merged&amp;accession=GCF_ALPHA&amp;branch_q=Prim',
+            f'{reverse("browser:protein-list")}?run=run-alpha&amp;genome=genome_alpha&amp;branch_q=Prim',
         )
 
     def test_repeatcall_list_keeps_raw_rows_narrow(self):

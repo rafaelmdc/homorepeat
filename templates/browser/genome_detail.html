@@ -10,23 +10,23 @@
       <span class="section-kicker mb-3">Genome</span>
       <h1 class="landing-title mb-3">{{ genome.accession }}</h1>
       <p class="landing-lead mb-3">
-        {{ genome.genome_name }}{% if genome.species_name %} for <strong>{{ genome.species_name }}</strong>{% endif %},
-        imported in run <strong>{{ genome.pipeline_run.run_id }}</strong>.
+        Current canonical genome record for {{ genome.genome_name }}{% if genome.species_name %} in <strong>{{ genome.species_name }}</strong>{% endif %},
+        last imported by run <strong>{{ genome.latest_pipeline_run.run_id }}</strong>.
       </p>
       <div class="d-flex flex-wrap gap-2">
-        <a class="btn btn-outline-dark" href="{% url 'browser:genome-list' %}?run={{ genome.pipeline_run.run_id|urlencode }}">Back to genomes</a>
+        <a class="btn btn-outline-dark" href="{% url 'browser:genome-list' %}">Back to genomes</a>
         <a class="btn btn-outline-dark" href="{{ run_detail_url }}">Open run</a>
         <a class="btn btn-brand" href="{{ taxon_detail_url }}">Open taxon branch</a>
         <a class="btn btn-outline-dark" href="{{ sequence_browser_url }}">Open sequences</a>
-        <a class="btn btn-outline-secondary" href="{{ merged_accession_url }}">Open accession analytics</a>
+        <a class="btn btn-outline-dark" href="{{ accession_detail_url }}">Open accession record</a>
       </div>
     </div>
     <aside class="landing-aside">
       <p class="sheet-label">At a glance</p>
       <p class="mb-2">{{ genome.analyzed_protein_count }} analyzed protein{{ genome.analyzed_protein_count|pluralize }}</p>
-      <p class="mb-2">{{ sequences_count }} repeat-linked sequence{{ sequences_count|pluralize }}</p>
-      <p class="mb-2">{{ proteins_count }} repeat-bearing protein{{ proteins_count|pluralize }}</p>
-      <p class="mb-0">{{ repeat_calls_count }} repeat call{{ repeat_calls_count|pluralize }}</p>
+      <p class="mb-2">{{ current_sequences_count }} current sequence{{ current_sequences_count|pluralize }}</p>
+      <p class="mb-2">{{ current_proteins_count }} current protein{{ current_proteins_count|pluralize }}</p>
+      <p class="mb-0">{{ current_repeat_calls_count }} current repeat call{{ current_repeat_calls_count|pluralize }}</p>
     </aside>
   </div>
 </section>
@@ -34,7 +34,7 @@
 <section class="row g-4 mb-4">
   <div class="col-lg-6">
     <div class="surface-card info-sheet h-100">
-      <p class="sheet-label">Metadata</p>
+      <p class="sheet-label">Current record</p>
       <dl class="info-grid">
         <dt>Accession</dt>
         <dd>{{ genome.accession }}</dd>
@@ -50,12 +50,10 @@
         <dd>{{ genome.analyzed_protein_count }}</dd>
         <dt>Taxon</dt>
         <dd><a href="{{ taxon_detail_url }}">{{ genome.taxon.taxon_name }}</a></dd>
-        <dt>Run</dt>
-        <dd><a href="{% url 'browser:run-detail' genome.pipeline_run.pk %}">{{ genome.pipeline_run.run_id }}</a></dd>
-        <dt>Merged accession</dt>
-        <dd>
-          <a href="{{ merged_accession_url }}">{{ related_accession_genomes_count }} genome row{{ related_accession_genomes_count|pluralize }} across imported runs</a>
-        </dd>
+        <dt>Latest run</dt>
+        <dd><a href="{{ run_detail_url }}">{{ genome.latest_pipeline_run.run_id }}</a></dd>
+        <dt>Latest import batch</dt>
+        <dd>{{ genome.latest_import_batch_id }}</dd>
       </dl>
     </div>
   </div>
@@ -63,18 +61,56 @@
   <div class="col-lg-6">
     <div class="surface-card info-sheet h-100">
       <p class="sheet-label">Lineage</p>
-      <div class="d-flex flex-wrap gap-2">
+      <div class="d-flex flex-wrap gap-2 mb-3">
         {% for node in lineage %}
           {% if node.ancestor.pk == genome.taxon.pk %}
             <span class="badge rounded-pill status-badge">{{ node.ancestor.taxon_name }}</span>
           {% else %}
-            <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:taxon-detail' node.ancestor.pk %}?run={{ genome.pipeline_run.run_id|urlencode }}">
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'browser:taxon-detail' node.ancestor.pk %}?run={{ genome.latest_pipeline_run.run_id|urlencode }}">
               {{ node.ancestor.taxon_name }}
             </a>
           {% endif %}
         {% endfor %}
       </div>
+      <p class="small text-secondary mb-2">Imported observations</p>
+      <p class="mb-0">{{ source_genomes_count }} genome row{{ source_genomes_count|pluralize }} across {{ source_runs_count }} run{{ source_runs_count|pluralize }} support this accession.</p>
     </div>
+  </div>
+</section>
+
+<section class="surface-card surface-card-wide mb-4">
+  <div class="section-header">
+    <div>
+      <p class="section-kicker mb-2">Imported observations</p>
+      <h2>Supporting genome rows</h2>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table align-middle mb-0 data-table">
+      <thead>
+        <tr>
+          <th>Run</th>
+          <th>Genome</th>
+          <th>Taxon</th>
+          <th>Sequences</th>
+          <th>Proteins</th>
+          <th>Repeat calls</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for source_genome in source_genomes %}
+          <tr>
+            <td><a href="{% url 'browser:run-detail' source_genome.pipeline_run.pk %}">{{ source_genome.pipeline_run.run_id }}</a></td>
+            <td><a href="{% url 'browser:genome-detail' source_genome.pk %}">{{ source_genome.genome_name }}</a></td>
+            <td><a href="{% url 'browser:taxon-detail' source_genome.taxon.pk %}?run={{ source_genome.pipeline_run.run_id|urlencode }}">{{ source_genome.taxon.taxon_name }}</a></td>
+            <td><a href="{% url 'browser:sequence-list' %}?run={{ source_genome.pipeline_run.run_id|urlencode }}&amp;genome={{ source_genome.genome_id|urlencode }}">{{ source_genome.sequences_count }}</a></td>
+            <td><a href="{% url 'browser:protein-list' %}?run={{ source_genome.pipeline_run.run_id|urlencode }}&amp;genome={{ source_genome.genome_id|urlencode }}">{{ source_genome.proteins_count }}</a></td>
+            <td><a href="{% url 'browser:repeatcall-list' %}?run={{ source_genome.pipeline_run.run_id|urlencode }}&amp;genome={{ source_genome.genome_id|urlencode }}">{{ source_genome.repeat_calls_count }}</a></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 </section>
 
@@ -83,8 +119,8 @@
     <div class="surface-card surface-card-wide h-100">
       <div class="section-header">
         <div>
-          <p class="section-kicker mb-2">Proteins</p>
-          <h2>Linked proteins</h2>
+          <p class="section-kicker mb-2">Current proteins</p>
+          <h2>Canonical protein preview</h2>
         </div>
         <a class="btn btn-outline-dark" href="{{ protein_browser_url }}">Protein browser</a>
       </div>
@@ -99,15 +135,21 @@
             </tr>
           </thead>
           <tbody>
-            {% for protein in protein_preview %}
+            {% for row in protein_preview %}
               <tr>
-                <td><a href="{% url 'browser:protein-detail' protein.pk %}">{{ protein.protein_name }}</a></td>
-                <td>{{ protein.gene_symbol|default:"-" }}</td>
-                <td>{{ protein.protein_length }}</td>
+                <td>
+                  {% if row.latest_protein %}
+                    <a href="{% url 'browser:protein-detail' row.latest_protein.pk %}">{{ row.protein.protein_name }}</a>
+                  {% else %}
+                    {{ row.protein.protein_name }}
+                  {% endif %}
+                </td>
+                <td>{{ row.protein.gene_symbol|default:"-" }}</td>
+                <td>{{ row.protein.protein_length }}</td>
               </tr>
             {% empty %}
               <tr>
-                <td colspan="3" class="empty-cell">No proteins were linked to this genome.</td>
+                <td colspan="3" class="empty-cell">No proteins are present in the current canonical record.</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -120,8 +162,8 @@
     <div class="surface-card surface-card-wide h-100">
       <div class="section-header">
         <div>
-          <p class="section-kicker mb-2">Repeat calls</p>
-          <h2>Linked repeat calls</h2>
+          <p class="section-kicker mb-2">Current repeat calls</p>
+          <h2>Canonical repeat-call preview</h2>
         </div>
         <a class="btn btn-outline-dark" href="{{ repeatcall_browser_url }}">Repeat-call browser</a>
       </div>
@@ -139,14 +181,20 @@
           <tbody>
             {% for repeat_call in repeat_call_preview %}
               <tr>
-                <td><a href="{% url 'browser:repeatcall-detail' repeat_call.pk %}">{{ repeat_call.call_id }}</a></td>
+                <td>
+                  {% if repeat_call.latest_repeat_call %}
+                    <a href="{% url 'browser:repeatcall-detail' repeat_call.latest_repeat_call.pk %}">{{ repeat_call.latest_repeat_call.call_id }}</a>
+                  {% else %}
+                    {{ repeat_call.source_call_id|default:"-" }}
+                  {% endif %}
+                </td>
                 <td>{{ repeat_call.method }}</td>
                 <td>{{ repeat_call.repeat_residue }}</td>
                 <td>{{ repeat_call.length }}</td>
               </tr>
             {% empty %}
               <tr>
-                <td colspan="4" class="empty-cell">No repeat calls were linked to this genome.</td>
+                <td colspan="4" class="empty-cell">No repeat calls are present in the current canonical record.</td>
               </tr>
             {% endfor %}
           </tbody>

@@ -261,7 +261,10 @@ def create_imported_run_fixture(
         RunParameter,
         Sequence,
     )
+    from apps.browser.catalog import sync_canonical_catalog_for_run
     from apps.browser.merged.build import rebuild_merged_summaries_for_run
+    from apps.imports.models import ImportBatch
+    from django.utils import timezone
 
     taxa = ensure_test_taxonomy()
     selected_taxon = taxa[taxon_key]
@@ -369,11 +372,24 @@ def create_imported_run_fixture(
         purity=1.0,
         aa_sequence="QQQQQQQQQQQ",
     )
+    import_batch = ImportBatch.objects.create(
+        pipeline_run=pipeline_run,
+        source_path=pipeline_run.publish_root,
+        status=ImportBatch.Status.RUNNING,
+        phase="syncing_canonical_catalog",
+        heartbeat_at=timezone.now(),
+    )
+    sync_canonical_catalog_for_run(
+        pipeline_run,
+        import_batch=import_batch,
+        last_seen_at=timezone.now(),
+    )
     if rebuild_merged:
         rebuild_merged_summaries_for_run(pipeline_run)
     return {
         "pipeline_run": pipeline_run,
         "batch": batch,
+        "import_batch": import_batch,
         "genome": genome,
         "sequence": sequence,
         "protein": protein,
