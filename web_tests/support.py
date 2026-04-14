@@ -248,6 +248,7 @@ def create_imported_run_fixture(
     accession: str,
     taxon_key: str = "human",
     genome_name: str | None = None,
+    rebuild_merged: bool = True,
 ):
     from apps.browser.models import (
         AccessionCallCount,
@@ -368,7 +369,8 @@ def create_imported_run_fixture(
         purity=1.0,
         aa_sequence="QQQQQQQQQQQ",
     )
-    rebuild_merged_summaries_for_run(pipeline_run)
+    if rebuild_merged:
+        rebuild_merged_summaries_for_run(pipeline_run)
     return {
         "pipeline_run": pipeline_run,
         "batch": batch,

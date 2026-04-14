@@ -1,9 +1,15 @@
 from datetime import timedelta
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from apps.browser.merged.build import rebuild_merged_summaries_for_run
+from apps.browser.merged.build import (
+    _global_protein_groups_by_key,
+    _global_residue_groups_by_key,
+    rebuild_merged_summaries_for_run,
+)
 from apps.browser.merged import (
     _identity_merged_protein_groups_from_repeat_calls,
     _identity_merged_residue_groups_from_repeat_calls,
@@ -30,6 +36,7 @@ class MergedHelperTests(TestCase):
         run_id,
         accession,
         protein_id,
+        pipeline_run=None,
         residue="Q",
         protein_name="SharedProtein",
         protein_length=300,
@@ -39,20 +46,22 @@ class MergedHelperTests(TestCase):
         purity=1.0,
         aa_sequence=None,
         imported_at=None,
+        rebuild=True,
     ):
         self._source_counter += 1
         suffix = str(self._source_counter)
 
-        pipeline_run = PipelineRun.objects.create(
-            run_id=run_id,
-            status="success",
-            profile="docker",
-            acquisition_publish_mode="raw",
-            git_revision="abc123",
-            manifest_path=f"/tmp/{run_id}/metadata/run_manifest.json",
-            publish_root=f"/tmp/{run_id}/publish",
-            manifest_payload={"run_id": run_id, "acquisition_publish_mode": "raw"},
-        )
+        if pipeline_run is None:
+            pipeline_run = PipelineRun.objects.create(
+                run_id=run_id,
+                status="success",
+                profile="docker",
+                acquisition_publish_mode="raw",
+                git_revision="abc123",
+                manifest_path=f"/tmp/{run_id}/metadata/run_manifest.json",
+                publish_root=f"/tmp/{run_id}/publish",
+                manifest_payload={"run_id": run_id, "acquisition_publish_mode": "raw"},
+            )
         if imported_at is not None:
             PipelineRun.objects.filter(pk=pipeline_run.pk).update(imported_at=imported_at)
             pipeline_run.imported_at = imported_at
@@ -116,7 +125,8 @@ class MergedHelperTests(TestCase):
             purity=purity,
             aa_sequence=aa_sequence,
         )
-        rebuild_merged_summaries_for_run(pipeline_run)
+        if rebuild:
+            rebuild_merged_summaries_for_run(pipeline_run)
         return repeat_call
 
     def test_protein_identity_groups_collapse_on_accession_and_protein_id(self):
@@ -339,8 +349,83 @@ class MergedHelperTests(TestCase):
         with self.assertNumQueries(2):
             residue_groups = merged_repeat_call_groups()
 
+    def test_summary_rebuild_global_queries_do_not_order_repeat_calls(self):
+        self._create_repeat_call_source(
+            run_id="run-alpha",
+            accession="GCF_SHARED",
+            protein_id="prot_shared",
+            residue="Q",
+        )
+        self._create_repeat_call_source(
+            run_id="run-beta",
+            accession="GCF_SHARED",
+            protein_id="prot_shared",
+            residue="N",
+        )
+
+        protein_key = ("GCF_SHARED", "prot_shared", RepeatCall.Method.PURE)
+        residue_key = protein_key + ("Q",)
+
+        with CaptureQueriesContext(connection) as context:
+            protein_groups = _global_protein_groups_by_key({protein_key})
+        protein_sql = "\n".join(
+            query["sql"]
+            for query in context.captured_queries
+            if "browser_repeatcall" in query["sql"]
+        )
+
+        with CaptureQueriesContext(connection) as context:
+            residue_groups = _global_residue_groups_by_key({residue_key})
+        residue_sql = "\n".join(
+            query["sql"]
+            for query in context.captured_queries
+            if "browser_repeatcall" in query["sql"]
+        )
+
+        self.assertIn("browser_repeatcall", protein_sql)
+        self.assertIn("browser_repeatcall", residue_sql)
+        self.assertNotIn("ORDER BY", protein_sql.upper())
+        self.assertNotIn("ORDER BY", residue_sql.upper())
         self.assertEqual(len(protein_groups), 1)
-        self.assertEqual(len(residue_groups), 2)
+        self.assertEqual(len(residue_groups), 1)
+
+    def test_rebuild_merged_summaries_streams_repeat_call_reads_by_accession(self):
+        alpha = self._create_repeat_call_source(
+            run_id="run-stream",
+            accession="GCF_ONE",
+            protein_id="prot_one",
+            rebuild=False,
+        )
+        self._create_repeat_call_source(
+            run_id="run-stream",
+            accession="GCF_TWO",
+            protein_id="prot_two",
+            pipeline_run=alpha.pipeline_run,
+            start=20,
+            rebuild=False,
+        )
+
+        with CaptureQueriesContext(connection) as context:
+            rebuild_merged_summaries_for_run(alpha.pipeline_run)
+
+        repeat_call_selects = [
+            query["sql"]
+            for query in context.captured_queries
+            if query["sql"].lstrip().upper().startswith("SELECT")
+            and 'FROM "BROWSER_REPEATCALL"' in query["sql"].upper()
+        ]
+        accession_reads = [
+            sql
+            for sql in repeat_call_selects
+            if '"BROWSER_REPEATCALL"."ACCESSION" =' in sql.upper()
+        ]
+
+        self.assertTrue(any("DISTINCT" in sql.upper() for sql in repeat_call_selects))
+        self.assertGreaterEqual(len(accession_reads), 4)
+        self.assertTrue(any("GCF_ONE" in sql for sql in accession_reads))
+        self.assertTrue(any("GCF_TWO" in sql for sql in accession_reads))
+        for sql in accession_reads:
+            self.assertNotIn("ORDER BY", sql.upper())
 
     def test_filter_inclusion_operates_on_matching_evidence_not_identity_keys(self):
         self._create_repeat_call_source(

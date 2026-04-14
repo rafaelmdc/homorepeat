@@ -197,6 +197,7 @@ class BrowserMetadataTests(TestCase):
             call_id="call_merged_backfill",
             accession="GCF_MERGED_BACKFILL",
             taxon_key="human",
+            rebuild_merged=False,
         )
         stdout = StringIO()
 

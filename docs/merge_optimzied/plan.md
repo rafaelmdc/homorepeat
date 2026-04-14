@@ -4,14 +4,17 @@
 
 This plan targets merged browser performance on the real `rehaul` branch.
 
-The current merged implementation is not blocked by the same issues as raw
+The original merged implementation was not blocked by the same issues as raw
 mode. Raw mode was dominated by hot ordered queries and repeated page-chrome
-work. Merged mode is still dominated by loading large `RepeatCall` querysets
-into Python, grouping them in memory, sorting the resulting dict records, and
-only then paginating and rendering them.
+work. The pre-redesign merged path was dominated by loading large `RepeatCall`
+querysets into Python, grouping them in memory, sorting the resulting dict
+records, and only then paginating and rendering them.
 
-That means the current merged cost scales with matching raw evidence, not with
-the number of rows shown on screen.
+That meant the pre-redesign merged cost scaled with matching raw evidence, not
+with the number of rows shown on screen. The current branch has now moved the
+hot merged list and summary paths onto the serving layer; see
+[reprofile-2026-04-13.md](/home/rafael/Documents/GitHub/homorepeat/docs/merge_optimzied/reprofile-2026-04-13.md)
+for the post-change profile.
 
 The recommended direction for this app is the usual database-backed serving
 pattern:

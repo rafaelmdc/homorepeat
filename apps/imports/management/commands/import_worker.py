@@ -30,7 +30,7 @@ class Command(BaseCommand):
 
         run_once = bool(options["once"])
         if run_once:
-            self._process_one_batch()
+            self._process_one_batch(raise_errors=True)
             return
 
         self.stdout.write(self.style.SUCCESS("Import worker started."))
@@ -41,11 +41,19 @@ class Command(BaseCommand):
                 continue
             sleep(poll_interval)
 
-    def _process_one_batch(self) -> bool:
+    def _process_one_batch(self, *, raise_errors: bool = False) -> bool:
         try:
             result = process_next_pending_import_batch()
         except ImportContractError as exc:
-            raise CommandError(str(exc)) from exc
+            if raise_errors:
+                raise CommandError(str(exc)) from exc
+            self.stderr.write(self.style.ERROR(str(exc)))
+            return False
+        except Exception as exc:
+            if raise_errors:
+                raise
+            self.stderr.write(self.style.ERROR(f"Import batch failed: {exc}"))
+            return False
 
         if result is None:
             self.stdout.write("No pending import batches were available.")

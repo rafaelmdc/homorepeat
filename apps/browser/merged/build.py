@@ -14,8 +14,6 @@ from apps.browser.models.runs import PipelineRun
 from .identity import (
     _identity_merged_protein_groups_from_repeat_calls,
     _identity_merged_residue_groups_from_repeat_calls,
-    _protein_identity_key,
-    _protein_residue_identity_key,
 )
 from .repeat_calls import _merged_repeat_call_queryset
 
@@ -24,18 +22,36 @@ MERGED_SUMMARY_BATCH_SIZE = 1000
 
 
 def rebuild_merged_summaries_for_run(pipeline_run: PipelineRun) -> None:
-    old_protein_keys = _existing_protein_occurrence_keys_for_run(pipeline_run)
-    old_residue_keys = _existing_residue_occurrence_keys_for_run(pipeline_run)
+    for accession in _rebuild_accessions_for_run(pipeline_run):
+        _rebuild_merged_summaries_for_accession(pipeline_run, accession)
 
-    MergedProteinOccurrence.objects.filter(pipeline_run=pipeline_run).delete()
-    MergedResidueOccurrence.objects.filter(pipeline_run=pipeline_run).delete()
 
-    run_repeat_calls = list(
-        _merged_repeat_call_queryset()
-        .filter(pipeline_run=pipeline_run)
-        .order_by("accession", "protein_name", "method", "start", "call_id")
+def _rebuild_merged_summaries_for_accession(
+    pipeline_run: PipelineRun,
+    accession: str,
+) -> None:
+    old_protein_keys = _existing_protein_occurrence_keys_for_run(
+        pipeline_run,
+        accession=accession,
+    )
+    old_residue_keys = _existing_residue_occurrence_keys_for_run(
+        pipeline_run,
+        accession=accession,
     )
 
+    MergedProteinOccurrence.objects.filter(
+        pipeline_run=pipeline_run,
+        summary__accession=accession,
+    ).delete()
+    MergedResidueOccurrence.objects.filter(
+        pipeline_run=pipeline_run,
+        summary__accession=accession,
+    ).delete()
+
+    run_repeat_calls = _source_repeat_calls_for_accession(
+        accession=accession,
+        pipeline_run=pipeline_run,
+    )
     protein_occurrence_groups = _protein_occurrence_groups_for_run(run_repeat_calls)
     residue_occurrence_groups = _residue_occurrence_groups_for_run(run_repeat_calls)
 
@@ -44,8 +60,15 @@ def rebuild_merged_summaries_for_run(pipeline_run: PipelineRun) -> None:
     touched_protein_keys = old_protein_keys | new_protein_keys
     touched_residue_keys = old_residue_keys | new_residue_keys
 
-    protein_summaries_by_key = _refresh_protein_summaries(touched_protein_keys)
-    residue_summaries_by_key = _refresh_residue_summaries(touched_residue_keys)
+    source_repeat_calls = _source_repeat_calls_for_accession(accession=accession)
+    protein_summaries_by_key = _refresh_protein_summaries(
+        touched_protein_keys,
+        source_repeat_calls=source_repeat_calls,
+    )
+    residue_summaries_by_key = _refresh_residue_summaries(
+        touched_residue_keys,
+        source_repeat_calls=source_repeat_calls,
+    )
 
     _create_protein_occurrences(
         pipeline_run,
@@ -75,9 +98,47 @@ def backfill_merged_summaries_for_run(
     return True
 
 
-def _existing_protein_occurrence_keys_for_run(pipeline_run: PipelineRun) -> set[tuple[str, str, str]]:
+def _rebuild_accessions_for_run(pipeline_run: PipelineRun) -> list[str]:
+    return sorted(
+        _current_repeat_call_accessions_for_run(pipeline_run)
+        | _existing_occurrence_accessions_for_run(pipeline_run)
+    )
+
+
+def _current_repeat_call_accessions_for_run(pipeline_run: PipelineRun) -> set[str]:
     return set(
-        MergedProteinOccurrence.objects.filter(pipeline_run=pipeline_run).values_list(
+        RepeatCall.objects.filter(pipeline_run=pipeline_run)
+        .exclude(accession="")
+        .order_by()
+        .values_list("accession", flat=True)
+        .distinct()
+    )
+
+
+def _existing_occurrence_accessions_for_run(pipeline_run: PipelineRun) -> set[str]:
+    return set(
+        MergedProteinOccurrence.objects.filter(pipeline_run=pipeline_run)
+        .order_by()
+        .values_list("summary__accession", flat=True)
+        .distinct()
+    ) | set(
+        MergedResidueOccurrence.objects.filter(pipeline_run=pipeline_run)
+        .order_by()
+        .values_list("summary__accession", flat=True)
+        .distinct()
+    )
+
+
+def _existing_protein_occurrence_keys_for_run(
+    pipeline_run: PipelineRun,
+    *,
+    accession: str | None = None,
+) -> set[tuple[str, str, str]]:
+    queryset = MergedProteinOccurrence.objects.filter(pipeline_run=pipeline_run)
+    if accession is not None:
+        queryset = queryset.filter(summary__accession=accession)
+    return set(
+        queryset.values_list(
             "summary__accession",
             "summary__protein_id",
             "summary__method",
@@ -85,9 +146,16 @@ def _existing_protein_occurrence_keys_for_run(pipeline_run: PipelineRun) -> set[
     )
 
 
-def _existing_residue_occurrence_keys_for_run(pipeline_run: PipelineRun) -> set[tuple[str, str, str, str]]:
+def _existing_residue_occurrence_keys_for_run(
+    pipeline_run: PipelineRun,
+    *,
+    accession: str | None = None,
+) -> set[tuple[str, str, str, str]]:
+    queryset = MergedResidueOccurrence.objects.filter(pipeline_run=pipeline_run)
+    if accession is not None:
+        queryset = queryset.filter(summary__accession=accession)
     return set(
-        MergedResidueOccurrence.objects.filter(pipeline_run=pipeline_run).values_list(
+        queryset.values_list(
             "summary__accession",
             "summary__protein_id",
             "summary__method",
@@ -130,11 +198,17 @@ def _residue_occurrence_groups_for_run(
 
 def _refresh_protein_summaries(
     touched_keys: set[tuple[str, str, str]],
+    *,
+    source_repeat_calls: list[RepeatCall] | None = None,
 ) -> dict[tuple[str, str, str], MergedProteinSummary]:
     if not touched_keys:
         return {}
 
-    groups_by_key = _global_protein_groups_by_key(touched_keys)
+    groups_by_key = (
+        _global_protein_groups_by_key(touched_keys)
+        if source_repeat_calls is None
+        else _protein_groups_by_key_from_repeat_calls(source_repeat_calls, keys=touched_keys)
+    )
     existing_by_key = _existing_protein_summaries_by_key(touched_keys)
     stale_keys = touched_keys - groups_by_key.keys()
     if stale_keys:
@@ -186,11 +260,17 @@ def _refresh_protein_summaries(
 
 def _refresh_residue_summaries(
     touched_keys: set[tuple[str, str, str, str]],
+    *,
+    source_repeat_calls: list[RepeatCall] | None = None,
 ) -> dict[tuple[str, str, str, str], MergedResidueSummary]:
     if not touched_keys:
         return {}
 
-    groups_by_key = _global_residue_groups_by_key(touched_keys)
+    groups_by_key = (
+        _global_residue_groups_by_key(touched_keys)
+        if source_repeat_calls is None
+        else _residue_groups_by_key_from_repeat_calls(source_repeat_calls, keys=touched_keys)
+    )
     existing_by_key = _existing_residue_summaries_by_key(touched_keys)
     stale_keys = touched_keys - groups_by_key.keys()
     if stale_keys:
@@ -250,24 +330,10 @@ def _global_protein_groups_by_key(
     if not touched_keys:
         return {}
 
-    accessions = {key[0] for key in touched_keys}
-    protein_ids = {key[1] for key in touched_keys}
-    methods = {key[2] for key in touched_keys}
-    source_repeat_calls = [
-        repeat_call
-        for repeat_call in _merged_repeat_call_queryset()
-        .filter(
-            accession__in=accessions,
-            protein__protein_id__in=protein_ids,
-            method__in=methods,
-        )
-        .order_by("accession", "protein_name", "method", "start", "call_id")
-        if _protein_identity_key(repeat_call) in touched_keys
-    ]
-    return {
-        (group["accession"], group["protein_id"], group["method"]): group
-        for group in _identity_merged_protein_groups_from_repeat_calls(source_repeat_calls)
-    }
+    source_repeat_calls: list[RepeatCall] = []
+    for accession in sorted({key[0] for key in touched_keys}):
+        source_repeat_calls.extend(_source_repeat_calls_for_accession(accession=accession))
+    return _protein_groups_by_key_from_repeat_calls(source_repeat_calls, keys=touched_keys)
 
 
 def _global_residue_groups_by_key(
@@ -276,26 +342,51 @@ def _global_residue_groups_by_key(
     if not touched_keys:
         return {}
 
-    accessions = {key[0] for key in touched_keys}
-    protein_ids = {key[1] for key in touched_keys}
-    methods = {key[2] for key in touched_keys}
-    residues = {key[3] for key in touched_keys}
-    source_repeat_calls = [
-        repeat_call
-        for repeat_call in _merged_repeat_call_queryset()
-        .filter(
-            accession__in=accessions,
-            protein__protein_id__in=protein_ids,
-            method__in=methods,
-            repeat_residue__in=residues,
-        )
-        .order_by("accession", "protein_name", "method", "start", "call_id")
-        if _protein_residue_identity_key(repeat_call) in touched_keys
-    ]
-    return {
-        (group["accession"], group["protein_id"], group["method"], group["repeat_residue"]): group
-        for group in _identity_merged_residue_groups_from_repeat_calls(source_repeat_calls)
-    }
+    source_repeat_calls: list[RepeatCall] = []
+    for accession in sorted({key[0] for key in touched_keys}):
+        source_repeat_calls.extend(_source_repeat_calls_for_accession(accession=accession))
+    return _residue_groups_by_key_from_repeat_calls(source_repeat_calls, keys=touched_keys)
+
+
+def _source_repeat_calls_for_accession(
+    *,
+    accession: str,
+    pipeline_run: PipelineRun | None = None,
+) -> list[RepeatCall]:
+    queryset = _merged_repeat_call_queryset().filter(accession=accession)
+    if pipeline_run is not None:
+        queryset = queryset.filter(pipeline_run=pipeline_run)
+    return list(queryset.order_by())
+
+
+def _protein_groups_by_key_from_repeat_calls(
+    source_repeat_calls: list[RepeatCall],
+    *,
+    keys: set[tuple[str, str, str]] | None = None,
+) -> dict[tuple[str, str, str], dict[str, object]]:
+    key_set = set(keys) if keys is not None else None
+    groups_by_key: dict[tuple[str, str, str], dict[str, object]] = {}
+    for group in _identity_merged_protein_groups_from_repeat_calls(source_repeat_calls):
+        key = (group["accession"], group["protein_id"], group["method"])
+        if key_set is not None and key not in key_set:
+            continue
+        groups_by_key[key] = group
+    return groups_by_key
+
+
+def _residue_groups_by_key_from_repeat_calls(
+    source_repeat_calls: list[RepeatCall],
+    *,
+    keys: set[tuple[str, str, str, str]] | None = None,
+) -> dict[tuple[str, str, str, str], dict[str, object]]:
+    key_set = set(keys) if keys is not None else None
+    groups_by_key: dict[tuple[str, str, str, str], dict[str, object]] = {}
+    for group in _identity_merged_residue_groups_from_repeat_calls(source_repeat_calls):
+        key = (group["accession"], group["protein_id"], group["method"], group["repeat_residue"])
+        if key_set is not None and key not in key_set:
+            continue
+        groups_by_key[key] = group
+    return groups_by_key
 
 
 def _existing_protein_summaries_by_key(

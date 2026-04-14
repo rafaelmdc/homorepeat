@@ -45,6 +45,8 @@ MERGED_HELPER_TESTS = [
     "test_representative_row_prefers_more_complete_row_before_newer_run",
     "test_representative_row_uses_newer_run_as_final_tiebreaker",
     "test_merged_group_helpers_do_not_issue_n_plus_one_queries",
+    "test_summary_rebuild_global_queries_do_not_order_repeat_calls",
+    "test_rebuild_merged_summaries_streams_repeat_call_reads_by_accession",
     "test_filter_inclusion_operates_on_matching_evidence_not_identity_keys",
 ]
 

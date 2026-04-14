@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django.core.management import CommandError, call_command
+from django.core.management.base import OutputWrapper
 from django.test import TestCase
 
 from apps.browser.models import (
@@ -252,6 +253,54 @@ class ImportRunCommandTests(TestCase):
                 },
             )
 
+    def test_import_run_replace_existing_removes_stale_merged_accessions(self):
+        with TemporaryDirectory() as tempdir:
+            publish_root = build_multibatch_publish_root(Path(tempdir), run_id="run-replace-stale")
+            stdout = StringIO()
+
+            call_command("import_run", publish_root=str(publish_root), stdout=stdout)
+
+            self.assertEqual(MergedProteinSummary.objects.count(), 2)
+            self.assertEqual(MergedResidueSummary.objects.count(), 2)
+            self.assertEqual(MergedProteinOccurrence.objects.count(), 2)
+            self.assertEqual(MergedResidueOccurrence.objects.count(), 2)
+
+            (publish_root / "calls" / "repeat_calls.tsv").write_text(
+                "call_id\tmethod\tgenome_id\ttaxon_id\tsequence_id\tprotein_id\tstart\tend\tlength\trepeat_residue\trepeat_count\tnon_repeat_count\tpurity\taa_sequence\tcodon_sequence\tcodon_metric_name\tcodon_metric_value\twindow_definition\ttemplate_name\tmerge_rule\tscore\n"
+                "call_1\tpure\tgenome_1\t9606\tseq_1\tprot_1\t10\t20\t11\tQ\t11\t0\t1.0\tQQQQQQQQQQQ\t\t\t\t\t\t\t\n",
+                encoding="utf-8",
+            )
+            (publish_root / "calls" / "run_params.tsv").write_text(
+                "method\trepeat_residue\tparam_name\tparam_value\n"
+                "pure\tQ\tmin_repeat_count\t6\n",
+                encoding="utf-8",
+            )
+            (publish_root / "status" / "accession_status.tsv").write_text(
+                "assembly_accession\tbatch_id\tdownload_status\tnormalize_status\ttranslate_status\tdetect_status\tfinalize_status\tterminal_status\tfailure_stage\tfailure_reason\tn_genomes\tn_proteins\tn_repeat_calls\tnotes\n"
+                "GCF_000001405.40\tbatch_0001\tsuccess\tsuccess\tsuccess\tsuccess\tsuccess\tcompleted\t\t\t1\t2\t1\t\n",
+                encoding="utf-8",
+            )
+            (publish_root / "status" / "accession_call_counts.tsv").write_text(
+                "assembly_accession\tbatch_id\tmethod\trepeat_residue\tdetect_status\tfinalize_status\tn_repeat_calls\n"
+                "GCF_000001405.40\tbatch_0001\tpure\tQ\tsuccess\tsuccess\t1\n",
+                encoding="utf-8",
+            )
+
+            call_command(
+                "import_run",
+                publish_root=str(publish_root),
+                replace_existing=True,
+                stdout=stdout,
+            )
+
+            self.assertEqual(RepeatCall.objects.count(), 1)
+            self.assertEqual(MergedProteinSummary.objects.count(), 1)
+            self.assertEqual(MergedResidueSummary.objects.count(), 1)
+            self.assertEqual(MergedProteinOccurrence.objects.count(), 1)
+            self.assertEqual(MergedResidueOccurrence.objects.count(), 1)
+            self.assertEqual(MergedProteinSummary.objects.get().accession, "GCF_000001405.40")
+            self.assertEqual(MergedResidueSummary.objects.get().accession, "GCF_000001405.40")
+
     def test_import_run_merged_summaries_aggregate_across_runs(self):
         with TemporaryDirectory() as tempdir_alpha, TemporaryDirectory() as tempdir_beta:
             publish_root_alpha = build_minimal_publish_root(Path(tempdir_alpha), run_id="run-merged-alpha")
@@ -435,6 +484,34 @@ class ImportRunCommandTests(TestCase):
         call_command("import_worker", once=True, stdout=stdout)
 
         self.assertIn("No pending import batches were available.", stdout.getvalue())
+
+    def test_import_worker_logs_unexpected_batch_failure_and_keeps_running(self):
+        from apps.imports.management.commands.import_worker import Command as ImportWorkerCommand
+
+        command = ImportWorkerCommand()
+        stdout = StringIO()
+        stderr = StringIO()
+        command.stdout = OutputWrapper(stdout)
+        command.stderr = OutputWrapper(stderr)
+
+        with patch(
+            "apps.imports.management.commands.import_worker.process_next_pending_import_batch",
+            side_effect=RuntimeError("boom"),
+        ):
+            processed = command._process_one_batch()
+
+        self.assertFalse(processed)
+        self.assertIn("Import batch failed: boom", stderr.getvalue())
+
+    def test_import_worker_once_raises_unexpected_batch_failure(self):
+        stdout = StringIO()
+
+        with patch(
+            "apps.imports.management.commands.import_worker.process_next_pending_import_batch",
+            side_effect=RuntimeError("boom"),
+        ):
+            with self.assertRaises(RuntimeError):
+                call_command("import_worker", once=True, stdout=stdout)
 
     def test_import_run_does_not_depend_on_fully_materialized_parser(self):
         with TemporaryDirectory() as tempdir:

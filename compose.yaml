@@ -15,6 +15,47 @@ services:
       timeout: 5s
       retries: 12
 
+  migrate:
+    build:
+      context: .
+      dockerfile: containers/web.Dockerfile
+    image: homorepeat-web:dev
+    working_dir: /app
+    command: >
+      sh -c "
+        attempts=0
+        until getent hosts $$DATABASE_HOST >/dev/null 2>&1; do
+          attempts=$$((attempts + 1))
+          if [ $$attempts -ge 30 ]; then
+            echo 'Could not resolve database host' $$DATABASE_HOST >&2
+            exit 1
+          fi
+          echo 'Waiting for database host' $$DATABASE_HOST 'to resolve...'
+          sleep 2
+        done
+        python manage.py migrate
+      "
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-secret-key}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-1}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-}
+      DJANGO_TIME_ZONE: ${DJANGO_TIME_ZONE:-UTC}
+      DATABASE_ENGINE: ${DATABASE_ENGINE:-django.db.backends.postgresql}
+      DATABASE_NAME: ${DATABASE_NAME:-homorepeat}
+      DATABASE_USER: ${DATABASE_USER:-homorepeat}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-homorepeat}
+      DATABASE_HOST: ${DATABASE_HOST:-postgres}
+      DATABASE_PORT: ${DATABASE_PORT:-5432}
+      HOMOREPEAT_RUNS_ROOT: ${HOMOREPEAT_RUNS_ROOT:-/workspace/homorepeat_pipeline/runs}
+    volumes:
+      - .:/app
+      - ../homorepeat_pipeline:/workspace/homorepeat_pipeline:ro
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   web:
     build:
       context: .
@@ -33,7 +74,6 @@ services:
           echo 'Waiting for database host' $$DATABASE_HOST 'to resolve...'
           sleep 2
         done
-        python manage.py migrate &&
         python manage.py runserver 0.0.0.0:8000
       "
     environment:
@@ -57,6 +97,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   worker:
     build:
@@ -76,7 +118,6 @@ services:
           echo 'Waiting for database host' $$DATABASE_HOST 'to resolve...'
           sleep 2
         done
-        python manage.py migrate &&
         python manage.py import_worker --poll-interval 2
       "
     environment:
@@ -98,6 +139,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:

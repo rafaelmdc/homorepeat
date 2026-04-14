@@ -8,6 +8,8 @@ TEST_NAMES = [
     "test_import_run_next_pending_reports_when_queue_is_empty",
     "test_import_worker_once_processes_next_pending_batch",
     "test_import_worker_once_reports_when_queue_is_empty",
+    "test_import_worker_logs_unexpected_batch_failure_and_keeps_running",
+    "test_import_worker_once_raises_unexpected_batch_failure",
 ]
 
 
