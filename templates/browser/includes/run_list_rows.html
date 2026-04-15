@@ -3,10 +3,10 @@
     <td><a href="{% url 'browser:run-detail' pipeline_run.pk %}">{{ pipeline_run.run_id }}</a></td>
     <td><span class="badge rounded-pill text-bg-light border status-badge">{{ pipeline_run.status }}</span></td>
     <td>{{ pipeline_run.profile|default:"-" }}</td>
-    <td>{% if pipeline_run.genomes_count is not None %}<a href="{% url 'browser:genome-list' %}?run={{ pipeline_run.run_id|urlencode }}">{{ pipeline_run.genomes_count }}</a>{% endif %}</td>
+    <td>{{ pipeline_run.genomes_count|default_if_none:"" }}</td>
     <td>{{ pipeline_run.sequences_count|default_if_none:"" }}</td>
-    <td>{% if pipeline_run.proteins_count is not None %}<a href="{% url 'browser:protein-list' %}?run={{ pipeline_run.run_id|urlencode }}">{{ pipeline_run.proteins_count }}</a>{% endif %}</td>
-    <td>{% if pipeline_run.repeat_calls_count is not None %}<a href="{% url 'browser:repeatcall-list' %}?run={{ pipeline_run.run_id|urlencode }}">{{ pipeline_run.repeat_calls_count }}</a>{% endif %}</td>
+    <td>{{ pipeline_run.proteins_count|default_if_none:"" }}</td>
+    <td>{{ pipeline_run.repeat_calls_count|default_if_none:"" }}</td>
     <td>{{ pipeline_run.imported_at|date:"Y-m-d H:i" }}</td>
   </tr>
 {% endfor %}

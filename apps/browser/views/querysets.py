@@ -7,6 +7,10 @@ from ..models import (
     AccessionCallCount,
     AccessionStatus,
     AcquisitionBatch,
+    CanonicalGenome,
+    CanonicalProtein,
+    CanonicalRepeatCall,
+    CanonicalSequence,
     DownloadManifestEntry,
     Genome,
     NormalizationWarning,
@@ -23,6 +27,10 @@ def _annotated_runs(queryset=None):
         queryset = PipelineRun.objects.all()
     return queryset.annotate(
         acquisition_batches_count=Coalesce(_count_subquery(AcquisitionBatch, "pipeline_run"), Value(0)),
+        current_accessions_count=Coalesce(_count_subquery(CanonicalGenome, "latest_pipeline_run"), Value(0)),
+        current_sequences_count=Coalesce(_count_subquery(CanonicalSequence, "latest_pipeline_run"), Value(0)),
+        current_proteins_count=Coalesce(_count_subquery(CanonicalProtein, "latest_pipeline_run"), Value(0)),
+        current_repeat_calls_count=Coalesce(_count_subquery(CanonicalRepeatCall, "latest_pipeline_run"), Value(0)),
         download_manifest_entries_count=Coalesce(_count_subquery(DownloadManifestEntry, "pipeline_run"), Value(0)),
         genomes_count=Coalesce(_count_subquery(Genome, "pipeline_run"), Value(0)),
         normalization_warnings_count=Coalesce(_count_subquery(NormalizationWarning, "pipeline_run"), Value(0)),

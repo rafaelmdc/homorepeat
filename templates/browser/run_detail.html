@@ -43,11 +43,14 @@
           <p class="text-uppercase text-secondary small mb-3">At a glance</p>
           <ul class="stack-list mb-0">
             <li>{{ pipeline_run.acquisition_batches_count }} acquisition batch{{ pipeline_run.acquisition_batches_count|pluralize:"es" }}</li>
-            <li><a href="{{ accession_browser_url }}">Browse current accession records linked to this run</a></li>
-            <li><a href="{{ genome_browser_url }}">{{ pipeline_run.genomes_count }} imported genome row{{ pipeline_run.genomes_count|pluralize }}</a></li>
-            <li><a href="{{ sequence_browser_url }}">{{ pipeline_run.sequences_count }} imported sequence row{{ pipeline_run.sequences_count|pluralize }}</a></li>
-            <li><a href="{{ protein_browser_url }}">{{ pipeline_run.proteins_count }} imported protein row{{ pipeline_run.proteins_count|pluralize }}</a></li>
-            <li><a href="{{ repeatcall_browser_url }}">{{ pipeline_run.repeat_calls_count }} imported repeat call row{{ pipeline_run.repeat_calls_count|pluralize }}</a></li>
+            <li><a href="{{ accession_browser_url }}">{{ pipeline_run.current_accessions_count }} current accession record{{ pipeline_run.current_accessions_count|pluralize }}</a></li>
+            <li><a href="{{ sequence_browser_url }}">{{ pipeline_run.current_sequences_count }} current sequence{{ pipeline_run.current_sequences_count|pluralize }}</a></li>
+            <li><a href="{{ protein_browser_url }}">{{ pipeline_run.current_proteins_count }} current protein{{ pipeline_run.current_proteins_count|pluralize }}</a></li>
+            <li><a href="{{ repeatcall_browser_url }}">{{ pipeline_run.current_repeat_calls_count }} current repeat call{{ pipeline_run.current_repeat_calls_count|pluralize }}</a></li>
+            <li>{{ pipeline_run.genomes_count }} imported genome row{{ pipeline_run.genomes_count|pluralize }}</li>
+            <li>{{ pipeline_run.sequences_count }} imported sequence row{{ pipeline_run.sequences_count|pluralize }}</li>
+            <li>{{ pipeline_run.proteins_count }} imported protein row{{ pipeline_run.proteins_count|pluralize }}</li>
+            <li>{{ pipeline_run.repeat_calls_count }} imported repeat call row{{ pipeline_run.repeat_calls_count|pluralize }}</li>
             <li><a href="{{ accession_status_browser_url }}">{{ pipeline_run.accession_status_rows_count }} accession status row{{ pipeline_run.accession_status_rows_count|pluralize }}</a></li>
             <li><a href="{{ warning_browser_url }}">{{ pipeline_run.normalization_warnings_count }} normalization warning{{ pipeline_run.normalization_warnings_count|pluralize }}</a></li>
             <li><a href="{{ taxon_browser_url }}">{{ distinct_taxa_count }} distinct taxa referenced</a></li>
@@ -59,6 +62,63 @@
 </section>
 
 <section class="row g-4 mb-4">
+  <div class="col-12">
+    <div class="section-header mb-0">
+      <div>
+        <p class="section-kicker mb-2">Current catalog</p>
+        <h2>Current entities linked to this run</h2>
+        <p class="text-secondary mb-0">These links reflect canonical entities whose latest provenance currently points at this run.</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <article class="card h-100 border-0 shadow-sm stat-card">
+      <div class="card-body">
+        <p class="text-uppercase text-secondary small mb-2">Current accessions</p>
+        <a class="display-5 fw-semibold mb-3 d-inline-block text-decoration-none" href="{{ accession_browser_url }}">{{ pipeline_run.current_accessions_count }}</a>
+        <p class="text-secondary mb-0">Canonical accession records whose latest provenance now points at this run.</p>
+      </div>
+    </article>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <article class="card h-100 border-0 shadow-sm stat-card">
+      <div class="card-body">
+        <p class="text-uppercase text-secondary small mb-2">Current sequences</p>
+        <a class="display-5 fw-semibold mb-3 d-inline-block text-decoration-none" href="{{ sequence_browser_url }}">{{ pipeline_run.current_sequences_count }}</a>
+        <p class="text-secondary mb-0">Canonical sequence rows currently owned by this run as latest provenance.</p>
+      </div>
+    </article>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <article class="card h-100 border-0 shadow-sm stat-card">
+      <div class="card-body">
+        <p class="text-uppercase text-secondary small mb-2">Current proteins</p>
+        <a class="display-5 fw-semibold mb-3 d-inline-block text-decoration-none" href="{{ protein_browser_url }}">{{ pipeline_run.current_proteins_count }}</a>
+        <p class="text-secondary mb-0">Canonical protein rows whose latest canonical state is attributed to this run.</p>
+      </div>
+    </article>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <article class="card h-100 border-0 shadow-sm stat-card">
+      <div class="card-body">
+        <p class="text-uppercase text-secondary small mb-2">Current repeat calls</p>
+        <a class="display-5 fw-semibold mb-3 d-inline-block text-decoration-none" href="{{ repeatcall_browser_url }}">{{ pipeline_run.current_repeat_calls_count }}</a>
+        <p class="text-secondary mb-0">Canonical repeat calls currently served with this run as their latest provenance.</p>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section class="row g-4 mb-4">
+  <div class="col-12">
+    <div class="section-header mb-0">
+      <div>
+        <p class="section-kicker mb-2">Imported observations</p>
+        <h2>Historical rows stored by this run</h2>
+        <p class="text-secondary mb-0">These counts describe raw imported observations preserved for provenance, not current canonical ownership.</p>
+      </div>
+    </div>
+  </div>
   <div class="col-sm-6 col-xl-4">
     <article class="card h-100 border-0 shadow-sm stat-card">
       <div class="card-body">
@@ -81,7 +141,7 @@
     <article class="card h-100 border-0 shadow-sm stat-card">
       <div class="card-body">
         <p class="text-uppercase text-secondary small mb-2">Imported genomes</p>
-        <a class="display-5 fw-semibold mb-3 d-inline-block text-decoration-none" href="{{ genome_browser_url }}">{{ pipeline_run.genomes_count }}</a>
+        <p class="display-5 fw-semibold mb-3">{{ pipeline_run.genomes_count }}</p>
         <p class="text-secondary mb-0">Genome rows imported for this run and still available as provenance.</p>
       </div>
     </article>
@@ -90,7 +150,7 @@
     <article class="card h-100 border-0 shadow-sm stat-card">
       <div class="card-body">
         <p class="text-uppercase text-secondary small mb-2">Imported sequences</p>
-        <a class="display-5 fw-semibold mb-3 d-inline-block text-decoration-none" href="{{ sequence_browser_url }}">{{ pipeline_run.sequences_count }}</a>
+        <p class="display-5 fw-semibold mb-3">{{ pipeline_run.sequences_count }}</p>
         <p class="text-secondary mb-0">Sequence rows imported for this run and retained as browseable history.</p>
       </div>
     </article>
@@ -99,7 +159,7 @@
     <article class="card h-100 border-0 shadow-sm stat-card">
       <div class="card-body">
         <p class="text-uppercase text-secondary small mb-2">Imported proteins</p>
-        <a class="display-5 fw-semibold mb-3 d-inline-block text-decoration-none" href="{{ protein_browser_url }}">{{ pipeline_run.proteins_count }}</a>
+        <p class="display-5 fw-semibold mb-3">{{ pipeline_run.proteins_count }}</p>
         <p class="text-secondary mb-0">Protein rows imported for this run and linked back into the current catalog.</p>
       </div>
     </article>
@@ -108,7 +168,7 @@
     <article class="card h-100 border-0 shadow-sm stat-card">
       <div class="card-body">
         <p class="text-uppercase text-secondary small mb-2">Imported repeat calls</p>
-        <a class="display-5 fw-semibold mb-3 d-inline-block text-decoration-none" href="{{ repeatcall_browser_url }}">{{ pipeline_run.repeat_calls_count }}</a>
+        <p class="display-5 fw-semibold mb-3">{{ pipeline_run.repeat_calls_count }}</p>
         <p class="text-secondary mb-0">Repeat-call rows imported for this run and preserved as provenance.</p>
       </div>
     </article>

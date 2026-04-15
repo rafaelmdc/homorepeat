@@ -279,10 +279,20 @@ Required behavior:
 
 - run pages remain useful for operators and provenance review
 - the browser no longer implies that run-scoped rows are the main catalog truth
+- run detail clearly separates:
+  - current canonical entities whose latest provenance points at the run
+  - historical imported observations stored by the run
+- run-page links only target pages whose semantics match the displayed metric:
+  raw imported-observation counts must not link to canonical
+  `latest_pipeline_run` views
+- if a run page shows both current-catalog and imported-observation metrics,
+  the labels make that distinction explicit
 
 Exit criteria:
 
 - navigation favors canonical entity browsing while keeping run history intact
+- focused browser tests cover the run-page metric/link contract after a
+  replacement import
 
 ## Phase 4: Remove Merged From The Product Surface
 
@@ -394,6 +404,11 @@ Required checks:
 - re-importing the same data updates canonical rows in place
 - method-scoped canonical repeat-call replacement behaves correctly
 - historical run-scoped rows remain visible
+- after a later replacement import of the same canonical identity:
+  - the older run still shows its raw imported observations
+  - the older run no longer claims current canonical ownership for the replaced
+    entities
+  - any run-page links resolve to pages whose counts match the displayed metric
 
 Exit criteria:
 
@@ -418,6 +433,8 @@ Required checks:
 - no stale current repeat calls remain for touched method scopes
 - import completion no longer depends on merged rebuild work
 - the browser entry points no longer depend on `mode=merged`
+- run/import provenance pages do not mix raw imported-observation counts with
+  canonical latest-run links
 
 Exit criteria:
 

@@ -231,12 +231,26 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, "run-beta")
         self.assertNotContains(response, "run-alpha")
 
+    def test_run_list_imported_counts_do_not_link_to_canonical_views(self):
+        response = self.client.get(reverse("browser:run-list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, f'{reverse("browser:genome-list")}?run=run-alpha')
+        self.assertNotContains(response, f'{reverse("browser:protein-list")}?run=run-alpha')
+        self.assertNotContains(response, f'{reverse("browser:repeatcall-list")}?run=run-alpha')
+
     def test_run_detail_shows_counts_and_scoped_links(self):
         response = self.client.get(reverse("browser:run-detail", args=[self.alpha["pipeline_run"].pk]))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "run-alpha")
         self.assertContains(response, "Open current accessions")
+        self.assertContains(response, "Current accessions")
+        self.assertContains(response, "Current sequences")
+        self.assertContains(response, "Current proteins")
+        self.assertContains(response, "Current repeat calls")
+        self.assertContains(response, "Current entities linked to this run")
+        self.assertContains(response, "Historical rows stored by this run")
         self.assertContains(response, "Distinct taxa referenced")
         self.assertContains(response, "Imported genomes")
         self.assertContains(response, "Imported sequences")
@@ -342,11 +356,40 @@ class BrowserViewTests(TestCase):
         response = self.client.get(reverse("browser:run-detail", args=[self.alpha["pipeline_run"].pk]))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, f"{reverse('browser:genome-list')}?run=run-alpha")
+        self.assertContains(response, f"{reverse('browser:accession-list')}?run=run-alpha")
+        self.assertContains(response, f"{reverse('browser:sequence-list')}?run=run-alpha")
         self.assertContains(response, f"{reverse('browser:protein-list')}?run=run-alpha")
         self.assertContains(response, f"{reverse('browser:repeatcall-list')}?run=run-alpha")
         self.assertContains(response, "terminal_status=completed")
         self.assertContains(response, "method=pure")
+
+    def test_run_detail_replacement_import_separates_current_and_imported_counts(self):
+        create_imported_run_fixture(
+            run_id="run-gamma",
+            genome_id="genome_gamma",
+            sequence_id="seq_alpha",
+            protein_id="prot_alpha",
+            call_id="call_gamma",
+            accession="GCF_ALPHA",
+            taxon_key="human",
+            genome_name="Human reference genome replacement",
+        )
+
+        response = self.client.get(reverse("browser:run-detail", args=[self.alpha["pipeline_run"].pk]))
+
+        self.assertEqual(response.status_code, 200)
+        pipeline_run = response.context["pipeline_run"]
+        self.assertEqual(pipeline_run.genomes_count, 1)
+        self.assertEqual(pipeline_run.sequences_count, 1)
+        self.assertEqual(pipeline_run.proteins_count, 1)
+        self.assertEqual(pipeline_run.repeat_calls_count, 1)
+        self.assertEqual(pipeline_run.current_accessions_count, 0)
+        self.assertEqual(pipeline_run.current_sequences_count, 0)
+        self.assertEqual(pipeline_run.current_proteins_count, 0)
+        self.assertEqual(pipeline_run.current_repeat_calls_count, 0)
+        accession_response = self.client.get(reverse("browser:accession-list"), {"run": "run-alpha"})
+        self.assertEqual(accession_response.status_code, 200)
+        self.assertNotContains(accession_response, "GCF_ALPHA")
 
     def test_run_detail_uses_browser_metadata_facets(self):
         pipeline_run = self.alpha["pipeline_run"]
