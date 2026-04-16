@@ -221,6 +221,7 @@ class CanonicalRepeatCall(TimestampedModel):
     codon_sequence = models.TextField(blank=True)
     codon_metric_name = models.CharField(max_length=255, blank=True)
     codon_metric_value = models.CharField(max_length=255, blank=True)
+    codon_ratio_value = models.FloatField(blank=True, null=True)
     window_definition = models.CharField(max_length=255, blank=True)
     template_name = models.CharField(max_length=255, blank=True)
     merge_rule = models.CharField(max_length=255, blank=True)
