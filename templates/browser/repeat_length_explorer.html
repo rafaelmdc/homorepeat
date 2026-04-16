@@ -1,7 +1,12 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Repeat Lengths{% endblock %}
 {% block body_class %}repeat-length-explorer-page{% endblock %}
+{% block extra_scripts %}
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <script src="{% static 'js/repeat-length-explorer.js' %}"></script>
+{% endblock %}
 
 {% block content %}
 <section class="landing-band mb-4">
@@ -123,6 +128,22 @@
       </div>
     {% endfor %}
   </div>
+</section>
+
+<section class="surface-card surface-card-wide mb-4">
+  <div class="section-header">
+    <div>
+      <p class="section-kicker mb-2">Chart layer</p>
+      <h2>Bounded ECharts payload for the visible taxa</h2>
+      <p class="text-secondary mb-0">The chart reads the same bounded server-rendered rows as the summary table below.</p>
+    </div>
+  </div>
+
+  {{ chart_payload|json_script:chart_payload_id }}
+  <div class="length-chart-shell" id="{{ chart_container_id }}"></div>
+  <noscript>
+    <p class="surface-note mb-0 mt-3">JavaScript is disabled, so the summary table remains the active view.</p>
+  </noscript>
 </section>
 
 <section class="surface-card surface-card-wide">

@@ -3,6 +3,7 @@ from django.views.generic import TemplateView
 
 from apps.browser.stats import (
     apply_stats_filter_context,
+    build_ranked_length_chart_payload,
     build_ranked_length_summary_bundle,
     build_stats_filter_state,
 )
@@ -109,6 +110,9 @@ class RepeatLengthExplorerView(TemplateView):
         context["matching_repeat_calls_count"] = summary_bundle["matching_repeat_calls_count"]
         context["summary_rows"] = summary_rows
         context["visible_taxa_count"] = summary_bundle["visible_taxa_count"]
+        context["chart_payload"] = build_ranked_length_chart_payload(summary_rows)
+        context["chart_payload_id"] = "repeat-length-chart-payload"
+        context["chart_container_id"] = "repeat-length-chart"
         context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
         context["rank_choices"] = [
             {"value": rank, "label": rank}

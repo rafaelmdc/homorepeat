@@ -18,6 +18,7 @@
       crossorigin="anonymous"
     >
     <link rel="stylesheet" href="{% static 'css/site.css' %}">
+    {% block extra_head %}{% endblock %}
   </head>
   <body class="{% block body_class %}{% endblock %}">
     <div class="site-backdrop"></div>
@@ -65,5 +66,6 @@
       crossorigin="anonymous"
     ></script>
     <script src="{% static 'js/site.js' %}"></script>
+    {% block extra_scripts %}{% endblock %}
   </body>
 </html>
