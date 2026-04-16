@@ -18,6 +18,7 @@ def build_ranked_length_summary_bundle(filter_state: StatsFilterState) -> dict[s
         return cached_bundle
 
     matching_repeat_calls_count = build_filtered_repeat_call_queryset(filter_state).count()
+    total_taxa_count = build_ranked_taxon_group_count(filter_state)
     if connection.vendor == "postgresql":
         summary_rows = list(build_ranked_length_summary_queryset(filter_state))
     else:
@@ -38,6 +39,7 @@ def build_ranked_length_summary_bundle(filter_state: StatsFilterState) -> dict[s
     bundle = {
         "matching_repeat_calls_count": matching_repeat_calls_count,
         "summary_rows": summary_rows,
+        "total_taxa_count": total_taxa_count,
         "visible_taxa_count": len(summary_rows),
     }
     cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
@@ -75,17 +77,15 @@ def build_filtered_repeat_call_queryset(filter_state: StatsFilterState):
 
 
 def build_ranked_taxon_group_queryset(filter_state: StatsFilterState):
-    queryset = _with_display_taxon_annotations(
-        build_filtered_repeat_call_queryset(filter_state),
-        rank=filter_state.rank,
-    ).exclude(display_taxon_id__isnull=True)
+    return build_ranked_taxon_group_base_queryset(filter_state).order_by(
+        "-observation_count",
+        "display_taxon_name",
+        "display_taxon_id",
+    )[: filter_state.top_n]
 
-    return (
-        queryset.values("display_taxon_id", "display_taxon_name", "display_taxon_rank")
-        .annotate(observation_count=Count("pk"))
-        .filter(observation_count__gte=filter_state.min_count)
-        .order_by("-observation_count", "display_taxon_name", "display_taxon_id")[: filter_state.top_n]
-    )
+
+def build_ranked_taxon_group_count(filter_state: StatsFilterState) -> int:
+    return build_ranked_taxon_group_base_queryset(filter_state).count()
 
 
 def build_group_length_values_queryset(filter_state: StatsFilterState, *, display_taxon_ids):
@@ -134,6 +134,19 @@ def build_ranked_length_summary_queryset(filter_state: StatsFilterState):
         }
         for row in summary_rows
     ]
+
+
+def build_ranked_taxon_group_base_queryset(filter_state: StatsFilterState):
+    queryset = _with_display_taxon_annotations(
+        build_filtered_repeat_call_queryset(filter_state),
+        rank=filter_state.rank,
+    ).exclude(display_taxon_id__isnull=True)
+
+    return (
+        queryset.values("display_taxon_id", "display_taxon_name", "display_taxon_rank")
+        .annotate(observation_count=Count("pk"))
+        .filter(observation_count__gte=filter_state.min_count)
+    )
 
 
 def _with_display_taxon_annotations(queryset, *, rank: str):

@@ -135,7 +135,7 @@
     <div>
       <p class="section-kicker mb-2">Chart layer</p>
       <h2>Ranked length distributions for the visible taxa</h2>
-      <p class="text-secondary mb-0">Each row shows min, lower quartile, median, upper quartile, and max for the same bounded taxa listed in the summary table.</p>
+      <p class="text-secondary mb-0">Each row shows min, lower quartile, median, upper quartile, and max for the same bounded taxa listed in the summary table. Click a chart row to reopen the explorer scoped to that branch.</p>
     </div>
   </div>
 
@@ -151,7 +151,7 @@
     <div>
       <p class="section-kicker mb-2">Grouped taxa</p>
       <h2>{{ visible_taxa_count }} visible taxon{{ visible_taxa_count|pluralize }} at rank {{ current_rank }}</h2>
-      <p class="text-secondary mb-0">Rows are ordered by observation count and limited by the current Top N setting.</p>
+      <p class="text-secondary mb-0">Showing {{ visible_taxa_count }} of {{ total_taxa_count }} taxa at rank {{ current_rank }}. Rows are ordered by observation count and limited by the current Top N setting.</p>
     </div>
   </div>
 

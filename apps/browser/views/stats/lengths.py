@@ -94,6 +94,8 @@ class RepeatLengthExplorerView(TemplateView):
                 residue=filter_state.residue,
                 length_min=filter_state.length_min,
                 length_max=filter_state.length_max,
+                purity_min=filter_state.purity_min,
+                purity_max=filter_state.purity_max,
                 min_count=filter_state.min_count,
                 top_n=filter_state.top_n,
             ),
@@ -109,6 +111,7 @@ class RepeatLengthExplorerView(TemplateView):
         apply_stats_filter_context(context, filter_state)
         context["matching_repeat_calls_count"] = summary_bundle["matching_repeat_calls_count"]
         context["summary_rows"] = summary_rows
+        context["total_taxa_count"] = summary_bundle["total_taxa_count"]
         context["visible_taxa_count"] = summary_bundle["visible_taxa_count"]
         context["chart_payload"] = build_ranked_length_chart_payload(summary_rows)
         context["chart_payload_id"] = "repeat-length-chart-payload"

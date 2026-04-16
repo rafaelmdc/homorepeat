@@ -35,8 +35,8 @@
     return `${taxonName.slice(0, 25)}...`;
   }
 
-  function taxonAxisLabel(row) {
-    return `${truncateTaxonName(row.taxonName)}\n n=${row.observationCount}`;
+  function rowCategoryValue(row) {
+    return String(row.taxonId);
   }
 
   function chartHeightForRowCount(rowCount) {
@@ -131,7 +131,7 @@
     }
 
     const rows = payload.rows;
-    const labels = rows.map((row) => taxonAxisLabel(row));
+    const categories = rows.map((row) => rowCategoryValue(row));
     const boxplotData = rows.map((row) => [row.min, row.q1, row.median, row.q3, row.max]);
     const [xMin, xMax] = lengthBounds(payload);
     const visibleRowWindow = Math.min(rows.length, DEFAULT_VISIBLE_ROWS);
@@ -184,7 +184,8 @@
       },
       yAxis: {
         type: "category",
-        data: labels,
+        data: categories,
+        triggerEvent: true,
         axisTick: {
           show: false,
         },
@@ -254,6 +255,7 @@
         {
           name: "Repeat length distribution",
           type: "boxplot",
+          cursor: "pointer",
           data: boxplotData,
           itemStyle: {
             color: BOX_FILL,
@@ -274,6 +276,7 @@
         {
           name: "Median marker",
           type: "scatter",
+          cursor: "pointer",
           data: rows.map((row, index) => [row.median, index]),
           symbol: "circle",
           symbolSize: 7,
@@ -289,6 +292,39 @@
     };
   }
 
+  function openBranchExplorer(rows, rowIndex) {
+    const row = rows[rowIndex];
+    if (!row || !row.branchExplorerUrl) {
+      return;
+    }
+    window.location.assign(row.branchExplorerUrl);
+  }
+
+  function rowIndexForAxisValue(rows, axisValue) {
+    return rows.findIndex((row) => rowCategoryValue(row) === String(axisValue));
+  }
+
+  function installDrilldown(chart, payload) {
+    const rows = Array.isArray(payload.rows) ? payload.rows : [];
+    if (rows.length === 0) {
+      return;
+    }
+
+    chart.on("click", (params) => {
+      if (typeof params.dataIndex === "number") {
+        openBranchExplorer(rows, params.dataIndex);
+        return;
+      }
+
+      if (params.componentType === "yAxis") {
+        const rowIndex = rowIndexForAxisValue(rows, params.value);
+        if (rowIndex >= 0) {
+          openBranchExplorer(rows, rowIndex);
+        }
+      }
+    });
+  }
+
   function mountLengthChart() {
     const container = document.getElementById("repeat-length-chart");
     const payload = parsePayload("repeat-length-chart-payload");
@@ -300,6 +336,7 @@
 
     const chart = window.echarts.init(container, null, { renderer: "svg" });
     chart.setOption(buildChartOption(payload));
+    installDrilldown(chart, payload);
 
     window.addEventListener("resize", () => {
       chart.resize();

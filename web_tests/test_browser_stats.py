@@ -166,6 +166,7 @@ class BrowserStatsTests(TestCase):
         first_bundle = build_ranked_length_summary_bundle(filter_state)
 
         self.assertEqual(first_bundle["matching_repeat_calls_count"], 2)
+        self.assertEqual(first_bundle["total_taxa_count"], 1)
         self.assertEqual(first_bundle["visible_taxa_count"], 1)
         self.assertEqual(first_bundle["summary_rows"][0]["taxon_name"], "Mammalia")
 
