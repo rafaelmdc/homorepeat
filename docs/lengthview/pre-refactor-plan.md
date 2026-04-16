@@ -24,6 +24,8 @@ The refactor should:
   them as ad hoc request parsing inside each stats view
 - move explorer-specific non-view query helpers out of generic shared modules
   where that separation is already clear
+- make stats performance ownership explicit, because these views will summarize
+  million-scale repeat-call tables and must stay fast by design
 
 ## 1. Refactor Goal
 
@@ -40,6 +42,8 @@ We need to make these boundaries explicit:
 - **stats service layer**
   - reusable filter parsing, aggregation, summary statistics, and chart payload
     shaping
+  - bounded query shaping, cache integration, and backend-specific fast paths
+    when needed
 
 Success criteria:
 
@@ -147,15 +151,21 @@ Initial ownership:
     - rank
     - `top_n`
     - `min_count`
+  - enforce bounded defaults and hard caps, especially for visible row counts
+  - keep search semantics index-friendly rather than allowing broad substring
+    scans by default
 - `queries.py`
   - grouped aggregate queries over canonical models for stats pages
   - take normalized stats filter state rather than raw request params
+  - own performance-sensitive query shaping, optional cache use, and
+    production-only fast paths where justified
 - `summaries.py`
   - quartiles, range summaries, visible-row shaping
 - `payloads.py`
-  - ECharts payload generation
+  - ECharts payload generation for bounded visible rows only
 - `params.py`
-  - low-level parameter/default helpers used by stats filters where useful
+  - low-level parameter/default/max-clamp helpers used by stats filters where
+    useful
 
 Recommended contract:
 
@@ -163,6 +173,8 @@ Recommended contract:
 - stats views build this once from the request
 - stats queries and payload builders consume that object rather than raw
   querystring values
+- include stable cache-key-safe serialization and clamped bounds in the filter
+  contract so later stats views inherit the same performance guardrails
 
 This package is the reusable base for the upcoming stats views and keeps
 chart-specific logic out of `views/filters.py` and other shared explorer code.
@@ -181,6 +193,10 @@ These rules should hold after the refactor:
   - `apps.browser.stats`
 - stats view modules should not hand-parse repeated stats filters directly once
   the shared stats filter layer exists
+- performance-sensitive query shaping, cache use, and database-specific fast
+  paths must live in `apps.browser.stats`, not be scattered across views
+- stats views should only request bounded visible summaries, never raw
+  million-row result sets
 - `apps.browser.explorer` must not depend on stats packages
 - `apps.browser.stats` must not depend on explorer view modules
 - `apps.browser.urls` should continue importing from `apps.browser.views`
@@ -297,6 +313,8 @@ Also add focused import-surface checks where useful:
 - `apps.browser.urls` still resolves current route wiring correctly
 - stats filter normalization can be unit-tested independently from the first
   chart page
+- performance-critical grouped queries should be explain-reviewed on real data
+  before the first stats page is considered done
 
 ## 8. Explicit Non-Goals
 
@@ -337,3 +355,6 @@ explorer-versus-stats boundary instead of landing into another flat layer.
 - future stats views will also share most filter semantics, so
   `apps/browser/stats/filters.py` and a normalized stats filter-state contract
   are worth introducing from the first stats page
+- future stats views will need the same performance guardrails, so keeping
+  bounds, cache usage, and query-shape rules inside `apps/browser/stats/` is
+  preferable to ad hoc tuning in individual views

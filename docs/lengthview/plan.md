@@ -14,6 +14,8 @@ inside the current Django + canonical browser architecture:
 - frontend: server-rendered page with one ECharts chart and a matching summary
   table
 - product role: current-catalog exploration first, provenance secondary
+- performance role: it must stay fast on datasets with millions of canonical
+  repeat-call matches by presenting bounded aggregates, not raw rows
 
 The first view should be simple, readable, and scalable. It should not try to
 be a dashboard.
@@ -58,6 +60,10 @@ Current constraints to respect:
   needs a small clean integration point
 - browser metadata currently precomputes only raw counts plus method/residue
   facets, not length summaries
+- the current canonical models already have useful single-column indexes on
+  `CanonicalRepeatCall.method`, `repeat_residue`, `taxon`, and `length`, plus
+  taxonomy-closure indexes; the stats path should start from those and only add
+  evidence-backed composite indexes where real query plans require them
 
 ## 2. Recommended First View
 
@@ -182,12 +188,16 @@ These should be visible in the main filter card:
     - `protein_id`
     - `protein_name`
     - `accession`
+  - keep this index-friendly in v1:
+    - exact or prefix semantics only
+    - no broad substring scans across multiple large text columns
 - `method`
 - `residue`
 - `length_min`
 - `length_max`
 - `min_count`
 - `top_n`
+  - clamp to a safe hard maximum such as `100`
 
 ### Useful but secondary
 
@@ -246,9 +256,29 @@ Then group repeat calls by ancestor taxon at the selected rank using
 The grouped query layer should consume normalized stats filter state from
 `apps/browser/stats/filters.py`, not parse request params directly.
 
+Candidate taxon selection should happen in the database and stay bounded before
+quartile work begins.
+
+### Performance requirement
+
+This view is expected to summarize millions of `CanonicalRepeatCall` rows over
+time. The browser must therefore present bounded aggregates, not raw matches.
+
+Rules:
+
+- never send raw repeat-call rows to the chart
+- never build an unbounded Python-side list of all matching lengths
+- keep visible taxa bounded with defaults and a hard `top_n` cap
+- keep `q` and `branch_q` index-friendly:
+  - exact taxon id or prefix search only
+  - no broad `icontains` scans across large text fields in v1
+- treat indexes, cache keys, and query-plan review as part of implementation,
+  not later tuning
+
 ### Live query vs precomputed summaries
 
-For v1, query live. Do not add a new summary table yet.
+For v1, default to live aggregation. Do not add a new import-time summary table
+yet.
 
 Reasons:
 
@@ -258,19 +288,29 @@ Reasons:
 - the new `apps/browser/stats/` package can host stats-specific logic without
   requiring import-time materialization
 
+But performance is still a feature requirement, so the first implementation is
+allowed to add:
+
+- short-TTL caching of grouped visible-row summaries or chart payloads keyed by
+  normalized filter state for repeated hot scopes
+- targeted database indexes if `EXPLAIN` on real queries shows the current
+  single-column indexes are not enough
+
 ### Quartile strategy
 
 Do this in two stages:
 
 1. use DB aggregation to identify candidate display taxa and counts
-2. fetch lengths only for the visible grouped taxa and compute quartiles in
-   Python
+2. compute quartiles only for the visible grouped taxa, using:
+   - DB-side percentile aggregates on PostgreSQL in production when the visible
+     groups are large
+   - a Python fallback for SQLite, tests, and bounded small-group cases
 
 This keeps the first implementation:
 
 - portable across SQLite and PostgreSQL
 - bounded by `Top N`
-- simpler than adopting database-specific percentile SQL in the initial slice
+- fast enough to avoid pulling millions of lengths into Python on real data
 
 ### Performance concerns
 
@@ -286,9 +326,21 @@ Mitigations:
 - explicit `min_count`
 - only compute quartiles for visible taxa
 - keep branch search text-first instead of giant dropdowns
+- keep `q` search exact-or-prefix only in v1
+- review query plans on representative broad and branch-scoped requests
+- evaluate targeted composite indexes only after `EXPLAIN`; likely candidates
+  are the hot stats predicate combinations on `CanonicalRepeatCall`, and a
+  standalone `CanonicalProtein.protein_id` index if protein-id search is common
+- cache repeated grouped summaries for common scopes if real validation shows
+  repeated expensive broad requests
 
-If real usage shows this is too slow, revisit with a summary layer later. Do
-not start there.
+Streaming is not the primary optimization for the interactive page. If the page
+is fast, there should be little to stream because only bounded summary rows
+reach the client. Streaming is more relevant later for export endpoints, not
+for the first browser view.
+
+If real usage shows this is still too slow, revisit with a summary layer later.
+Do not start there.
 
 ## 6. Frontend Integration
 
@@ -335,6 +387,7 @@ This stays aligned with the current repo style:
 - no chart gallery
 - keep labels short
 - counts should live in row labels or row annotations, not a separate panel
+- keep the chart payload small and bounded to the visible row set
 - keep loading, empty, and overly narrow-filter states explicit and calm
 
 ## 7. Incremental Implementation Plan
@@ -432,6 +485,7 @@ Do not do these in the first implementation:
 - summary-table persistence or import-time analytics schema
 - advanced provenance/batch analytics
 - client-side async filtering architecture
+- streaming raw repeat-call rows to the browser
 
 ## 9. Recommended Next Implementation Target
 

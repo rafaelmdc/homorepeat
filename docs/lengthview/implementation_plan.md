@@ -11,6 +11,8 @@ into an execution sequence for implementing the first lineage-aware repeat
 length explorer.
 
 It is intentionally implementation-focused. It is not a product brainstorm.
+It is also explicitly performance-focused: the finished view must remain fast
+when summarizing millions of repeat-call matches.
 
 ## Sequencing Rules
 
@@ -24,6 +26,14 @@ It is intentionally implementation-focused. It is not a product brainstorm.
 - add navigation and discoverability after the page semantics are correct
 - do not introduce import-time summary tables or new browser models in this
   track
+- treat performance as part of the implementation, not a later cleanup pass
+- never ship or render unbounded raw match sets; only bounded aggregates should
+  reach the page
+- keep `q` and `branch_q` index-friendly in v1
+- clamp visible-row controls like `top_n` to safe maximums
+- validate hot grouped queries with real query plans before closing the work
+- allow targeted indexes and short-TTL cache entries if real validation shows
+  they materially improve the hot path
 
 ## Current Baseline
 
@@ -51,6 +61,22 @@ Current next slice:
 
 - `1.1` create explorer-vs-stats view packages while preserving the current
   `apps.browser.views` import surface
+
+## Performance Baseline
+
+This feature is expected to operate over million-scale `CanonicalRepeatCall`
+tables.
+
+That means:
+
+- the browser presents aggregates over large datasets, not raw result streams
+- streaming is not the primary optimization for the interactive page
+- the hot path is:
+  - candidate taxon selection
+  - bounded grouped summary computation
+  - rendering only visible rows
+- any feature choice that forces full-table substring scans or Python-side
+  materialization of all matching lengths is out of bounds for v1
 
 ## Phase 1: Pre-Refactor Browser Ownership
 
@@ -128,6 +154,9 @@ Required behavior:
 - browser-wide scope helpers stay in `apps/browser/views/filters.py`
 - reusable stats-family filters live in `apps/browser/stats/filters.py`
 - stats queries take normalized filter state, not raw request params
+- normalized stats filters clamp visible-row bounds and expose stable cache-key
+  serialization
+- stats-layer search semantics stay index-friendly by default
 
 Exit criteria:
 
@@ -171,6 +200,8 @@ Required behavior:
 - defaults are applied consistently through the normalized stats filter state
 - invalid numeric inputs fail soft through empty/ignored parsing, matching the
   current browser style
+- `q` stays exact-or-prefix in v1 rather than broad substring search
+- `top_n` is clamped to a safe maximum such as `100`
 
 Exit criteria:
 
@@ -211,6 +242,8 @@ Required behavior:
 - branch-scoped drill-down behaves correctly
 - `top_n` and `min_count` bound the visible result set
 - the page works meaningfully with JS disabled
+- the template only receives aggregated visible rows, never raw repeat-call
+  result sets
 
 Exit criteria:
 
@@ -218,28 +251,41 @@ Exit criteria:
 - empty states are explicit
 - the page is already useful before chart wiring exists
 
-### Slice 2.3: Harden the grouped query shape and semantics
+### Slice 2.3: Harden the grouped query shape, indexes, and caching
 
 Goal:
 
-- make the first server-rendered explorer stable enough to support the chart
+- make the first server-rendered explorer fast enough for million-scale data
 
 Scope:
 
 - keep grouped candidate selection bounded
-- compute quartiles only for visible taxa
+- add query-plan review on representative broad and branch-scoped requests
+- add targeted indexes where `EXPLAIN` shows the current index set is
+  insufficient
+- add short-TTL caching for repeated grouped summaries or chart payloads if the
+  hot path is repeatedly reused
+- compute quartiles only for visible taxa, using:
+  - database-side percentile aggregates on PostgreSQL when visible groups are
+    large
+  - Python fallback for SQLite/tests and bounded small-group cases
 - verify sorting and visible-row shaping
 - ensure later stats views can reuse the same normalized filter flow
 
 Required behavior:
 
 - no query depends on giant live taxonomy dropdowns
+- no broad `icontains` scans across large text fields
 - broad unscoped requests remain bounded by defaults
+- broad unscoped requests remain bounded by a hard `top_n` max
+- no broad request materializes all matching lengths into Python
 - queries do not parse raw request params directly in the lower layers
 
 Exit criteria:
 
 - grouped summaries stay correct under filter combinations
+- hot query plans are explain-reviewed
+- any necessary indexes or caches land before chart work proceeds
 - query shape is acceptable for the first real validation pass
 
 ## Phase 3: Add ECharts To The Length Explorer
@@ -262,6 +308,7 @@ Required behavior:
 - ECharts loads only on the length explorer page
 - the chart uses the same server-side data as the HTML summary table
 - no SPA-style fetch loop is required for v1
+- only bounded visible-row payloads are sent to the client
 
 Exit criteria:
 
@@ -448,6 +495,9 @@ Required checks:
 - branch-scoped drill-down is biologically meaningful
 - chart and table stay aligned
 - the page remains useful with hundreds or thousands of taxa in the database
+- million-scale repeat-call volumes still produce an interactive bounded view
+- hot queries use the intended indexes or cached grouped summaries where added
+- no part of the page depends on streaming raw match sets to the browser
 
 Exit criteria:
 
@@ -466,4 +516,4 @@ Do not include these in this track:
 - beeswarm/scatter/histogram companion views in the initial track
 - advanced provenance or batch analytics
 - client-side fetch-driven filtering architecture
-
+- streaming raw repeat-call rows to the interactive browser view
