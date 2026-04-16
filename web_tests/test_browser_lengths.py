@@ -1,13 +1,20 @@
 from urllib.parse import parse_qs, urlparse
 
+from django.core.cache import cache
 from django.test import TestCase
-from django.urls import reverse
+from django.urls import resolve, reverse
+from django.utils import timezone
+
+from apps.browser.catalog import sync_canonical_catalog_for_run
+from apps.browser.models import RepeatCall
+from apps.browser.views import RepeatLengthExplorerView
 
 from .support import create_imported_run_fixture
 
 
 class BrowserLengthExplorerTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.alpha = create_imported_run_fixture(
             run_id="run-alpha",
             genome_id="genome_alpha",
@@ -29,6 +36,61 @@ class BrowserLengthExplorerTests(TestCase):
             genome_name="Mouse reference genome",
         )
 
+    def _create_repeat_call(
+        self,
+        run_data,
+        *,
+        suffix,
+        method,
+        residue,
+        length,
+        purity,
+        start=30,
+        gene_symbol=None,
+    ):
+        protein = run_data["protein"]
+        sequence = run_data["sequence"]
+        genome = run_data["genome"]
+        repeat_count = max(1, min(length, int(round(length * purity))))
+        non_repeat_count = max(length - repeat_count, 0)
+        filler = "A" if residue != "A" else "Q"
+        aa_sequence = (residue * repeat_count) + (filler * non_repeat_count)
+
+        repeat_call = RepeatCall.objects.create(
+            pipeline_run=run_data["pipeline_run"],
+            genome=genome,
+            sequence=sequence,
+            protein=protein,
+            taxon=run_data["taxon"],
+            call_id=f"call_{suffix}",
+            method=method,
+            accession=genome.accession,
+            gene_symbol=gene_symbol or protein.gene_symbol or sequence.gene_symbol,
+            protein_name=protein.protein_name,
+            protein_length=protein.protein_length,
+            start=start,
+            end=start + length - 1,
+            length=length,
+            repeat_residue=residue,
+            repeat_count=repeat_count,
+            non_repeat_count=non_repeat_count,
+            purity=purity,
+            aa_sequence=aa_sequence,
+        )
+        sync_canonical_catalog_for_run(
+            run_data["pipeline_run"],
+            import_batch=run_data["import_batch"],
+            last_seen_at=timezone.now(),
+            replace_all_repeat_call_methods=True,
+        )
+        cache.clear()
+        return repeat_call
+
+    def test_length_explorer_route_uses_stable_view_export(self):
+        match = resolve(reverse("browser:lengths"))
+
+        self.assertIs(match.func.view_class, RepeatLengthExplorerView)
+
     def test_length_explorer_renders_with_default_scope(self):
         response = self.client.get(reverse("browser:lengths"))
 
@@ -49,6 +111,12 @@ class BrowserLengthExplorerTests(TestCase):
         self.assertContains(response, "repeat-length-explorer.js")
         self.assertContains(response, "echarts.min.js")
         self.assertContains(response, "Ranked length distributions for the visible taxa")
+        self.assertContains(response, 'data-chart-mode-switch')
+        self.assertContains(response, 'data-chart-mode-button')
+        self.assertContains(response, 'data-chart-mode="focused"')
+        self.assertContains(response, 'data-chart-mode="full-range"')
+        self.assertContains(response, "Focused")
+        self.assertContains(response, "Full range")
         self.assertContains(
             response,
             "No taxa reached the current display rank and minimum observation threshold.",
@@ -76,6 +144,63 @@ class BrowserLengthExplorerTests(TestCase):
         self.assertEqual(response.context["current_length_max"], 12)
         self.assertEqual(response.context["matching_repeat_calls_count"], 1)
 
+    def test_length_explorer_method_and_residue_filters_limit_matching_calls(self):
+        self._create_repeat_call(
+            self.alpha,
+            suffix="threshold_a",
+            method=RepeatCall.Method.THRESHOLD,
+            residue="A",
+            length=9,
+            purity=0.78,
+        )
+
+        response = self.client.get(
+            reverse("browser:lengths"),
+            {
+                "run": "run-alpha",
+                "branch_q": "Prim",
+                "method": RepeatCall.Method.THRESHOLD,
+                "residue": "a",
+                "min_count": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["matching_repeat_calls_count"], 1)
+        self.assertEqual(response.context["visible_taxa_count"], 1)
+        self.assertEqual(response.context["summary_rows"][0]["taxon_name"], "Homo sapiens")
+        self.assertEqual(response.context["summary_rows"][0]["observation_count"], 1)
+        self.assertEqual(response.context["summary_rows"][0]["min_length"], 9)
+        self.assertEqual(response.context["summary_rows"][0]["max_length"], 9)
+
+    def test_length_explorer_length_range_filter_limits_matching_calls(self):
+        self._create_repeat_call(
+            self.alpha,
+            suffix="short_threshold_a",
+            method=RepeatCall.Method.THRESHOLD,
+            residue="A",
+            length=9,
+            purity=0.78,
+        )
+
+        response = self.client.get(
+            reverse("browser:lengths"),
+            {
+                "run": "run-alpha",
+                "branch_q": "Prim",
+                "length_max": "10",
+                "min_count": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["matching_repeat_calls_count"], 1)
+        self.assertEqual(response.context["visible_taxa_count"], 1)
+        self.assertEqual(response.context["summary_rows"][0]["taxon_name"], "Homo sapiens")
+        self.assertEqual(response.context["summary_rows"][0]["min_length"], 9)
+        self.assertEqual(response.context["summary_rows"][0]["median"], 9)
+        self.assertEqual(response.context["summary_rows"][0]["max_length"], 9)
+
     def test_length_explorer_renders_grouped_taxon_summary_rows(self):
         response = self.client.get(
             reverse("browser:lengths"),
@@ -93,6 +218,12 @@ class BrowserLengthExplorerTests(TestCase):
         self.assertContains(response, "Mammalia")
         self.assertContains(response, "Open branch")
         self.assertContains(response, "Showing 1 of 1 taxa at rank class.")
+        self.assertContains(response, 'data-summary-section')
+        self.assertContains(response, 'data-summary-page-size="25"')
+        self.assertContains(response, 'data-summary-table-body')
+        self.assertContains(response, 'data-summary-row')
+        self.assertContains(response, 'data-summary-pagination')
+        self.assertContains(response, 'data-chart-mode-switch')
 
         summary_rows = response.context["summary_rows"]
         self.assertEqual(len(summary_rows), 1)
@@ -180,6 +311,33 @@ class BrowserLengthExplorerTests(TestCase):
         self.assertEqual(response.context["visible_taxa_count"], 1)
         self.assertEqual(response.context["summary_rows"][0]["taxon_name"], "Homo sapiens")
         self.assertEqual(response.context["summary_rows"][0]["observation_count"], 1)
+
+    def test_length_explorer_top_n_limits_visible_taxa_but_preserves_total_taxa_count(self):
+        self._create_repeat_call(
+            self.alpha,
+            suffix="human_extra",
+            method=RepeatCall.Method.PURE,
+            residue="Q",
+            length=12,
+            purity=1.0,
+        )
+
+        response = self.client.get(
+            reverse("browser:lengths"),
+            {
+                "rank": "species",
+                "min_count": "1",
+                "top_n": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["total_taxa_count"], 2)
+        self.assertEqual(response.context["visible_taxa_count"], 1)
+        self.assertEqual(response.context["summary_rows"][0]["taxon_name"], "Homo sapiens")
+        self.assertEqual(response.context["summary_rows"][0]["observation_count"], 2)
+        self.assertEqual(response.context["chart_payload"]["visibleTaxaCount"], 1)
+        self.assertContains(response, "Showing 1 of 2 taxa at rank species.")
 
     def test_length_explorer_explains_when_matches_exist_but_no_taxa_survive_threshold(self):
         response = self.client.get(

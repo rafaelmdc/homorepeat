@@ -211,6 +211,19 @@ class RepeatCallDetailView(TemplateView):
             reverse("browser:taxon-detail", args=[repeat_call.taxon.pk]),
             run=repeat_call.latest_pipeline_run.run_id,
         )
+        context["length_explorer_url"] = _url_with_query(
+            reverse("browser:lengths"),
+            run=repeat_call.latest_pipeline_run.run_id,
+            branch=repeat_call.taxon.pk,
+            q=(
+                repeat_call.gene_symbol
+                or repeat_call.protein.protein_id
+                or repeat_call.protein_name
+                or repeat_call.accession
+            ),
+            method=repeat_call.method,
+            residue=repeat_call.repeat_residue,
+        )
         context["repeatcall_list_url"] = _url_with_query(
             reverse("browser:repeatcall-list"),
             run=repeat_call.latest_pipeline_run.run_id,

@@ -1269,6 +1269,11 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, "Stored protein sequence")
         self.assertContains(response, "Q" * 30)
         self.assertContains(response, "CAG" * 30)
+        self.assertContains(response, "Compare branch lengths")
+        protein_length_query = parse_qs(urlparse(response.context["length_explorer_url"]).query)
+        self.assertEqual(protein_length_query["run"], ["run-alpha"])
+        self.assertEqual(protein_length_query["branch"], [str(self.alpha["taxon"].pk)])
+        self.assertEqual(protein_length_query["q"], ["GENE1"])
         self.assertNotContains(response, "Open run")
 
     def test_repeatcall_list_combined_filters_and_branch_scope_work(self):
@@ -1524,4 +1529,11 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, matched["protein"].protein_name)
         self.assertContains(response, "GCF_ALPHA")
         self.assertContains(response, reverse("browser:sequence-detail", args=[matched["sequence"].pk]))
+        self.assertContains(response, "Compare branch lengths")
+        repeatcall_length_query = parse_qs(urlparse(response.context["length_explorer_url"]).query)
+        self.assertEqual(repeatcall_length_query["run"], ["run-alpha"])
+        self.assertEqual(repeatcall_length_query["branch"], [str(self.alpha["taxon"].pk)])
+        self.assertEqual(repeatcall_length_query["q"], ["DETAILGENE"])
+        self.assertEqual(repeatcall_length_query["method"], [RepeatCall.Method.THRESHOLD])
+        self.assertEqual(repeatcall_length_query["residue"], ["A"])
         self.assertNotContains(response, "Open run")

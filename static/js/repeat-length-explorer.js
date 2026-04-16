@@ -2,10 +2,13 @@
   const BOX_FILL = "#dcebef";
   const BOX_BORDER = "#0f5964";
   const MEDIAN_COLOR = "#d06e37";
+  const CHART_MODE_FOCUSED = "focused";
+  const CHART_MODE_FULL_RANGE = "full-range";
   const GRID_COLOR = "rgba(23, 36, 44, 0.1)";
   const TEXT_COLOR = "#17242c";
   const MUTED_TEXT_COLOR = "#63727a";
   const DEFAULT_VISIBLE_ROWS = 12;
+  const DEFAULT_SUMMARY_PAGE_SIZE = 25;
   const MAX_CHART_HEIGHT = 980;
   const MIN_CHART_HEIGHT = 380;
   const ROW_HEIGHT = 38;
@@ -28,6 +31,23 @@
     return Math.min(Math.max(number, minimum), maximum);
   }
 
+  function positiveInteger(value, fallbackValue) {
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      return fallbackValue;
+    }
+    return parsed;
+  }
+
+  function formatLengthValue(value) {
+    if (typeof value !== "number" || Number.isNaN(value)) {
+      return "-";
+    }
+
+    const rounded = Math.round(value * 1000) / 1000;
+    return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+  }
+
   function truncateTaxonName(taxonName) {
     if (taxonName.length <= 28) {
       return taxonName;
@@ -39,6 +59,10 @@
     return String(row.taxonId);
   }
 
+  function rowForAxisValue(rows, axisValue) {
+    return rows.find((row) => rowCategoryValue(row) === String(axisValue)) || null;
+  }
+
   function chartHeightForRowCount(rowCount) {
     if (rowCount <= 0) {
       return MIN_CHART_HEIGHT;
@@ -46,14 +70,48 @@
     return clamp((rowCount * ROW_HEIGHT) + CHART_PADDING, MIN_CHART_HEIGHT, MAX_CHART_HEIGHT);
   }
 
-  function lengthBounds(payload) {
-    if (!Array.isArray(payload.rows) || payload.rows.length === 0) {
+  function focusedDisplayMin(row) {
+    const iqr = Math.max(0, row.q3 - row.q1);
+    return Math.max(row.min, row.q1 - (1.5 * iqr));
+  }
+
+  function focusedDisplayMax(row) {
+    const iqr = Math.max(0, row.q3 - row.q1);
+    return Math.min(row.max, row.q3 + (1.5 * iqr));
+  }
+
+  function deriveChartRows(rows, mode) {
+    return rows.map((row) => {
+      if (mode !== CHART_MODE_FOCUSED) {
+        return {
+          ...row,
+          displayMin: row.min,
+          displayMax: row.max,
+          maxOverflow: false,
+        };
+      }
+
+      const displayMin = focusedDisplayMin(row);
+      const displayMax = focusedDisplayMax(row);
+      return {
+        ...row,
+        displayMin,
+        displayMax,
+        maxOverflow: row.max > displayMax,
+      };
+    });
+  }
+
+  function lengthBounds(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
       return [0, 1];
     }
 
-    const span = payload.x_max - payload.x_min;
+    const visibleMin = Math.min(...rows.map((row) => row.displayMin));
+    const visibleMax = Math.max(...rows.map((row) => row.displayMax));
+    const span = visibleMax - visibleMin;
     const padding = span > 0 ? Math.max(1, Math.round(span * 0.08)) : 1;
-    return [Math.max(0, payload.x_min - padding), payload.x_max + padding];
+    return [Math.max(0, visibleMin - padding), visibleMax + padding];
   }
 
   function buildEmptyOption(payload) {
@@ -115,27 +173,49 @@
     };
   }
 
-  function buildTooltip(row) {
-    return [
+  function buildTooltip(row, { focusedMode = false } = {}) {
+    const lines = [
       `<strong>${row.taxonName}</strong>`,
       `Observations: ${row.observationCount}`,
-      `Min-Max: ${row.min}-${row.max}`,
-      `Median: ${row.median}`,
-      `IQR: ${row.q1}-${row.q3}`,
-    ].join("<br>");
+      `Min-Max: ${formatLengthValue(row.min)}-${formatLengthValue(row.max)}`,
+      `Median: ${formatLengthValue(row.median)}`,
+      `IQR: ${formatLengthValue(row.q1)}-${formatLengthValue(row.q3)}`,
+    ];
+    if (focusedMode && row.maxOverflow) {
+      lines.push(`Focused view clips max whisker at ${formatLengthValue(row.displayMax)}`);
+    }
+    return lines.join("<br>");
   }
 
-  function buildChartOption(payload) {
+  function markerPoint(row, rowIndex, xValue) {
+    return {
+      value: [xValue, rowIndex],
+      rowIndex,
+    };
+  }
+
+  function overflowMarkerData(rows) {
+    const markers = [];
+    rows.forEach((row, rowIndex) => {
+      if (row.maxOverflow) {
+        markers.push(markerPoint(row, rowIndex, row.displayMax));
+      }
+    });
+    return markers;
+  }
+
+  function buildChartOption(payload, mode) {
     if (!Array.isArray(payload.rows) || payload.rows.length === 0) {
       return buildEmptyOption(payload);
     }
 
-    const rows = payload.rows;
+    const rows = deriveChartRows(payload.rows, mode);
     const categories = rows.map((row) => rowCategoryValue(row));
-    const boxplotData = rows.map((row) => [row.min, row.q1, row.median, row.q3, row.max]);
-    const [xMin, xMax] = lengthBounds(payload);
+    const boxplotData = rows.map((row) => [row.displayMin, row.q1, row.median, row.q3, row.displayMax]);
+    const [xMin, xMax] = lengthBounds(rows);
     const visibleRowWindow = Math.min(rows.length, DEFAULT_VISIBLE_ROWS);
     const needsZoom = rows.length > visibleRowWindow;
+    const overflowMarkers = mode === CHART_MODE_FOCUSED ? overflowMarkerData(rows) : [];
 
     return {
       animationDuration: 250,
@@ -158,7 +238,9 @@
           fontSize: 13,
         },
         formatter(params) {
-          return buildTooltip(rows[params.dataIndex]);
+          return buildTooltip(rows[params.dataIndex], {
+            focusedMode: mode === CHART_MODE_FOCUSED,
+          });
         },
       },
       xAxis: {
@@ -208,8 +290,11 @@
               fontWeight: 600,
             },
           },
-          formatter(value, index) {
-            const row = rows[index];
+          formatter(value) {
+            const row = rowForAxisValue(rows, value);
+            if (!row) {
+              return "";
+            }
             return `{taxon|${truncateTaxonName(row.taxonName)}}\n{count|n=${row.observationCount}}`;
           },
         },
@@ -277,7 +362,7 @@
           name: "Median marker",
           type: "scatter",
           cursor: "pointer",
-          data: rows.map((row, index) => [row.median, index]),
+          data: rows.map((row, index) => markerPoint(row, index, row.median)),
           symbol: "circle",
           symbolSize: 7,
           itemStyle: {
@@ -288,6 +373,32 @@
             show: false,
           },
         },
+        ...(
+          overflowMarkers.length > 0
+            ? [
+                {
+                  name: "Clipped max marker",
+                  type: "scatter",
+                  cursor: "pointer",
+                  data: overflowMarkers,
+                  symbol: "triangle",
+                  symbolRotate: 90,
+                  symbolSize: 12,
+                  itemStyle: {
+                    color: MEDIAN_COLOR,
+                  },
+                  z: 6,
+                  tooltip: {
+                    show: true,
+                    formatter(params) {
+                      const row = rows[params.data.rowIndex];
+                      return buildTooltip(row, { focusedMode: true });
+                    },
+                  },
+                },
+              ]
+            : []
+        ),
       ],
     };
   }
@@ -304,15 +415,27 @@
     return rows.findIndex((row) => rowCategoryValue(row) === String(axisValue));
   }
 
+  function rowIndexForChartParams(params) {
+    if (params.data && typeof params.data.rowIndex === "number") {
+      return params.data.rowIndex;
+    }
+    if (typeof params.dataIndex === "number") {
+      return params.dataIndex;
+    }
+    return -1;
+  }
+
   function installDrilldown(chart, payload) {
     const rows = Array.isArray(payload.rows) ? payload.rows : [];
     if (rows.length === 0) {
       return;
     }
 
+    chart.off("click");
     chart.on("click", (params) => {
-      if (typeof params.dataIndex === "number") {
-        openBranchExplorer(rows, params.dataIndex);
+      const rowIndex = rowIndexForChartParams(params);
+      if (rowIndex >= 0) {
+        openBranchExplorer(rows, rowIndex);
         return;
       }
 
@@ -332,16 +455,110 @@
       return;
     }
 
+    const modeButtons = Array.from(document.querySelectorAll("[data-chart-mode-button]"));
     container.style.height = `${chartHeightForRowCount(payload.visibleTaxaCount || 0)}px`;
 
     const chart = window.echarts.init(container, null, { renderer: "svg" });
-    chart.setOption(buildChartOption(payload));
-    installDrilldown(chart, payload);
+    let currentMode = CHART_MODE_FOCUSED;
+
+    function syncModeButtons() {
+      modeButtons.forEach((button) => {
+        const isActive = button.dataset.chartMode === currentMode;
+        button.classList.toggle("btn-brand", isActive);
+        button.classList.toggle("btn-outline-secondary", !isActive);
+        button.setAttribute("aria-pressed", isActive ? "true" : "false");
+      });
+    }
+
+    function renderChart() {
+      chart.setOption(buildChartOption(payload, currentMode), { notMerge: true });
+      installDrilldown(chart, payload);
+    }
+
+    modeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const requestedMode = button.dataset.chartMode;
+        if (requestedMode !== CHART_MODE_FOCUSED && requestedMode !== CHART_MODE_FULL_RANGE) {
+          return;
+        }
+        if (requestedMode === currentMode) {
+          return;
+        }
+        currentMode = requestedMode;
+        syncModeButtons();
+        renderChart();
+      });
+    });
+
+    syncModeButtons();
+    renderChart();
 
     window.addEventListener("resize", () => {
       chart.resize();
     });
   }
 
-  document.addEventListener("DOMContentLoaded", mountLengthChart);
+  function summaryPageStatus(pageNumber, pageCount, totalRows, pageSize) {
+    const startRow = ((pageNumber - 1) * pageSize) + 1;
+    const endRow = Math.min(pageNumber * pageSize, totalRows);
+    return `Rows ${startRow}-${endRow} of ${totalRows} visible taxa. Page ${pageNumber} of ${pageCount}.`;
+  }
+
+  function mountSummaryTablePagination() {
+    const section = document.querySelector("[data-summary-section]");
+    if (!section) {
+      return;
+    }
+
+    const tableBody = section.querySelector("[data-summary-table-body]");
+    const pagination = section.querySelector("[data-summary-pagination]");
+    const previousButton = section.querySelector("[data-summary-pagination-previous]");
+    const nextButton = section.querySelector("[data-summary-pagination-next]");
+    const status = section.querySelector("[data-summary-pagination-status]");
+    if (!tableBody || !pagination || !previousButton || !nextButton || !status) {
+      return;
+    }
+
+    const rows = Array.from(tableBody.querySelectorAll("[data-summary-row]"));
+    if (rows.length === 0) {
+      return;
+    }
+
+    const pageSize = positiveInteger(section.dataset.summaryPageSize, DEFAULT_SUMMARY_PAGE_SIZE);
+    const pageCount = Math.ceil(rows.length / pageSize);
+    if (pageCount <= 1) {
+      return;
+    }
+
+    function renderPage(pageNumber) {
+      const currentPage = clamp(pageNumber, 1, pageCount);
+      const startIndex = (currentPage - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+
+      rows.forEach((row, index) => {
+        row.hidden = index < startIndex || index >= endIndex;
+      });
+
+      previousButton.disabled = currentPage === 1;
+      nextButton.disabled = currentPage === pageCount;
+      status.textContent = summaryPageStatus(currentPage, pageCount, rows.length, pageSize);
+      pagination.hidden = false;
+      pagination.dataset.currentPage = String(currentPage);
+    }
+
+    previousButton.addEventListener("click", () => {
+      renderPage(positiveInteger(pagination.dataset.currentPage, 1) - 1);
+    });
+
+    nextButton.addEventListener("click", () => {
+      renderPage(positiveInteger(pagination.dataset.currentPage, 1) + 1);
+    });
+
+    renderPage(1);
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    mountLengthChart();
+    mountSummaryTablePagination();
+  });
 })();
