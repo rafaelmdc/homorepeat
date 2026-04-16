@@ -5,6 +5,7 @@
   const CHART_MODE_FOCUSED = "focused";
   const CHART_MODE_FULL_RANGE = "full-range";
   const GRID_COLOR = "rgba(23, 36, 44, 0.1)";
+  const MAX_VISIBLE_ROWS_WITH_TAXON_LABELS = 24;
   const TEXT_COLOR = "#17242c";
   const MUTED_TEXT_COLOR = "#63727a";
   const DEFAULT_VISIBLE_ROWS = 12;
@@ -39,6 +40,13 @@
     return parsed;
   }
 
+  function numericValue(value, fallbackValue) {
+    if (Array.isArray(value)) {
+      return numericValue(value[0], fallbackValue);
+    }
+    return typeof value === "number" && Number.isFinite(value) ? value : fallbackValue;
+  }
+
   function formatLengthValue(value) {
     if (typeof value !== "number" || Number.isNaN(value)) {
       return "-";
@@ -68,6 +76,53 @@
       return MIN_CHART_HEIGHT;
     }
     return clamp((rowCount * ROW_HEIGHT) + CHART_PADDING, MIN_CHART_HEIGHT, MAX_CHART_HEIGHT);
+  }
+
+  function defaultZoomState(rowCount) {
+    return {
+      startValue: 0,
+      endValue: Math.max(0, Math.min(rowCount - 1, DEFAULT_VISIBLE_ROWS - 1)),
+    };
+  }
+
+  function normalizeZoomState(rowCount, zoomState) {
+    if (rowCount <= DEFAULT_VISIBLE_ROWS) {
+      return null;
+    }
+
+    const fallback = defaultZoomState(rowCount);
+    const startValue = clamp(
+      Math.round(numericValue(zoomState ? zoomState.startValue : undefined, fallback.startValue)),
+      0,
+      rowCount - 1,
+    );
+    const endValue = clamp(
+      Math.round(numericValue(zoomState ? zoomState.endValue : undefined, fallback.endValue)),
+      startValue,
+      rowCount - 1,
+    );
+    return {
+      startValue,
+      endValue,
+    };
+  }
+
+  function visibleRowCountForZoom(rowCount, zoomState) {
+    if (rowCount <= 0) {
+      return 0;
+    }
+    if (!zoomState) {
+      return rowCount;
+    }
+    return (zoomState.endValue - zoomState.startValue) + 1;
+  }
+
+  function shouldShowObservationCounts(visibleRowCount) {
+    return visibleRowCount <= DEFAULT_VISIBLE_ROWS;
+  }
+
+  function shouldShowTaxonLabels(visibleRowCount) {
+    return visibleRowCount <= MAX_VISIBLE_ROWS_WITH_TAXON_LABELS;
   }
 
   function focusedDisplayMin(row) {
@@ -204,7 +259,16 @@
     return markers;
   }
 
-  function buildChartOption(payload, mode) {
+  function averageMedian(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return null;
+    }
+
+    const sum = rows.reduce((total, row) => total + row.median, 0);
+    return sum / rows.length;
+  }
+
+  function buildChartOption(payload, mode, zoomState) {
     if (!Array.isArray(payload.rows) || payload.rows.length === 0) {
       return buildEmptyOption(payload);
     }
@@ -215,7 +279,14 @@
     const [xMin, xMax] = lengthBounds(rows);
     const visibleRowWindow = Math.min(rows.length, DEFAULT_VISIBLE_ROWS);
     const needsZoom = rows.length > visibleRowWindow;
+    const normalizedZoomState = normalizeZoomState(rows.length, zoomState);
+    const visibleRowCount = visibleRowCountForZoom(rows.length, normalizedZoomState);
+    const showTaxonLabels = shouldShowTaxonLabels(visibleRowCount);
+    const showObservationCounts = shouldShowObservationCounts(
+      visibleRowCount,
+    );
     const overflowMarkers = mode === CHART_MODE_FOCUSED ? overflowMarkerData(rows) : [];
+    const avgMedian = averageMedian(rows);
 
     return {
       animationDuration: 250,
@@ -275,6 +346,8 @@
           show: false,
         },
         axisLabel: {
+          show: showTaxonLabels,
+          interval: showTaxonLabels ? 0 : "auto",
           color: TEXT_COLOR,
           fontWeight: 700,
           lineHeight: 17,
@@ -295,6 +368,9 @@
             if (!row) {
               return "";
             }
+            if (!showObservationCounts) {
+              return `{taxon|${truncateTaxonName(row.taxonName)}}`;
+            }
             return `{taxon|${truncateTaxonName(row.taxonName)}}\n{count|n=${row.observationCount}}`;
           },
         },
@@ -307,8 +383,8 @@
               zoomOnMouseWheel: false,
               moveOnMouseMove: true,
               moveOnMouseWheel: true,
-              startValue: 0,
-              endValue: visibleRowWindow - 1,
+              startValue: normalizedZoomState.startValue,
+              endValue: normalizedZoomState.endValue,
             },
             {
               type: "slider",
@@ -319,8 +395,8 @@
               top: 24,
               bottom: 64,
               brushSelect: false,
-              startValue: 0,
-              endValue: visibleRowWindow - 1,
+              startValue: normalizedZoomState.startValue,
+              endValue: normalizedZoomState.endValue,
               fillerColor: "rgba(15, 89, 100, 0.16)",
               borderColor: "rgba(23, 36, 44, 0.08)",
               handleStyle: {
@@ -372,6 +448,30 @@
           tooltip: {
             show: false,
           },
+          markLine: avgMedian === null
+            ? undefined
+            : {
+                silent: true,
+                symbol: "none",
+                lineStyle: {
+                  color: MEDIAN_COLOR,
+                  type: "dashed",
+                  width: 2,
+                  opacity: 0.7,
+                },
+                label: {
+                  show: true,
+                  formatter: `Avg median ${formatLengthValue(avgMedian)}`,
+                  color: MEDIAN_COLOR,
+                  fontWeight: 700,
+                  padding: [0, 0, 8, 0],
+                },
+                data: [
+                  {
+                    xAxis: avgMedian,
+                  },
+                ],
+              },
         },
         ...(
           overflowMarkers.length > 0
@@ -448,6 +548,18 @@
     });
   }
 
+  function zoomStateFromChart(chart, rowCount) {
+    const dataZoom = chart.getOption().dataZoom;
+    if (!Array.isArray(dataZoom) || dataZoom.length === 0) {
+      return null;
+    }
+
+    return normalizeZoomState(rowCount, {
+      startValue: numericValue(dataZoom[0].startValue, 0),
+      endValue: numericValue(dataZoom[0].endValue, Math.max(0, rowCount - 1)),
+    });
+  }
+
   function mountLengthChart() {
     const container = document.getElementById("repeat-length-chart");
     const payload = parsePayload("repeat-length-chart-payload");
@@ -460,6 +572,7 @@
 
     const chart = window.echarts.init(container, null, { renderer: "svg" });
     let currentMode = CHART_MODE_FOCUSED;
+    let currentZoomState = normalizeZoomState(payload.visibleTaxaCount || 0, null);
 
     function syncModeButtons() {
       modeButtons.forEach((button) => {
@@ -471,9 +584,20 @@
     }
 
     function renderChart() {
-      chart.setOption(buildChartOption(payload, currentMode), { notMerge: true });
+      chart.setOption(buildChartOption(payload, currentMode, currentZoomState), { notMerge: true });
       installDrilldown(chart, payload);
     }
+
+    chart.off("datazoom");
+    chart.on("datazoom", () => {
+      const nextZoomState = zoomStateFromChart(chart, payload.visibleTaxaCount || 0);
+      const previousVisibleRowCount = visibleRowCountForZoom(payload.visibleTaxaCount || 0, currentZoomState);
+      const nextVisibleRowCount = visibleRowCountForZoom(payload.visibleTaxaCount || 0, nextZoomState);
+      currentZoomState = nextZoomState;
+      if (shouldShowObservationCounts(previousVisibleRowCount) !== shouldShowObservationCounts(nextVisibleRowCount)) {
+        renderChart();
+      }
+    });
 
     modeButtons.forEach((button) => {
       button.addEventListener("click", () => {
