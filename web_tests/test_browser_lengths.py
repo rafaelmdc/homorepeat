@@ -45,6 +45,7 @@ class BrowserLengthExplorerTests(TestCase):
         self.assertContains(response, 'id="repeat-length-chart"')
         self.assertContains(response, "repeat-length-explorer.js")
         self.assertContains(response, "echarts.min.js")
+        self.assertContains(response, "Ranked length distributions for the visible taxa")
         self.assertContains(
             response,
             "No taxa reached the current display rank and minimum observation threshold.",

@@ -176,6 +176,7 @@ code {
 
 .length-chart-shell {
   min-height: 380px;
+  overflow: hidden;
   border: 1px dashed var(--site-line-strong);
   border-radius: calc(var(--site-radius) - 10px);
   background:
