@@ -1,0 +1,872 @@
+# Homorepeat Browser Visualization Plan
+
+## Purpose
+
+This document defines the visualization architecture for the next browser phase.
+
+The browser should be organized around:
+
+- **single-stat viewers**
+- **comparison viewers**
+- a consistent **3-tier model** for each viewer:
+  - **Tier 1 — Overview**
+  - **Tier 2 — Browse**
+  - **Tier 3 — Inspect**
+
+This structure is motivated by the earlier analysis, where **polyQ length and codon ratio** were the only features that consistently clustered taxa in a biologically meaningful way, while other variables were less informative at broad scale. The earlier work also showed that the strongest comparative signal came from the **codon ratio–length relationship**, not just from either variable in isolation. :contentReference[oaicite:0]{index=0} :contentReference[oaicite:1]{index=1}
+
+---
+
+## Current state
+
+Currently implemented:
+
+- **Length viewer**
+  - only a **boxplot**
+
+This is useful as a local statistical plot, but it is not enough as the primary browser architecture:
+- it does not scale well to hundreds of taxa
+- it is not a strong overview
+- it does not provide a browsing layer
+- it does not support millions of matches cleanly
+
+So the next step is not to add disconnected charts, but to define a coherent viewer system.
+
+---
+
+# Architectural principles
+
+## 1. Same viewer structure everywhere
+
+Every viewer should follow the same pattern:
+
+- **Tier 1 — Overview**
+  - compressed
+  - scalable
+  - lineage-aware
+  - suitable for many taxa / many rows
+
+- **Tier 2 — Browse**
+  - comparison-oriented
+  - searchable / sortable
+  - still compact
+  - suitable for many taxa but more targeted than Tier 1
+
+- **Tier 3 — Inspect**
+  - detailed
+  - focused on one taxon, clade, or filtered subset
+  - suitable for more classical plots
+
+This consistency matters more than any individual chart.
+
+---
+
+## 2. Single-stat and comparison viewers are separate
+
+We should not force every question into one page.
+
+Instead, the browser should be organized into:
+
+### Single-stat viewers
+These answer:
+- how is this variable distributed?
+- how does it vary across taxa?
+- which taxa stand out?
+
+Examples:
+- Length
+- Codon Ratio
+- Purity
+- Position
+
+### Comparison viewers
+These answer:
+- how do two variables relate?
+- does that relationship vary by lineage?
+- which taxa have distinct relationship patterns?
+
+Examples:
+- Codon Ratio × Length
+- Purity × Length
+- Position × Length
+
+Not every pair needs a viewer. Only the biologically useful ones should exist.
+
+---
+
+## 3. Top levels should prefer compact, binned, lineage-aware views
+
+At browser scale, the default view should usually **not** be:
+- a giant scatterplot
+- one boxplot per taxon
+- raw-point visualization
+- donut or pie style overview
+
+At this scale, top-level views should use:
+- heatmaps
+- binned summaries
+- ranked summaries
+- small multiples
+- compact interval summaries
+
+The earlier analysis already moved in this direction by using taxon summaries, clustering, heatmaps, and aggregated codon/length relationships because broad interpretation at scale required compression. :contentReference[oaicite:2]{index=2} :contentReference[oaicite:3]{index=3}
+
+---
+
+## 4. Lineage-aware taxon ordering is a hard requirement
+
+This is not optional.
+
+Any taxon-based overview is only readable if the taxon axis is **lineage-aware**.
+
+A taxon heatmap, ranked summary, or binned overview without lineage-aware ordering is visually misleading. If unrelated taxa are placed adjacent to each other, the chart encourages meaningless visual comparisons and destroys the ability to read biological structure from local neighborhoods.
+
+### Therefore:
+
+- taxa must **not** default to alphabetical order
+- taxa must **not** be placed in arbitrary UI order
+- adjacent rows should remain as biologically comparable as possible
+- closely related taxa should stay adjacent
+- larger clades should be visually grouped
+- the same lineage-aware ordering should be reused consistently across viewers
+
+### Practical implication
+We should never place distant groups beside each other in taxon-binned overview charts just because of sort order or implementation convenience. For example, we should not end up with insects beside mammals, mammals beside tunicates, or other visually incoherent neighbor relationships.
+
+### Default behavior
+Taxa should be ordered according to evolutionary structure:
+- basal groups first
+- more derived groups later
+- optionally grouped into larger clades
+- optionally collapsible by lineage in the future
+
+This follows the earlier analysis, where heatmaps became interpretable because taxa were presented in evolutionary order, with basal groups on one side and mammals on the other. :contentReference[oaicite:4]{index=4}
+
+---
+
+## 5. Use real biological values first, derived statistics second
+
+The browser should primarily show:
+- actual codon ratio summaries
+- actual length bins
+- actual taxon structure
+
+Derived statistical encodings used in the earlier analysis, such as transformed codon values around 0.5 or pairwise sign-test matrices, should still exist, but as **comparison/statistical views**, not as the first default biological display. The earlier symmetric codon transformation was useful for pairwise testing, but it is not the most intuitive first data view. :contentReference[oaicite:5]{index=5}
+
+---
+
+# Viewer inventory
+
+## First-wave viewers
+
+These should be the first serious viewer set:
+
+### Single-stat
+1. **Length**
+2. **Codon Ratio**
+
+### Comparison
+3. **Codon Ratio × Length**
+
+These are the highest priority because the earlier work showed that length and codon ratio were the most informative broad-scale features, and that their relationship captured taxonomic structure. :contentReference[oaicite:6]{index=6} :contentReference[oaicite:7]{index=7}
+
+---
+
+## Second-wave viewers
+
+### Single-stat
+4. **Purity**
+5. **Position**
+
+### Comparison
+6. **Purity × Length**
+7. **Position × Length**
+
+These should come later because they are useful, but were not the main large-scale discriminators in the earlier analysis. Purity in particular was noted as less valuable as an average-based metric. :contentReference[oaicite:8]{index=8}
+
+---
+
+# Viewer definitions
+
+# 1. Length viewer
+
+## Main question
+How are polyQ tract lengths distributed across taxa and lineages?
+
+## Tier 1 — Overview
+
+### Chart
+**Taxon × Length-bin Heatmap**
+
+### ECharts type
+- `heatmap`
+
+### Axes
+- y-axis: taxa or lineage groups
+- x-axis: length bins
+
+### Encoding
+- color: count, normalized count, or log count
+
+### Why
+This is the best scalable overview of tract size across many taxa.
+It is much better than trying to display hundreds of boxplots or donuts at once.
+
+### Lineage-aware requirement
+The taxon axis must be lineage-aware. This chart only works if nearby rows remain biologically coherent.
+
+### Notes
+- taxa ordered biologically
+- low-count bins visually muted or tooltip-warned
+- support normalization toggle later if needed
+
+---
+
+## Tier 2 — Browse
+
+### Chart
+**Ranked Taxon Length Summary**
+
+### ECharts type
+- `custom series` or `scatter` + `lines`
+- alternatively `bar` for simpler first implementation
+
+### Encoding
+Per taxon:
+- median length
+- IQR or p10–p90
+- optional p95 or max
+- count in tooltip
+
+### Why
+This lets users compare many taxa compactly and sort them by:
+- median length
+- p95
+- max
+- count
+
+### Lineage-aware requirement
+Default ordering should still be lineage-aware. Explicit alternative sorts can be allowed, but the viewer should always allow returning to biological order.
+
+### Notes
+If the interval-style plot is too much for the first implementation, start with:
+- sorted horizontal bar chart of median length
+- tooltip with additional stats
+
+---
+
+## Tier 3 — Inspect
+
+### Charts
+- **Histogram**
+- **Boxplot**
+- optional **ECDF** later
+
+### ECharts type
+- histogram-like bar chart using binned data with `bar`
+- `boxplot`
+
+### Why
+Once the user selects a taxon or filtered subset, classical statistical charts become appropriate.
+
+### Current status
+- boxplot already exists here
+- this tier is the closest to existing implementation
+
+---
+
+# 2. Codon Ratio viewer
+
+## Main question
+How does codon ratio vary across taxa, and how does that variation change across repeat lengths?
+
+## Important note
+The browser should prioritize showing the **actual codon ratio values**.
+The transformed sign-test encoding used in the earlier analysis should be preserved as a comparison/statistical mode, not as the default biological display. :contentReference[oaicite:9]{index=9}
+
+## Tier 1 — Overview
+
+### Chart
+**Taxon × Length-bin Codon Heatmap**
+
+### ECharts type
+- `heatmap`
+
+### Axes
+- y-axis: taxa or lineage groups
+- x-axis: length bins
+
+### Encoding
+- color: mean or median codon ratio
+
+### Why
+This is likely the best top-level codon view because it preserves the length dimension instead of collapsing it away.
+That matches the earlier biological result better than a flat codon summary.
+
+### Lineage-aware requirement
+This chart is only meaningful if taxa are organized evolutionarily. Codon patterns are read partly through local adjacency and clade-level continuity.
+
+### Notes
+- taxa ordered by lineage
+- tooltip should include:
+  - count
+  - codon ratio summary
+  - maybe purity/position summaries later
+
+---
+
+## Tier 2 — Browse
+
+### Chart
+**Ranked Codon Ratio Summary by Taxon**
+
+### ECharts type
+- `custom series` or `scatter` + interval lines
+- fallback: `bar`
+
+### Encoding
+Per taxon:
+- median codon ratio
+- IQR or p10–p90
+- count
+
+### Why
+This allows users to browse and rank taxa by codon behavior without jumping straight into comparison matrices.
+
+### Lineage-aware requirement
+Biological order should be the default. Sort-by-value is useful, but lineage order must remain a first-class option.
+
+### Notes
+Can also support grouping by macro-clade.
+
+---
+
+## Tier 3 — Inspect
+
+### Charts
+- **Histogram / density-like binned codon ratio plot**
+- **Boxplot**
+- optional **ECDF**
+
+### ECharts type
+- `bar` for binned histogram
+- `boxplot`
+
+### Why
+This is where a user explores one selected taxon, clade, or filtered subset in detail.
+
+---
+
+# 3. Codon Ratio × Length viewer
+
+## Main question
+How does codon ratio change with polyQ length, and how do those relationships differ across taxa?
+
+## Importance
+This should be the flagship comparison viewer.
+The earlier work showed that length and codon ratio together were the most informative pair, and that taxonomic differentiation emerged from comparing codon-length relationships between groups. :contentReference[oaicite:10]{index=10} :contentReference[oaicite:11]{index=11}
+
+## Tier 1 — Overview
+
+### Primary chart
+**Taxon × Length-bin Codon Heatmap**
+
+### ECharts type
+- `heatmap`
+
+### Why
+This is the most direct and interpretable overview of the codon-length relationship by taxon.
+
+### Lineage-aware requirement
+Mandatory. The taxon axis must preserve lineage structure.
+
+### Secondary companion chart
+**Taxon × Taxon Comparison Matrix**
+
+### ECharts type
+- `heatmap`
+
+### Encoding
+- pairwise statistic describing codon-length relation difference between taxa
+
+### Why
+This is the browser-friendly continuation of the earlier sign-test matrix work.
+It should exist, but probably as a companion panel/tab, not the only top-level chart.
+
+### Lineage-aware requirement
+Both axes must use the same lineage-aware ordering, otherwise block structure and clade differences become much harder to read.
+
+### Notes
+This matrix is a comparison/statistical view, not the first biological data view.
+
+---
+
+## Tier 2 — Browse
+
+### Chart
+**Small-multiple Trend Panels**
+
+### ECharts type
+- `line`
+
+### Structure
+- one small panel per selected taxon or lineage group
+- x-axis: length bins
+- y-axis: codon ratio summary per bin
+
+### Why
+This is much cleaner than overlaying many lines into a spaghetti plot.
+
+### Lineage-aware requirement
+When multiple taxa are shown, they should be selected and displayed in lineage-coherent sets whenever possible:
+- sibling taxa
+- taxa within one clade
+- taxa within one macro-group
+
+### Notes
+- show only selected or filtered taxa
+- do not show all taxa at once
+- could start with top N taxa or sibling taxa within a lineage
+
+---
+
+## Tier 3 — Inspect
+
+### Chart
+**2D Density / Hexbin-style View**
+
+### ECharts type
+- best practical first version: `heatmap` using 2D binned data
+- later: custom hexbin rendering if really needed
+
+### Axes
+- x-axis: length
+- y-axis: codon ratio
+
+### Encoding
+- color: density/count
+
+### Why
+This is where the hexbin idea works best.
+It should be used for a selected taxon, clade, or filtered subset, not as the global all-taxa default.
+
+### Notes
+For implementation simplicity:
+- start with rectangular 2D binned density heatmap
+- only move to true hexbin if the gain is real
+
+---
+
+# 4. Purity viewer
+
+## Main question
+How pure are detected repeats, and how does purity vary across taxa?
+
+## Priority
+Secondary.
+Useful, but not first-wave.
+
+## Tier 1 — Overview
+
+### Chart
+**Taxon Purity Summary Heatmap**
+
+### ECharts type
+- `heatmap`
+
+### Structure
+- rows: taxa
+- columns: purity bins or summary fields
+
+### Why
+Compact and readable at scale.
+
+### Lineage-aware requirement
+As with all taxon-based overviews, the taxon axis must be lineage-aware.
+
+---
+
+## Tier 2 — Browse
+
+### Chart
+**Ranked Purity Summary by Taxon**
+
+### ECharts type
+- `bar` initially
+- later interval-style plot
+
+### Encoding
+- median purity
+- IQR
+- count
+
+### Notes
+Default order should remain biological unless the user explicitly changes it.
+
+---
+
+## Tier 3 — Inspect
+
+### Charts
+- histogram
+- boxplot
+
+### ECharts type
+- `bar`
+- `boxplot`
+
+### Notes
+Purity may become more useful in comparison viewers than as a standalone flagship page.
+
+---
+
+# 5. Position viewer
+
+## Main question
+Where in proteins do repeats tend to occur, and does that vary by lineage?
+
+## Tier 1 — Overview
+
+### Chart
+**Relative Position Bucket Heatmap**
+
+### ECharts type
+- `heatmap`
+
+### Axes
+- y-axis: taxa
+- x-axis: relative-position bins
+
+### Why
+Position is more interpretable when normalized and bucketed.
+
+### Lineage-aware requirement
+Taxon order must remain lineage-aware for the same reasons as other overview heatmaps.
+
+---
+
+## Tier 2 — Browse
+
+### Chart
+**Taxon Region Occupancy Summary**
+
+### ECharts type
+- `bar`
+
+### Encoding
+For each taxon:
+- fraction in N-terminal region
+- fraction in middle
+- fraction in C-terminal region
+
+### Why
+This is easier to browse than raw continuous position summaries.
+
+### Notes
+Allow switching between lineage order and value order, but lineage order should be the default.
+
+---
+
+## Tier 3 — Inspect
+
+### Charts
+- relative position histogram
+- optional density-like view
+
+### ECharts type
+- `bar`
+
+---
+
+# 6. Purity × Length viewer
+
+## Main question
+How does purity change with repeat length, and does that differ across taxa?
+
+## Tier 1 — Overview
+
+### Chart
+**Taxon × Length-bin Purity Heatmap**
+
+### ECharts type
+- `heatmap`
+
+### Encoding
+- color: mean/median purity
+
+### Lineage-aware requirement
+The taxon axis must be lineage-aware.
+
+---
+
+## Tier 2 — Browse
+
+### Chart
+**Small-multiple Purity Trends**
+
+### ECharts type
+- `line`
+
+### Structure
+- selected taxa only
+- x-axis: length bins
+- y-axis: purity summary
+
+### Notes
+Prefer lineage-coherent subsets over arbitrary mixtures of taxa.
+
+---
+
+## Tier 3 — Inspect
+
+### Chart
+**2D Density of Purity vs Length**
+
+### ECharts type
+- `heatmap` using 2D bins
+
+---
+
+# 7. Position × Length viewer
+
+## Main question
+Do repeat lengths vary according to protein position?
+
+## Tier 1 — Overview
+
+### Chart
+**Taxon × Length-bin Position Summary Heatmap**
+
+### ECharts type
+- `heatmap`
+
+### Encoding
+- color: mean/median relative position
+
+### Lineage-aware requirement
+The taxon axis must be lineage-aware.
+
+---
+
+## Tier 2 — Browse
+
+### Chart
+**Small-multiple Position Trends**
+
+### ECharts type
+- `line`
+
+### Structure
+- selected taxa only
+- x-axis: length bins
+- y-axis: relative position summary
+
+### Notes
+Prefer lineage-coherent subsets.
+
+---
+
+## Tier 3 — Inspect
+
+### Chart
+**2D Density of Position vs Length**
+
+### ECharts type
+- `heatmap` using 2D bins
+
+---
+
+# Shared filters
+
+All viewers should use a shared filtering language where possible.
+
+## Core filters
+- taxon / lineage
+- taxonomic rank
+- repeat length range
+- protein / gene / accession search
+- detection method
+- minimum observation count
+- Top N
+- sort mode
+
+## Later filters
+- purity range
+- position range
+- protein length
+- annotation text
+
+The core idea is that filters should narrow the biological scope first, then the tier determines how much detail to show.
+
+---
+
+# Shared UI structure
+
+Every viewer page should follow the same skeleton.
+
+## Header
+- viewer name
+- short interpretation sentence
+- main filters
+
+## Tier tabs
+- **Overview**
+- **Browse**
+- **Inspect**
+
+## Side or lower utility panel
+- summary stats
+- low-n warnings
+- export options later
+
+This consistency will make the browser feel much more deliberate.
+
+---
+
+# Shared ordering rules
+
+These ordering rules should be applied consistently across the browser.
+
+## Default
+- lineage-aware biological ordering
+
+## Optional alternates
+- sort by median
+- sort by count
+- sort by p95/max
+- sort alphabetically only if explicitly useful for lookup
+
+## Important rule
+Lineage order is not just one sort option among many. It is the semantic default that makes taxon-binned views interpretable.
+
+---
+
+# Implementation priority
+
+## Phase 1 — Extend existing Length viewer
+Goal:
+- keep current boxplot
+- add overview and browse tiers
+
+Implement:
+1. Length Tier 1 — taxon × length-bin heatmap
+2. Length Tier 2 — ranked taxon summary
+3. Keep current Length Tier 3 boxplot
+4. Add histogram beside or above the existing boxplot
+
+This is the most natural first step because length already exists.
+
+---
+
+## Phase 2 — Add Codon Ratio viewer
+Goal:
+- establish second flagship single-stat viewer
+
+Implement:
+1. Codon Tier 1 — taxon × length-bin codon heatmap
+2. Codon Tier 2 — ranked codon summary
+3. Codon Tier 3 — codon histogram + boxplot
+
+---
+
+## Phase 3 — Add Codon Ratio × Length viewer
+Goal:
+- implement the first comparison viewer
+
+Implement:
+1. Overview — taxon × length-bin codon heatmap reused here
+2. Comparison companion — taxon × taxon comparison matrix
+3. Browse — small-multiple trends
+4. Inspect — 2D binned density plot
+
+This is where the strongest biology becomes explicit.
+
+---
+
+## Phase 4 — Add Purity and Position viewers
+Goal:
+- complete the single-stat family
+
+Implement:
+- purity viewer
+- position viewer
+
+---
+
+## Phase 5 — Add secondary comparison viewers
+Goal:
+- expand only if they remain biologically useful
+
+Implement:
+- purity × length
+- position × length
+
+Only after the first three viewers feel solid.
+
+---
+
+# Explicit non-goals for now
+
+Do not do these yet:
+
+- one giant dashboard with all variables
+- true hexbin custom rendering before rectangular 2D binning proves insufficient
+- advanced clustering UI
+- UMAP/PCA/embedding views
+- violin plots as default browser views
+- one boxplot per taxon for hundreds of taxa
+- donut/pie charts as top-level browser views
+- overengineered multi-panel scientific dashboards
+- arbitrary taxon ordering in overview charts
+
+The browser should remain:
+- clean
+- modern
+- sparse
+- fast
+- understandable
+
+---
+
+# Recommended immediate next step
+
+The next concrete implementation target should be:
+
+## Length viewer upgrade
+because it is already the only implemented viewer.
+
+### Exact target
+Turn Length into the first full 3-tier viewer:
+
+- **Tier 1:** Taxon × Length-bin Heatmap
+- **Tier 2:** Ranked Taxon Length Summary
+- **Tier 3:** Existing Boxplot + Histogram
+
+This gives the project its first complete viewer architecture and sets the pattern for all later viewers.
+
+---
+
+# Summary
+
+## Viewer model
+- build **single-stat viewers**
+- build **comparison viewers**
+- give every viewer the same **3-tier structure**
+
+## First-wave viewers
+- Length
+- Codon Ratio
+- Codon Ratio × Length
+
+## Top-level chart philosophy
+- Tier 1 = heatmap / compact overview
+- Tier 2 = ranked summary / browsing view
+- Tier 3 = classical detail plots
+
+## Taxon-axis rule
+- any taxon-based overview must be **lineage-aware by default**
+
+## First implementation move
+- evolve the current length boxplot into a complete 3-tier length viewer
+
+This is the cleanest path from the current state to a modern, scalable browser architecture.
