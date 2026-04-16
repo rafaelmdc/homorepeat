@@ -8,7 +8,12 @@ from django.db.models import Count, F, Max, Min, Q
 from ..models import CanonicalRepeatCall
 from .aggregates import PercentileCont
 from .filters import StatsFilterState
-from .summaries import normalize_length_summary_value, summarize_ranked_length_groups
+from .summaries import (
+    normalize_length_summary_value,
+    normalize_numeric_summary_value,
+    summarize_ranked_codon_ratio_groups,
+    summarize_ranked_length_groups,
+)
 
 
 def build_ranked_length_summary_bundle(filter_state: StatsFilterState) -> dict[str, object]:
@@ -35,6 +40,52 @@ def build_ranked_length_summary_bundle(filter_state: StatsFilterState) -> dict[s
             else []
         )
         summary_rows = summarize_ranked_length_groups(group_rows, grouped_lengths)
+
+    bundle = {
+        "matching_repeat_calls_count": matching_repeat_calls_count,
+        "summary_rows": summary_rows,
+        "total_taxa_count": total_taxa_count,
+        "visible_taxa_count": len(summary_rows),
+    }
+    cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
+    return bundle
+
+
+def build_ranked_codon_summary_bundle(filter_state: StatsFilterState) -> dict[str, object]:
+    cache_key = f"browser:stats:codon-summary:{filter_state.cache_key()}"
+    cached_bundle = cache.get(cache_key)
+    if cached_bundle is not None:
+        return cached_bundle
+
+    matching_repeat_calls_count = build_filtered_repeat_call_queryset(
+        filter_state,
+        require_codon_ratio=True,
+    ).count()
+    total_taxa_count = build_ranked_taxon_group_count(
+        filter_state,
+        require_codon_ratio=True,
+    )
+    if connection.vendor == "postgresql":
+        summary_rows = list(build_ranked_codon_summary_queryset(filter_state))
+    else:
+        group_rows = list(
+            build_ranked_taxon_group_queryset(
+                filter_state,
+                require_codon_ratio=True,
+            )
+        )
+        display_taxon_ids = [row["display_taxon_id"] for row in group_rows]
+        grouped_codon_ratio_values = (
+            list(
+                build_group_codon_ratio_values_queryset(
+                    filter_state,
+                    display_taxon_ids=display_taxon_ids,
+                )
+            )
+            if display_taxon_ids
+            else []
+        )
+        summary_rows = summarize_ranked_codon_ratio_groups(group_rows, grouped_codon_ratio_values)
 
     bundle = {
         "matching_repeat_calls_count": matching_repeat_calls_count,
@@ -99,16 +150,22 @@ def build_available_codon_metric_names(filter_state: StatsFilterState) -> list[s
     )
 
 
-def build_ranked_taxon_group_queryset(filter_state: StatsFilterState):
-    return build_ranked_taxon_group_base_queryset(filter_state).order_by(
+def build_ranked_taxon_group_queryset(filter_state: StatsFilterState, *, require_codon_ratio: bool = False):
+    return build_ranked_taxon_group_base_queryset(
+        filter_state,
+        require_codon_ratio=require_codon_ratio,
+    ).order_by(
         "-observation_count",
         "display_taxon_name",
         "display_taxon_id",
     )[: filter_state.top_n]
 
 
-def build_ranked_taxon_group_count(filter_state: StatsFilterState) -> int:
-    return build_ranked_taxon_group_base_queryset(filter_state).count()
+def build_ranked_taxon_group_count(filter_state: StatsFilterState, *, require_codon_ratio: bool = False) -> int:
+    return build_ranked_taxon_group_base_queryset(
+        filter_state,
+        require_codon_ratio=require_codon_ratio,
+    ).count()
 
 
 def build_group_length_values_queryset(filter_state: StatsFilterState, *, display_taxon_ids):
@@ -120,6 +177,21 @@ def build_group_length_values_queryset(filter_state: StatsFilterState, *, displa
         .filter(display_taxon_id__in=display_taxon_ids)
         .values_list("display_taxon_id", "length")
         .order_by("display_taxon_id", "length")
+    )
+
+
+def build_group_codon_ratio_values_queryset(filter_state: StatsFilterState, *, display_taxon_ids):
+    return (
+        _with_display_taxon_annotations(
+            build_filtered_repeat_call_queryset(
+                filter_state,
+                require_codon_ratio=True,
+            ),
+            rank=filter_state.rank,
+        )
+        .filter(display_taxon_id__in=display_taxon_ids)
+        .values_list("display_taxon_id", "codon_ratio_value")
+        .order_by("display_taxon_id", "codon_ratio_value")
     )
 
 
@@ -159,9 +231,51 @@ def build_ranked_length_summary_queryset(filter_state: StatsFilterState):
     ]
 
 
-def build_ranked_taxon_group_base_queryset(filter_state: StatsFilterState):
+def build_ranked_codon_summary_queryset(filter_state: StatsFilterState):
     queryset = _with_display_taxon_annotations(
-        build_filtered_repeat_call_queryset(filter_state),
+        build_filtered_repeat_call_queryset(
+            filter_state,
+            require_codon_ratio=True,
+        ),
+        rank=filter_state.rank,
+    ).exclude(display_taxon_id__isnull=True)
+
+    summary_rows = (
+        queryset.values("display_taxon_id", "display_taxon_name", "display_taxon_rank")
+        .annotate(
+            observation_count=Count("pk"),
+            min_codon_ratio=Min("codon_ratio_value"),
+            q1=PercentileCont(0.25, "codon_ratio_value"),
+            median=PercentileCont(0.5, "codon_ratio_value"),
+            q3=PercentileCont(0.75, "codon_ratio_value"),
+            max_codon_ratio=Max("codon_ratio_value"),
+        )
+        .filter(observation_count__gte=filter_state.min_count)
+        .order_by("-observation_count", "display_taxon_name", "display_taxon_id")[: filter_state.top_n]
+    )
+
+    return [
+        {
+            "taxon_id": row["display_taxon_id"],
+            "taxon_name": row["display_taxon_name"],
+            "rank": row["display_taxon_rank"],
+            "observation_count": row["observation_count"],
+            "min_codon_ratio": normalize_numeric_summary_value(row["min_codon_ratio"]),
+            "q1": normalize_numeric_summary_value(row["q1"]),
+            "median": normalize_numeric_summary_value(row["median"]),
+            "q3": normalize_numeric_summary_value(row["q3"]),
+            "max_codon_ratio": normalize_numeric_summary_value(row["max_codon_ratio"]),
+        }
+        for row in summary_rows
+    ]
+
+
+def build_ranked_taxon_group_base_queryset(filter_state: StatsFilterState, *, require_codon_ratio: bool = False):
+    queryset = _with_display_taxon_annotations(
+        build_filtered_repeat_call_queryset(
+            filter_state,
+            require_codon_ratio=require_codon_ratio,
+        ),
         rank=filter_state.rank,
     ).exclude(display_taxon_id__isnull=True)
 

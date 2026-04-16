@@ -9,12 +9,15 @@ from django.test import RequestFactory, TestCase
 from apps.browser.stats import (
     apply_stats_filter_context,
     build_available_codon_metric_names,
+    build_group_codon_ratio_values_queryset,
     build_filtered_repeat_call_queryset,
     build_group_length_values_queryset,
+    build_ranked_codon_summary_bundle,
     build_ranked_length_chart_payload,
     build_ranked_length_summary_bundle,
     build_ranked_taxon_group_queryset,
     build_stats_filter_state,
+    summarize_ranked_codon_ratio_groups,
     summarize_ranked_length_groups,
 )
 from apps.browser.models import CanonicalRepeatCall, RepeatCall
@@ -389,4 +392,163 @@ class BrowserStatsTests(TestCase):
         self.assertEqual(
             list(queryset.values_list("codon_metric_name", "codon_ratio_value")),
             [("alt_ratio", 1.6)],
+        )
+
+    def test_ranked_codon_summary_bundle_rolls_up_and_summarizes_codon_ratios(self):
+        self._create_repeat_call(
+            self.beta,
+            suffix="beta_low_ratio",
+            residue="Q",
+            codon_metric_name="codon_ratio",
+            codon_ratio_value=0.8,
+        )
+
+        filter_state = build_stats_filter_state(
+            self.factory.get(
+                "/browser/codon-ratios/",
+                {
+                    "rank": "class",
+                    "min_count": "1",
+                    "top_n": "10",
+                    "residue": "q",
+                    "codon_metric_name": "codon_ratio",
+                },
+            )
+        )
+
+        bundle = build_ranked_codon_summary_bundle(filter_state)
+
+        self.assertEqual(bundle["matching_repeat_calls_count"], 3)
+        self.assertEqual(bundle["total_taxa_count"], 1)
+        self.assertEqual(bundle["visible_taxa_count"], 1)
+        self.assertEqual(
+            bundle["summary_rows"],
+            [
+                {
+                    "taxon_id": self.alpha["taxa"]["mammalia"].pk,
+                    "taxon_name": "Mammalia",
+                    "rank": "class",
+                    "observation_count": 3,
+                    "min_codon_ratio": 0.8,
+                    "q1": 1.025,
+                    "median": 1.25,
+                    "q3": 1.25,
+                    "max_codon_ratio": 1.25,
+                }
+            ],
+        )
+
+    def test_ranked_codon_summary_bundle_respects_run_branch_method_and_residue_filters(self):
+        self._create_repeat_call(
+            self.alpha,
+            suffix="alpha_threshold_a",
+            residue="A",
+            codon_metric_name="alanine_ratio",
+            codon_ratio_value=0.7,
+        )
+        self._create_repeat_call(
+            self.beta,
+            suffix="beta_threshold_a",
+            residue="A",
+            codon_metric_name="alanine_ratio",
+            codon_ratio_value=0.6,
+        )
+
+        RepeatCall.objects.filter(call_id="call_alpha_threshold_a").update(method=RepeatCall.Method.THRESHOLD)
+        RepeatCall.objects.filter(call_id="call_beta_threshold_a").update(method=RepeatCall.Method.THRESHOLD)
+        sync_canonical_catalog_for_run(
+            self.alpha["pipeline_run"],
+            import_batch=self.alpha["import_batch"],
+            last_seen_at=timezone.now(),
+            replace_all_repeat_call_methods=True,
+        )
+        sync_canonical_catalog_for_run(
+            self.beta["pipeline_run"],
+            import_batch=self.beta["import_batch"],
+            last_seen_at=timezone.now(),
+            replace_all_repeat_call_methods=True,
+        )
+
+        filter_state = build_stats_filter_state(
+            self.factory.get(
+                "/browser/codon-ratios/",
+                {
+                    "run": "run-alpha",
+                    "branch": str(self.alpha["taxa"]["primates"].pk),
+                    "rank": "species",
+                    "method": RepeatCall.Method.THRESHOLD,
+                    "residue": "a",
+                    "codon_metric_name": "alanine_ratio",
+                    "min_count": "1",
+                },
+            )
+        )
+
+        bundle = build_ranked_codon_summary_bundle(filter_state)
+
+        self.assertEqual(bundle["matching_repeat_calls_count"], 1)
+        self.assertEqual(bundle["total_taxa_count"], 1)
+        self.assertEqual(bundle["visible_taxa_count"], 1)
+        self.assertEqual(
+            bundle["summary_rows"],
+            [
+                {
+                    "taxon_id": self.alpha["taxon"].pk,
+                    "taxon_name": "Homo sapiens",
+                    "rank": "species",
+                    "observation_count": 1,
+                    "min_codon_ratio": 0.7,
+                    "q1": 0.7,
+                    "median": 0.7,
+                    "q3": 0.7,
+                    "max_codon_ratio": 0.7,
+                }
+            ],
+        )
+
+    def test_grouped_codon_ratio_values_support_sqlite_summary_fallback(self):
+        self._create_repeat_call(
+            self.beta,
+            suffix="beta_mid_ratio",
+            residue="Q",
+            codon_metric_name="codon_ratio",
+            codon_ratio_value=1.0,
+        )
+
+        filter_state = build_stats_filter_state(
+            self.factory.get(
+                "/browser/codon-ratios/",
+                {
+                    "rank": "class",
+                    "min_count": "1",
+                    "residue": "q",
+                    "codon_metric_name": "codon_ratio",
+                },
+            )
+        )
+
+        group_rows = list(build_ranked_taxon_group_queryset(filter_state, require_codon_ratio=True))
+        grouped_codon_ratios = list(
+            build_group_codon_ratio_values_queryset(
+                filter_state,
+                display_taxon_ids=[group_rows[0]["display_taxon_id"]],
+            )
+        )
+
+        self.assertEqual(grouped_codon_ratios, [(group_rows[0]["display_taxon_id"], 1.0), (group_rows[0]["display_taxon_id"], 1.25), (group_rows[0]["display_taxon_id"], 1.25)])
+        self.assertEqual(
+            summarize_ranked_codon_ratio_groups(group_rows, grouped_codon_ratios),
+            [
+                {
+                    "taxon_id": group_rows[0]["display_taxon_id"],
+                    "taxon_name": "Mammalia",
+                    "rank": "class",
+                    "observation_count": 3,
+                    "min_codon_ratio": 1,
+                    "q1": 1.125,
+                    "median": 1.25,
+                    "q3": 1.25,
+                    "max_codon_ratio": 1.25,
+                }
+            ],
         )
