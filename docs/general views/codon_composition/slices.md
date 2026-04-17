@@ -5,9 +5,16 @@
 Replace the scalar codon-ratio browser direction with a composition-first
 viewer built on normalized codon-usage rows.
 
+Boundary rule:
+
+- do not modify `homorepeat_pipeline` as part of this plan unless the user
+  explicitly approves that change
+- use the codon-usage data already present in finalized published artifacts and
+  import it correctly
+
 ## Phase 1: Replace the data contract
 
-### `CC1` Publish merged codon usage as a canonical browser artifact
+### `CC1` Discover existing finalized codon-usage artifacts in the import contract
 
 Goal:
 
@@ -16,18 +23,19 @@ Goal:
 
 Scope:
 
-- add canonical `publish/calls/codon_usage.tsv` to the pipeline output surface
-- keep finalized per-batch codon-usage files for audit and debugging
-- expose the merged artifact through runtime manifest metadata
+- discover finalized codon-usage TSVs under `publish/calls/finalized/...`
+- preserve method, residue, and batch context while enumerating those files
+- do not introduce a new merged artifact as part of the default plan
 
 Tests:
 
-- merged codon-usage artifact exists
-- merged rows equal the union of finalized codon-usage rows
+- finalized codon-usage files are discovered across methods, residues, and
+  batches
+- missing codon-usage files stay an explicit import-contract path
 
 Exit criteria:
 
-- downstream browser import has one canonical codon-usage source
+- downstream browser import can enumerate the existing codon-usage sources
 
 ### `CC2` Add imported and canonical codon-usage models
 
@@ -59,7 +67,8 @@ Goal:
 
 Scope:
 
-- ingest merged `publish/calls/codon_usage.tsv`
+- ingest the existing finalized codon-usage TSVs discovered from the published
+  run layout
 - align canonical codon-usage rows with current canonical repeat calls
 - keep missing codon-usage data as an explicit empty-state path
 

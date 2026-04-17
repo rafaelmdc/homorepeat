@@ -100,6 +100,17 @@ REPEAT_CALL_REQUIRED_COLUMNS = [
     "purity",
     "aa_sequence",
 ]
+CODON_USAGE_REQUIRED_COLUMNS = [
+    "call_id",
+    "method",
+    "repeat_residue",
+    "sequence_id",
+    "protein_id",
+    "amino_acid",
+    "codon",
+    "codon_count",
+    "codon_fraction",
+]
 MANIFEST_REQUIRED_KEYS = [
     "run_id",
     "status",
@@ -155,25 +166,11 @@ class BatchArtifactPaths:
 
 
 @dataclass(frozen=True)
-class RepeatLinkedIds:
-    genome_ids: tuple[str, ...]
-    sequence_ids: tuple[str, ...]
-    protein_ids: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class ParsedAcquisitionBatch:
-    artifact_paths: BatchArtifactPaths
-    acquisition_validation: dict[str, Any]
-    total_genomes: int
-    total_sequences: int
-    total_proteins: int
-    total_download_manifest_rows: int
-    total_normalization_warning_rows: int
-    total_repeat_calls: int
-    total_repeat_linked_genomes: int
-    total_repeat_linked_sequences: int
-    total_repeat_linked_proteins: int
+class CodonUsageArtifactPath:
+    batch_id: str
+    method: str
+    repeat_residue: str
+    codon_usage_tsv: Path
 
 
 @dataclass(frozen=True)
@@ -182,6 +179,7 @@ class RequiredArtifactPaths:
     manifest: Path
     acquisition_batches_root: Path
     acquisition_batches: tuple[BatchArtifactPaths, ...]
+    codon_usage_artifacts: tuple[CodonUsageArtifactPath, ...]
     accession_status_tsv: Path
     accession_call_counts_tsv: Path
     run_params_tsv: Path
@@ -193,22 +191,3 @@ class InspectedPublishedRun:
     artifact_paths: RequiredArtifactPaths
     manifest: dict[str, Any]
     pipeline_run: dict[str, Any]
-
-
-@dataclass(frozen=True)
-class ParsedPublishedRun:
-    artifact_paths: RequiredArtifactPaths
-    manifest: dict[str, Any]
-    pipeline_run: dict[str, Any]
-    batch_summaries: tuple[ParsedAcquisitionBatch, ...]
-    taxonomy_rows: list[dict[str, Any]]
-    genome_rows: list[dict[str, Any]]
-    sequence_rows: list[dict[str, Any]]
-    protein_rows: list[dict[str, Any]]
-    download_manifest_rows: list[dict[str, Any]]
-    normalization_warning_rows: list[dict[str, Any]]
-    accession_status_rows: list[dict[str, Any]]
-    accession_call_count_rows: list[dict[str, Any]]
-    run_parameter_rows: list[dict[str, Any]]
-    repeat_call_rows: list[dict[str, Any]]
-    repeat_linked_ids: RepeatLinkedIds

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from itertools import islice
+from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.db.models import Count, Exists, OuterRef
@@ -11,15 +12,20 @@ from apps.browser.models import (
     CanonicalGenome,
     CanonicalProtein,
     CanonicalRepeatCall,
+    CanonicalRepeatCallCodonUsage,
     CanonicalSequence,
     PipelineRun,
     Protein,
     RepeatCall,
+    RepeatCallCodonUsage,
     Sequence,
 )
 from apps.browser.models.genomes import Genome
 from apps.imports.models import ImportBatch
 from apps.browser.import_batches import latest_completed_import_batch_for_run
+
+if TYPE_CHECKING:
+    from apps.imports.services.import_run.state import _ImportBatchStateReporter
 
 
 @dataclass(frozen=True)
@@ -40,12 +46,49 @@ class _CanonicalGenomeRef:
 CANONICAL_SYNC_BATCH_SIZE = 1000
 
 
+def _report_catalog_sync_progress(
+    import_batch: ImportBatch,
+    *,
+    reporter: _ImportBatchStateReporter | None = None,
+    stage: str,
+    message: str,
+    processed: int | None = None,
+    force: bool = False,
+) -> None:
+    if reporter is None:
+        return
+
+    prior_payload = import_batch.progress_payload if isinstance(import_batch.progress_payload, dict) else {}
+    progress_payload: dict[str, object] = {
+        "message": message,
+        "stage": stage,
+    }
+    counts = prior_payload.get("counts")
+    if isinstance(counts, dict):
+        progress_payload["counts"] = counts
+    if processed is not None:
+        progress_payload["processed"] = processed
+
+    stage_changed = (
+        prior_payload.get("stage") != stage
+        or prior_payload.get("message") != message
+    )
+    import_batch.phase = "syncing_canonical_catalog"
+    import_batch.heartbeat_at = timezone.now()
+    import_batch.progress_payload = progress_payload
+    reporter.save(
+        ["phase", "heartbeat_at", "progress_payload"],
+        force=force or stage_changed,
+    )
+
+
 def sync_canonical_catalog_for_run(
     pipeline_run: PipelineRun,
     *,
     import_batch: ImportBatch,
     last_seen_at=None,
     replace_all_repeat_call_methods: bool = False,
+    reporter: _ImportBatchStateReporter | None = None,
 ) -> CatalogSyncResult:
     if import_batch.pipeline_run_id not in (None, pipeline_run.pk):
         raise ValueError("Import batch does not belong to the requested pipeline run.")
@@ -57,6 +100,7 @@ def sync_canonical_catalog_for_run(
     raw_sequences = _raw_sequence_queryset(pipeline_run)
     raw_proteins = _raw_protein_queryset(pipeline_run)
     raw_repeat_calls = _raw_repeat_call_queryset(pipeline_run)
+    raw_repeat_call_codon_usages = _raw_repeat_call_codon_usage_queryset(pipeline_run)
 
     with transaction.atomic():
         _prune_stale_canonical_genomes(pipeline_run)
@@ -65,6 +109,7 @@ def sync_canonical_catalog_for_run(
             pipeline_run=pipeline_run,
             import_batch=import_batch,
             last_seen_at=last_seen_at,
+            reporter=reporter,
         )
         _prune_stale_canonical_sequences(pipeline_run)
         canonical_sequences_by_raw_pk, sequence_count = _sync_canonical_sequences(
@@ -73,6 +118,7 @@ def sync_canonical_catalog_for_run(
             pipeline_run=pipeline_run,
             import_batch=import_batch,
             last_seen_at=last_seen_at,
+            reporter=reporter,
         )
         _prune_stale_canonical_proteins(pipeline_run)
         canonical_proteins_by_raw_pk, protein_count = _sync_canonical_proteins(
@@ -82,6 +128,7 @@ def sync_canonical_catalog_for_run(
             pipeline_run=pipeline_run,
             import_batch=import_batch,
             last_seen_at=last_seen_at,
+            reporter=reporter,
         )
 
         touched_methods = _touched_methods_for_run(pipeline_run, raw_repeat_calls)
@@ -95,9 +142,20 @@ def sync_canonical_catalog_for_run(
             last_seen_at=last_seen_at,
             touched_methods=touched_methods,
             replace_all_repeat_call_methods=replace_all_repeat_call_methods,
+            reporter=reporter,
+        )
+        _replace_canonical_repeat_call_codon_usages(
+            raw_repeat_call_codon_usages,
+            pipeline_run=pipeline_run,
+            import_batch=import_batch,
+            reporter=reporter,
         )
 
-        _refresh_canonical_protein_repeat_call_counts(pipeline_run=pipeline_run)
+        _refresh_canonical_protein_repeat_call_counts(
+            pipeline_run=pipeline_run,
+            import_batch=import_batch,
+            reporter=reporter,
+        )
         _record_pipeline_run_canonical_sync(
             pipeline_run,
             import_batch=import_batch,
@@ -213,6 +271,17 @@ def _raw_repeat_call_queryset(pipeline_run: PipelineRun):
     )
 
 
+def _raw_repeat_call_codon_usage_queryset(pipeline_run: PipelineRun):
+    return RepeatCallCodonUsage.objects.filter(repeat_call__pipeline_run=pipeline_run).order_by("pk").only(
+        "id",
+        "repeat_call_id",
+        "amino_acid",
+        "codon",
+        "codon_count",
+        "codon_fraction",
+    )
+
+
 def backfill_canonical_catalog_for_run(
     pipeline_run: PipelineRun,
     *,
@@ -238,9 +307,18 @@ def _sync_canonical_genomes(
     pipeline_run: PipelineRun,
     import_batch: ImportBatch,
     last_seen_at,
+    reporter: _ImportBatchStateReporter | None = None,
 ) -> tuple[dict[int, _CanonicalGenomeRef], int]:
     canonical_by_raw_pk: dict[int, _CanonicalGenomeRef] = {}
     genome_count = 0
+    _report_catalog_sync_progress(
+        import_batch,
+        reporter=reporter,
+        stage="canonical_genomes",
+        message="Syncing canonical genome rows.",
+        processed=genome_count,
+        force=True,
+    )
 
     for batch in _iter_queryset_batches(raw_genomes):
         CanonicalGenome.objects.bulk_create(
@@ -292,6 +370,13 @@ def _sync_canonical_genomes(
                 accession=canonical_genome.accession,
             )
         genome_count += len(batch)
+        _report_catalog_sync_progress(
+            import_batch,
+            reporter=reporter,
+            stage="canonical_genomes",
+            message="Syncing canonical genome rows.",
+            processed=genome_count,
+        )
 
     return canonical_by_raw_pk, genome_count
 
@@ -390,9 +475,18 @@ def _sync_canonical_sequences(
     pipeline_run: PipelineRun,
     import_batch: ImportBatch,
     last_seen_at,
+    reporter: _ImportBatchStateReporter | None = None,
 ) -> tuple[dict[int, int], int]:
     canonical_by_raw_pk: dict[int, int] = {}
     sequence_count = 0
+    _report_catalog_sync_progress(
+        import_batch,
+        reporter=reporter,
+        stage="canonical_sequences",
+        message="Syncing canonical sequence rows.",
+        processed=sequence_count,
+        force=True,
+    )
 
     for batch in _iter_queryset_batches(raw_sequences):
         CanonicalSequence.objects.bulk_create(
@@ -456,6 +550,13 @@ def _sync_canonical_sequences(
                 (canonical_genomes_by_raw_pk[sequence.genome_id].pk, sequence.sequence_id)
             ]
         sequence_count += len(batch)
+        _report_catalog_sync_progress(
+            import_batch,
+            reporter=reporter,
+            stage="canonical_sequences",
+            message="Syncing canonical sequence rows.",
+            processed=sequence_count,
+        )
 
     return canonical_by_raw_pk, sequence_count
 
@@ -468,9 +569,18 @@ def _sync_canonical_proteins(
     pipeline_run: PipelineRun,
     import_batch: ImportBatch,
     last_seen_at,
+    reporter: _ImportBatchStateReporter | None = None,
 ) -> tuple[dict[int, int], int]:
     canonical_by_raw_pk: dict[int, int] = {}
     protein_count = 0
+    _report_catalog_sync_progress(
+        import_batch,
+        reporter=reporter,
+        stage="canonical_proteins",
+        message="Syncing canonical protein rows.",
+        processed=protein_count,
+        force=True,
+    )
 
     for batch in _iter_queryset_batches(raw_proteins):
         CanonicalProtein.objects.bulk_create(
@@ -532,6 +642,13 @@ def _sync_canonical_proteins(
                 (canonical_genomes_by_raw_pk[protein.genome_id].pk, protein.protein_id)
             ]
         protein_count += len(batch)
+        _report_catalog_sync_progress(
+            import_batch,
+            reporter=reporter,
+            stage="canonical_proteins",
+            message="Syncing canonical protein rows.",
+            processed=protein_count,
+        )
 
     return canonical_by_raw_pk, protein_count
 
@@ -561,7 +678,16 @@ def _replace_canonical_repeat_calls(
     last_seen_at,
     touched_methods: tuple[str, ...],
     replace_all_repeat_call_methods: bool,
+    reporter: _ImportBatchStateReporter | None = None,
 ) -> tuple[int, int]:
+    _report_catalog_sync_progress(
+        import_batch,
+        reporter=reporter,
+        stage="canonical_repeat_calls",
+        message="Syncing canonical repeat-call rows.",
+        processed=0,
+        force=True,
+    )
     if replace_all_repeat_call_methods or touched_methods:
         delete_queryset = CanonicalRepeatCall.objects.filter(
             protein__latest_pipeline_run=pipeline_run,
@@ -613,14 +739,88 @@ def _replace_canonical_repeat_calls(
             batch_size=CANONICAL_SYNC_BATCH_SIZE,
         )
         repeat_call_count += len(batch)
+        _report_catalog_sync_progress(
+            import_batch,
+            reporter=reporter,
+            stage="canonical_repeat_calls",
+            message="Syncing canonical repeat-call rows.",
+            processed=repeat_call_count,
+        )
 
     return repeat_call_count, replaced_repeat_calls
+
+
+def _replace_canonical_repeat_call_codon_usages(
+    raw_repeat_call_codon_usages,
+    *,
+    pipeline_run: PipelineRun,
+    import_batch: ImportBatch,
+    reporter: _ImportBatchStateReporter | None = None,
+) -> None:
+    processed_count = 0
+    _report_catalog_sync_progress(
+        import_batch,
+        reporter=reporter,
+        stage="canonical_repeat_call_codon_usages",
+        message="Syncing canonical repeat-call codon-usage rows.",
+        processed=processed_count,
+        force=True,
+    )
+    for batch in _iter_queryset_batches(raw_repeat_call_codon_usages):
+        raw_repeat_call_ids = {codon_usage.repeat_call_id for codon_usage in batch}
+        canonical_repeat_call_pk_by_raw_pk = dict(
+            CanonicalRepeatCall.objects.filter(
+                latest_pipeline_run=pipeline_run,
+                latest_repeat_call_id__in=raw_repeat_call_ids,
+            )
+            .order_by()
+            .values_list("latest_repeat_call_id", "pk")
+        )
+        canonical_codon_usages: list[CanonicalRepeatCallCodonUsage] = []
+        for codon_usage in batch:
+            canonical_repeat_call_pk = canonical_repeat_call_pk_by_raw_pk.get(codon_usage.repeat_call_id)
+            if canonical_repeat_call_pk is None:
+                raise ValueError(
+                    f"Missing canonical repeat call for raw repeat-call codon usage {codon_usage.pk}"
+                )
+            canonical_codon_usages.append(
+                CanonicalRepeatCallCodonUsage(
+                    repeat_call_id=canonical_repeat_call_pk,
+                    amino_acid=codon_usage.amino_acid,
+                    codon=codon_usage.codon,
+                    codon_count=codon_usage.codon_count,
+                    codon_fraction=codon_usage.codon_fraction,
+                )
+            )
+        CanonicalRepeatCallCodonUsage.objects.bulk_create(
+            canonical_codon_usages,
+            batch_size=CANONICAL_SYNC_BATCH_SIZE,
+        )
+        processed_count += len(batch)
+        _report_catalog_sync_progress(
+            import_batch,
+            reporter=reporter,
+            stage="canonical_repeat_call_codon_usages",
+            message="Syncing canonical repeat-call codon-usage rows.",
+            processed=processed_count,
+        )
 
 
 def _refresh_canonical_protein_repeat_call_counts(
     *,
     pipeline_run: PipelineRun,
+    import_batch: ImportBatch,
+    reporter: _ImportBatchStateReporter | None = None,
 ) -> None:
+    processed_count = 0
+    _report_catalog_sync_progress(
+        import_batch,
+        reporter=reporter,
+        stage="canonical_protein_repeat_call_counts",
+        message="Refreshing canonical protein repeat-call counts.",
+        processed=processed_count,
+        force=True,
+    )
     repeat_call_counts = {
         row["protein_id"]: row["total"]
         for row in CanonicalRepeatCall.objects.filter(protein__latest_pipeline_run=pipeline_run)
@@ -635,16 +835,26 @@ def _refresh_canonical_protein_repeat_call_counts(
     ).iterator(chunk_size=CANONICAL_SYNC_BATCH_SIZE):
         repeat_call_count = repeat_call_counts.get(protein.pk, 0)
         if protein.repeat_call_count == repeat_call_count:
-            continue
-        protein.repeat_call_count = repeat_call_count
-        proteins_to_update.append(protein)
-        if len(proteins_to_update) >= CANONICAL_SYNC_BATCH_SIZE:
-            CanonicalProtein.objects.bulk_update(
-                proteins_to_update,
-                ["repeat_call_count"],
-                batch_size=CANONICAL_SYNC_BATCH_SIZE,
+            processed_count += 1
+        else:
+            protein.repeat_call_count = repeat_call_count
+            proteins_to_update.append(protein)
+            processed_count += 1
+            if len(proteins_to_update) >= CANONICAL_SYNC_BATCH_SIZE:
+                CanonicalProtein.objects.bulk_update(
+                    proteins_to_update,
+                    ["repeat_call_count"],
+                    batch_size=CANONICAL_SYNC_BATCH_SIZE,
+                )
+                proteins_to_update = []
+        if processed_count % CANONICAL_SYNC_BATCH_SIZE == 0:
+            _report_catalog_sync_progress(
+                import_batch,
+                reporter=reporter,
+                stage="canonical_protein_repeat_call_counts",
+                message="Refreshing canonical protein repeat-call counts.",
+                processed=processed_count,
             )
-            proteins_to_update = []
 
     if proteins_to_update:
         CanonicalProtein.objects.bulk_update(
@@ -652,3 +862,10 @@ def _refresh_canonical_protein_repeat_call_counts(
             ["repeat_call_count"],
             batch_size=CANONICAL_SYNC_BATCH_SIZE,
         )
+    _report_catalog_sync_progress(
+        import_batch,
+        reporter=reporter,
+        stage="canonical_protein_repeat_call_counts",
+        message="Refreshing canonical protein repeat-call counts.",
+        processed=processed_count,
+    )

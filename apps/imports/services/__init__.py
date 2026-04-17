@@ -1,6 +1,5 @@
 from .published_run import (
     ImportContractError,
-    ParsedPublishedRun,
     RequiredArtifactPaths,
     load_published_run,
     resolve_required_artifacts,
@@ -18,7 +17,6 @@ __all__ = [
     "ImportContractError",
     "ImportPhase",
     "ImportRunResult",
-    "ParsedPublishedRun",
     "RequiredArtifactPaths",
     "enqueue_published_run",
     "import_published_run",

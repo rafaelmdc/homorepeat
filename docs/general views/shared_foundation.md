@@ -97,9 +97,17 @@ The current repeat-call rows preserve these codon-adjacent fields:
 Those fields are not the correct hot-path browser contract for composition
 work. The codon viewers should standardize around normalized codon-usage rows.
 
-The canonical downstream artifact should be:
+The current source contract already exists in the published run layout:
 
-- `publish/calls/codon_usage.tsv`
+- finalized codon-usage TSVs under
+  `publish/calls/finalized/<method>/<residue>/<batch>/final_<method>_<residue>_<batch>_codon_usage.tsv`
+
+Boundary rule:
+
+- do not change `homorepeat_pipeline` as part of this viewer work unless the
+  user explicitly approves pipeline changes
+- assume the pipeline already emits the codon-composition rows the browser
+  needs and import those existing finalized artifacts correctly
 
 The imported browser contract should mirror the normalized codon-usage rows
 already produced by codon slicing:
@@ -208,17 +216,18 @@ Exit criteria:
 
 - length and codon viewers reuse one bounded overview layer
 
-### `F5` Promote merged codon usage to a first-class downstream artifact
+### `F5` Import existing finalized codon usage as first-class browser data
 
 Goal:
 
 - make codon viewers depend on real composition rows instead of ad hoc parsing
-  or scalar fallbacks
+  or scalar fallbacks, without changing the pipeline boundary by default
 
 Scope:
 
-- pipeline merge step for canonical `publish/calls/codon_usage.tsv`
-- manifest/runtime-artifact updates
+- published-run import support for existing finalized codon-usage TSVs
+- finalized codon-usage artifact discovery across methods, residues, and
+  batches
 - import and canonical-sync support for codon-usage rows
 - fixture and unit-test updates
 

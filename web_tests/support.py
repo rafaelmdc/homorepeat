@@ -48,6 +48,32 @@ def build_test_repeat_call_values(
     }
 
 
+def add_finalized_codon_usage_artifact(
+    publish_root: Path,
+    *,
+    method: str,
+    repeat_residue: str,
+    batch_id: str,
+    rows: list[dict[str, object]],
+) -> Path:
+    artifact_dir = publish_root / "calls" / "finalized" / method / repeat_residue / batch_id
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    artifact_path = artifact_dir / f"final_{method}_{repeat_residue}_{batch_id}_codon_usage.tsv"
+    header = (
+        "call_id\tmethod\trepeat_residue\tsequence_id\tprotein_id\tamino_acid\tcodon\tcodon_count\tcodon_fraction\n"
+    )
+    body = "".join(
+        (
+            f"{row['call_id']}\t{row.get('method', method)}\t{row.get('repeat_residue', repeat_residue)}\t"
+            f"{row['sequence_id']}\t{row['protein_id']}\t{row['amino_acid']}\t{row['codon']}\t"
+            f"{row['codon_count']}\t{row['codon_fraction']}\n"
+        )
+        for row in rows
+    )
+    artifact_path.write_text(header + body, encoding="utf-8")
+    return artifact_path
+
+
 def build_minimal_publish_root(base_dir: Path, *, run_id: str = "run-alpha") -> Path:
     publish_root = base_dir / "publish"
     batch_root = publish_root / "acquisition" / "batches" / "batch_0001"

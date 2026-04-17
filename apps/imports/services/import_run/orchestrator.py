@@ -7,7 +7,7 @@ from apps.imports.models import ImportBatch
 from apps.imports.services.published_run import (
     ImportContractError,
     InspectedPublishedRun,
-    ParsedPublishedRun,
+    iter_codon_usage_artifact_rows,
     iter_accession_call_count_rows,
     iter_accession_status_rows,
     iter_repeat_call_rows,
@@ -18,27 +18,20 @@ from .entities import (
     _create_acquisition_batches,
     _create_call_linked_entities_for_batches,
     _create_genomes,
-    _create_proteins,
-    _create_repeat_calls,
     _create_repeat_calls_streamed,
-    _create_sequences,
+    _create_repeat_call_codon_usages_streamed,
     _delete_run_scoped_rows,
     _load_genome_rows,
     _update_genome_analyzed_protein_counts,
 )
 from .operational import (
-    _create_accession_call_count_rows,
     _create_accession_call_count_rows_streamed,
-    _create_accession_status_rows,
     _create_accession_status_rows_streamed,
-    _create_download_manifest_entries,
     _create_download_manifest_entries_streamed,
-    _create_normalization_warning_rows,
     _create_normalization_warning_rows_streamed,
-    _create_run_parameters,
     _create_run_parameters_streamed,
 )
-from .prepare import PreparedImportData, PreparedStreamedImportData
+from .prepare import PreparedStreamedImportData
 from .state import _ImportBatchStateReporter
 from .taxonomy import _load_taxonomy_rows, _rebuild_taxon_closure, _upsert_taxa
 
@@ -129,6 +122,12 @@ def _import_inspected_run(
         taxon_by_taxon_id,
         reporter=reporter,
     )
+    repeat_call_codon_usage_count = _create_repeat_call_codon_usages_streamed(
+        batch,
+        pipeline_run,
+        iter_codon_usage_artifact_rows(inspected.artifact_paths.codon_usage_artifacts),
+        reporter=reporter,
+    )
     accession_status_count = _create_accession_status_rows_streamed(
         pipeline_run,
         iter_accession_status_rows(inspected.artifact_paths.accession_status_tsv),
@@ -152,86 +151,6 @@ def _import_inspected_run(
         "accession_call_count_rows": accession_call_count,
         "run_parameters": run_parameter_count,
         "repeat_calls": repeat_call_count,
-    }
-    return pipeline_run, counts
-
-
-def _import_parsed_run(
-    parsed: ParsedPublishedRun,
-    prepared: PreparedImportData,
-    *,
-    replace_existing: bool,
-) -> tuple[PipelineRun, dict[str, int]]:
-    pipeline_run = _upsert_pipeline_run(parsed.pipeline_run, replace_existing=replace_existing)
-
-    taxon_by_taxon_id = _upsert_taxa(parsed.taxonomy_rows)
-    _rebuild_taxon_closure()
-    batch_by_batch_id = _create_acquisition_batches(pipeline_run, parsed)
-
-    genome_by_genome_id = _create_genomes(
-        pipeline_run,
-        parsed.genome_rows,
-        batch_by_batch_id,
-        taxon_by_taxon_id,
-        prepared.analyzed_protein_counts,
-    )
-    sequence_by_sequence_id = _create_sequences(
-        pipeline_run,
-        prepared.retained_sequence_rows,
-        genome_by_genome_id,
-        taxon_by_taxon_id,
-        prepared.nucleotide_sequences_by_id,
-    )
-    protein_by_protein_id = _create_proteins(
-        pipeline_run,
-        prepared.retained_protein_rows,
-        genome_by_genome_id,
-        sequence_by_sequence_id,
-        taxon_by_taxon_id,
-        prepared.amino_acid_sequences_by_id,
-        prepared.repeat_call_counts_by_protein,
-    )
-    _create_run_parameters(pipeline_run, parsed.run_parameter_rows)
-    _create_download_manifest_entries(
-        pipeline_run,
-        parsed.download_manifest_rows,
-        batch_by_batch_id,
-    )
-    _create_normalization_warning_rows(
-        pipeline_run,
-        parsed.normalization_warning_rows,
-        batch_by_batch_id,
-    )
-    _create_repeat_calls(
-        pipeline_run,
-        parsed.repeat_call_rows,
-        genome_by_genome_id,
-        sequence_by_sequence_id,
-        protein_by_protein_id,
-        taxon_by_taxon_id,
-    )
-    _create_accession_status_rows(
-        pipeline_run,
-        parsed.accession_status_rows,
-        batch_by_batch_id,
-    )
-    _create_accession_call_count_rows(
-        pipeline_run,
-        parsed.accession_call_count_rows,
-        batch_by_batch_id,
-    )
-
-    counts = {
-        "acquisition_batches": len(parsed.artifact_paths.acquisition_batches),
-        "taxonomy": len(parsed.taxonomy_rows),
-        "genomes": len(parsed.genome_rows),
-        "sequences": len(prepared.retained_sequence_rows),
-        "proteins": len(prepared.retained_protein_rows),
-        "download_manifest_entries": len(parsed.download_manifest_rows),
-        "normalization_warnings": len(parsed.normalization_warning_rows),
-        "accession_status_rows": len(parsed.accession_status_rows),
-        "accession_call_count_rows": len(parsed.accession_call_count_rows),
-        "run_parameters": len(parsed.run_parameter_rows),
-        "repeat_calls": len(parsed.repeat_call_rows),
+        "repeat_call_codon_usages": repeat_call_codon_usage_count,
     }
     return pipeline_run, counts

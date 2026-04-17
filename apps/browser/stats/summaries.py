@@ -38,6 +38,36 @@ def summarize_ranked_codon_ratio_groups(group_rows, grouped_codon_ratio_values):
     )
 
 
+def summarize_ranked_codon_composition_groups(group_rows, grouped_codon_fraction_sums, *, visible_codons):
+    fraction_sums_by_taxon = defaultdict(dict)
+    for display_taxon_id, codon, total_fraction in grouped_codon_fraction_sums:
+        fraction_sums_by_taxon[display_taxon_id][codon] = float(total_fraction)
+
+    summary_rows = []
+    for row in group_rows:
+        observation_count = row["observation_count"]
+        if observation_count <= 0:
+            continue
+        summary_rows.append(
+            {
+                "taxon_id": row["display_taxon_id"],
+                "taxon_name": row["display_taxon_name"],
+                "rank": row["display_taxon_rank"],
+                "observation_count": observation_count,
+                "codon_shares": [
+                    {
+                        "codon": codon,
+                        "share": normalize_numeric_summary_value(
+                            fraction_sums_by_taxon[row["display_taxon_id"]].get(codon, 0.0) / observation_count
+                        ),
+                    }
+                    for codon in visible_codons
+                ],
+            }
+        )
+    return summary_rows
+
+
 def summarize_codon_heatmap_groups(group_rows, grouped_length_codon_ratio_values):
     values_by_taxon_bin = defaultdict(list)
     bin_starts_by_taxon = defaultdict(set)

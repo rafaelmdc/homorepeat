@@ -6,12 +6,14 @@ from apps.browser.models import (
     AccessionStatus,
     AcquisitionBatch,
     CanonicalRepeatCall,
+    CanonicalRepeatCallCodonUsage,
     DownloadManifestEntry,
     Genome,
     NormalizationWarning,
     PipelineRun,
     Protein,
     RepeatCall,
+    RepeatCallCodonUsage,
     RunParameter,
     Sequence,
     Taxon,
@@ -481,9 +483,45 @@ class BiologicalModelTests(TestCase):
         self.assertTrue(canonical_repeat_call_field.null)
         self.assertTrue(canonical_repeat_call_field.blank)
 
+    def test_repeat_call_codon_usage_rows_can_store_per_codon_values(self):
+        repeat_call = RepeatCall.objects.create(
+            pipeline_run=self.run_alpha,
+            genome=self.genome,
+            sequence=self.sequence,
+            protein=self.protein,
+            taxon=self.species,
+            call_id="call_with_codon_usage",
+            method=RepeatCall.Method.PURE,
+            accession=self.genome.accession,
+            gene_symbol=self.protein.gene_symbol,
+            protein_name=self.protein.protein_name,
+            protein_length=self.protein.protein_length,
+            start=10,
+            end=20,
+            length=11,
+            repeat_residue="Q",
+            repeat_count=11,
+            non_repeat_count=0,
+            purity=1.0,
+            aa_sequence="QQQQQQQQQQQ",
+        )
+        codon_usage = RepeatCallCodonUsage.objects.create(
+            repeat_call=repeat_call,
+            amino_acid="Q",
+            codon="CAG",
+            codon_count=11,
+            codon_fraction=1.0,
+        )
+
+        self.assertEqual(codon_usage.repeat_call, repeat_call)
+        self.assertEqual(codon_usage.codon, "CAG")
+        self.assertEqual(codon_usage.codon_count, 11)
+        self.assertEqual(codon_usage.codon_fraction, 1.0)
+
     def test_biological_run_scoped_models_expose_imported_observation_labels(self):
         self.assertEqual(Genome._meta.verbose_name_plural, "imported genome observations")
         self.assertEqual(Sequence._meta.verbose_name_plural, "imported sequence observations")
         self.assertEqual(Protein._meta.verbose_name_plural, "imported protein observations")
         self.assertEqual(RepeatCall._meta.verbose_name_plural, "imported repeat-call observations")
+        self.assertEqual(RepeatCallCodonUsage._meta.verbose_name_plural, "imported repeat-call codon-usage rows")
         self.assertEqual(RunParameter._meta.verbose_name_plural, "imported run parameters")

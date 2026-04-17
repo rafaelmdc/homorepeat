@@ -141,3 +141,39 @@ class RepeatCall(TimestampedModel):
 
     def __str__(self):
         return f"{self.call_id} [{self.pipeline_run.run_id}]"
+
+
+class RepeatCallCodonUsage(TimestampedModel):
+    repeat_call = models.ForeignKey(
+        RepeatCall,
+        on_delete=models.CASCADE,
+        related_name="codon_usages",
+    )
+    amino_acid = models.CharField(max_length=16, db_index=True)
+    codon = models.CharField(max_length=16, db_index=True)
+    codon_count = models.PositiveIntegerField()
+    codon_fraction = models.FloatField()
+
+    class Meta:
+        ordering = ["repeat_call_id", "amino_acid", "codon"]
+        verbose_name = "imported repeat-call codon-usage row"
+        verbose_name_plural = "imported repeat-call codon-usage rows"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["repeat_call", "amino_acid", "codon"],
+                name="brw_rccu_unique_call_aa_codon",
+            ),
+            models.CheckConstraint(
+                condition=Q(codon_fraction__gte=0) & Q(codon_fraction__lte=1),
+                name="brw_rccu_fraction_0_1",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["amino_acid", "codon"],
+                name="brw_rccu_aa_codon_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.repeat_call.call_id}:{self.amino_acid}:{self.codon}"

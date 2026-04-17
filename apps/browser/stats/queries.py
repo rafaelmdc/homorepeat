@@ -3,9 +3,9 @@ from __future__ import annotations
 from django.conf import settings
 from django.core.cache import cache
 from django.db import connection
-from django.db.models import Count, F, Max, Min, Q
+from django.db.models import Count, F, Max, Min, Q, Sum
 
-from ..models import CanonicalRepeatCall
+from ..models import CanonicalRepeatCall, CanonicalRepeatCallCodonUsage
 from .aggregates import PercentileCont
 from .filters import StatsFilterState
 from .ordering import order_taxon_rows_by_lineage
@@ -15,6 +15,7 @@ from .summaries import (
     normalize_length_summary_value,
     normalize_numeric_summary_value,
     summarize_codon_heatmap_groups,
+    summarize_ranked_codon_composition_groups,
     summarize_ranked_codon_ratio_groups,
     summarize_ranked_length_groups,
 )
@@ -96,6 +97,99 @@ def build_ranked_codon_summary_bundle(filter_state: StatsFilterState) -> dict[st
         "summary_rows": summary_rows,
         "total_taxa_count": total_taxa_count,
         "visible_taxa_count": len(summary_rows),
+    }
+    cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
+    return bundle
+
+
+def build_ranked_codon_composition_summary_bundle(filter_state: StatsFilterState) -> dict[str, object]:
+    if not filter_state.residue:
+        return {
+            "matching_repeat_calls_count": 0,
+            "summary_rows": [],
+            "total_taxa_count": 0,
+            "visible_taxa_count": 0,
+            "visible_codons": [],
+        }
+
+    cache_key = f"browser:stats:codon-composition:{filter_state.composition_cache_key()}"
+    cached_bundle = cache.get(cache_key)
+    if cached_bundle is not None:
+        return cached_bundle
+
+    matching_repeat_calls_count = build_filtered_repeat_call_queryset(filter_state).count()
+    total_taxa_count = build_ranked_taxon_group_count(filter_state)
+    group_rows = list(build_ranked_taxon_group_queryset(filter_state))
+    display_taxon_ids = [row["display_taxon_id"] for row in group_rows]
+    grouped_codon_fraction_sums = (
+        list(
+            build_group_codon_fraction_sums_queryset(
+                filter_state,
+                display_taxon_ids=display_taxon_ids,
+            )
+        )
+        if display_taxon_ids
+        else []
+    )
+    visible_codons = sorted({codon for _, codon, _ in grouped_codon_fraction_sums})
+    summary_rows = (
+        summarize_ranked_codon_composition_groups(
+            group_rows,
+            grouped_codon_fraction_sums,
+            visible_codons=visible_codons,
+        )
+        if visible_codons
+        else []
+    )
+
+    bundle = {
+        "matching_repeat_calls_count": matching_repeat_calls_count,
+        "summary_rows": summary_rows,
+        "total_taxa_count": total_taxa_count,
+        "visible_taxa_count": len(summary_rows),
+        "visible_codons": visible_codons,
+    }
+    cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
+    return bundle
+
+
+def build_codon_composition_inspect_bundle(filter_state: StatsFilterState) -> dict[str, object]:
+    if not filter_state.residue:
+        return {
+            "observation_count": 0,
+            "visible_codons": [],
+            "codon_shares": [],
+        }
+
+    cache_key = f"browser:stats:codon-composition-inspect:{filter_state.composition_cache_key()}"
+    cached_bundle = cache.get(cache_key)
+    if cached_bundle is not None:
+        return cached_bundle
+
+    observation_count = build_filtered_repeat_call_queryset(filter_state).count()
+    codon_fraction_sums = list(
+        build_filtered_codon_usage_queryset(filter_state)
+        .values("codon")
+        .annotate(total_fraction=Sum("codon_fraction"))
+        .order_by("codon")
+        .values_list("codon", "total_fraction")
+    )
+    visible_codons = [codon for codon, _ in codon_fraction_sums]
+    codon_shares = (
+        [
+            {
+                "codon": codon,
+                "share": normalize_numeric_summary_value(float(total_fraction) / observation_count),
+            }
+            for codon, total_fraction in codon_fraction_sums
+        ]
+        if observation_count > 0
+        else []
+    )
+    bundle = {
+        "observation_count": observation_count,
+        "visible_codons": visible_codons,
+        "codon_shares": codon_shares,
     }
     cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
     return bundle
@@ -208,6 +302,16 @@ def build_filtered_repeat_call_queryset(
     return queryset
 
 
+def build_filtered_codon_usage_queryset(filter_state: StatsFilterState):
+    if not filter_state.residue:
+        return CanonicalRepeatCallCodonUsage.objects.none()
+
+    return CanonicalRepeatCallCodonUsage.objects.order_by().filter(
+        repeat_call__in=build_filtered_repeat_call_queryset(filter_state),
+        amino_acid=filter_state.residue,
+    )
+
+
 def build_available_codon_metric_names(filter_state: StatsFilterState) -> list[str]:
     return list(
         build_filtered_repeat_call_queryset(
@@ -264,6 +368,21 @@ def build_group_codon_ratio_values_queryset(filter_state: StatsFilterState, *, d
         .filter(display_taxon_id__in=display_taxon_ids)
         .values_list("display_taxon_id", "codon_ratio_value")
         .order_by("display_taxon_id", "codon_ratio_value")
+    )
+
+
+def build_group_codon_fraction_sums_queryset(filter_state: StatsFilterState, *, display_taxon_ids):
+    return (
+        _with_display_taxon_annotations(
+            build_filtered_codon_usage_queryset(filter_state),
+            rank=filter_state.rank,
+            taxon_field_name="repeat_call__taxon",
+        )
+        .filter(display_taxon_id__in=display_taxon_ids)
+        .values("display_taxon_id", "codon")
+        .annotate(total_fraction=Sum("codon_fraction"))
+        .order_by("display_taxon_id", "codon")
+        .values_list("display_taxon_id", "codon", "total_fraction")
     )
 
 
@@ -373,11 +492,11 @@ def build_ranked_taxon_group_base_queryset(filter_state: StatsFilterState, *, re
     )
 
 
-def _with_display_taxon_annotations(queryset, *, rank: str):
+def _with_display_taxon_annotations(queryset, *, rank: str, taxon_field_name: str = "taxon"):
     return queryset.filter(
-        taxon__closure_ancestors__ancestor__rank=rank,
+        **{f"{taxon_field_name}__closure_ancestors__ancestor__rank": rank},
     ).annotate(
-        display_taxon_id=F("taxon__closure_ancestors__ancestor_id"),
-        display_taxon_name=F("taxon__closure_ancestors__ancestor__taxon_name"),
-        display_taxon_rank=F("taxon__closure_ancestors__ancestor__rank"),
+        display_taxon_id=F(f"{taxon_field_name}__closure_ancestors__ancestor_id"),
+        display_taxon_name=F(f"{taxon_field_name}__closure_ancestors__ancestor__taxon_name"),
+        display_taxon_rank=F(f"{taxon_field_name}__closure_ancestors__ancestor__rank"),
     )

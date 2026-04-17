@@ -9,24 +9,28 @@ from django.test import RequestFactory, TestCase
 from apps.browser.stats import (
     apply_stats_filter_context,
     build_available_codon_metric_names,
+    build_filtered_codon_usage_queryset,
     build_codon_heatmap_payload,
     build_codon_heatmap_summary_bundle,
     build_codon_inspect_bundle,
     build_codon_inspect_payload,
+    build_group_codon_fraction_sums_queryset,
     build_group_codon_heatmap_values_queryset,
     build_group_codon_ratio_values_queryset,
     build_filtered_repeat_call_queryset,
     build_group_length_values_queryset,
+    build_ranked_codon_composition_summary_bundle,
     build_ranked_codon_summary_bundle,
     build_ranked_length_chart_payload,
     build_ranked_length_summary_bundle,
     build_ranked_taxon_group_queryset,
     build_stats_filter_state,
     summarize_codon_heatmap_groups,
+    summarize_ranked_codon_composition_groups,
     summarize_ranked_codon_ratio_groups,
     summarize_ranked_length_groups,
 )
-from apps.browser.models import CanonicalRepeatCall, RepeatCall
+from apps.browser.models import CanonicalRepeatCall, RepeatCall, RepeatCallCodonUsage
 
 from .support import build_test_repeat_call_values, create_imported_run_fixture
 
@@ -153,6 +157,32 @@ class BrowserStatsTests(TestCase):
             replace_all_repeat_call_methods=True,
         )
         return repeat_call
+
+    def _sync_run(self, run_data):
+        sync_canonical_catalog_for_run(
+            run_data["pipeline_run"],
+            import_batch=run_data["import_batch"],
+            last_seen_at=timezone.now(),
+            replace_all_repeat_call_methods=True,
+        )
+
+    def _set_repeat_call_codon_usages(self, run_data, *, repeat_call=None, rows):
+        target_repeat_call = repeat_call or run_data["repeat_call"]
+        RepeatCallCodonUsage.objects.filter(repeat_call=target_repeat_call).delete()
+        RepeatCallCodonUsage.objects.bulk_create(
+            [
+                RepeatCallCodonUsage(
+                    repeat_call=target_repeat_call,
+                    amino_acid=row["amino_acid"],
+                    codon=row["codon"],
+                    codon_count=row["codon_count"],
+                    codon_fraction=row["codon_fraction"],
+                )
+                for row in rows
+            ]
+        )
+        self._sync_run(run_data)
+        return target_repeat_call
 
     def test_stats_filter_state_defaults_without_branch_scope(self):
         request = self.factory.get("/browser/lengths/")
@@ -323,6 +353,276 @@ class BrowserStatsTests(TestCase):
         self.assertEqual(repeat_call.codon_sequence, "GCT" * 11)
         self.assertEqual(canonical_repeat_call.repeat_residue, "A")
         self.assertEqual(canonical_repeat_call.codon_ratio_value, 0.75)
+
+    def test_codon_composition_requires_residue_scope_and_ignores_scalar_metric_selector(self):
+        filter_state = build_stats_filter_state(
+            self.factory.get(
+                "/browser/codon-ratios/",
+                {
+                    "codon_metric_name": "alt_ratio",
+                },
+            )
+        )
+
+        self.assertEqual(filter_state.composition_cache_key_data()["codon_metric_name"], "")
+        self.assertEqual(build_filtered_codon_usage_queryset(filter_state).count(), 0)
+        self.assertEqual(build_ranked_codon_composition_summary_bundle(filter_state)["summary_rows"], [])
+
+    def test_filtered_codon_usage_queryset_only_includes_selected_residue_codons(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "D", "codon": "GAC", "codon_count": 1, "codon_fraction": 1.0},
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 3, "codon_fraction": 0.3},
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 7, "codon_fraction": 0.7},
+            ],
+        )
+
+        filter_state = build_stats_filter_state(
+            self.factory.get(
+                "/browser/codon-ratios/",
+                {
+                    "run": "run-alpha",
+                    "branch": str(self.alpha["taxa"]["primates"].pk),
+                    "residue": "q",
+                },
+            )
+        )
+
+        self.assertEqual(
+            list(build_filtered_codon_usage_queryset(filter_state).values_list("amino_acid", "codon")),
+            [("Q", "CAA"), ("Q", "CAG")],
+        )
+
+    def test_ranked_codon_composition_summary_bundle_rolls_up_two_codon_residue(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 8, "codon_fraction": 1.0},
+            ],
+        )
+        self._set_repeat_call_codon_usages(
+            self.beta,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 1, "codon_fraction": 0.25},
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 3, "codon_fraction": 0.75},
+            ],
+        )
+
+        filter_state = build_stats_filter_state(
+            self.factory.get(
+                "/browser/codon-ratios/",
+                {
+                    "rank": "class",
+                    "min_count": "1",
+                    "top_n": "10",
+                    "residue": "q",
+                    "codon_metric_name": "ignored_metric",
+                },
+            )
+        )
+
+        bundle = build_ranked_codon_composition_summary_bundle(filter_state)
+
+        self.assertEqual(bundle["matching_repeat_calls_count"], 2)
+        self.assertEqual(bundle["total_taxa_count"], 1)
+        self.assertEqual(bundle["visible_taxa_count"], 1)
+        self.assertEqual(bundle["visible_codons"], ["CAA", "CAG"])
+        self.assertEqual(
+            bundle["summary_rows"],
+            [
+                {
+                    "taxon_id": self.alpha["taxa"]["mammalia"].pk,
+                    "taxon_name": "Mammalia",
+                    "rank": "class",
+                    "observation_count": 2,
+                    "codon_shares": [
+                        {"codon": "CAA", "share": 0.625},
+                        {"codon": "CAG", "share": 0.375},
+                    ],
+                }
+            ],
+        )
+
+    def test_ranked_codon_composition_summary_bundle_supports_four_codon_residue(self):
+        alpha_alanine = self._create_repeat_call(
+            self.alpha,
+            suffix="alpha_alanine_composition",
+            residue="A",
+            codon_metric_name="alanine_ratio",
+            codon_ratio_value=0.7,
+        )
+        beta_alanine = self._create_repeat_call(
+            self.beta,
+            suffix="beta_alanine_composition",
+            residue="A",
+            codon_metric_name="alanine_ratio",
+            codon_ratio_value=0.6,
+        )
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            repeat_call=alpha_alanine,
+            rows=[
+                {"amino_acid": "A", "codon": "GCA", "codon_count": 2, "codon_fraction": 0.5},
+                {"amino_acid": "A", "codon": "GCC", "codon_count": 2, "codon_fraction": 0.5},
+            ],
+        )
+        self._set_repeat_call_codon_usages(
+            self.beta,
+            repeat_call=beta_alanine,
+            rows=[
+                {"amino_acid": "A", "codon": "GCG", "codon_count": 2, "codon_fraction": 0.5},
+                {"amino_acid": "A", "codon": "GCT", "codon_count": 2, "codon_fraction": 0.5},
+            ],
+        )
+
+        filter_state = build_stats_filter_state(
+            self.factory.get(
+                "/browser/codon-ratios/",
+                {
+                    "rank": "class",
+                    "min_count": "1",
+                    "top_n": "10",
+                    "residue": "a",
+                },
+            )
+        )
+
+        bundle = build_ranked_codon_composition_summary_bundle(filter_state)
+
+        self.assertEqual(bundle["visible_codons"], ["GCA", "GCC", "GCG", "GCT"])
+        self.assertEqual(
+            bundle["summary_rows"],
+            [
+                {
+                    "taxon_id": self.alpha["taxa"]["mammalia"].pk,
+                    "taxon_name": "Mammalia",
+                    "rank": "class",
+                    "observation_count": 2,
+                    "codon_shares": [
+                        {"codon": "GCA", "share": 0.25},
+                        {"codon": "GCC", "share": 0.25},
+                        {"codon": "GCG", "share": 0.25},
+                        {"codon": "GCT", "share": 0.25},
+                    ],
+                }
+            ],
+        )
+
+    def test_ranked_codon_composition_summary_bundle_uses_equal_call_weight(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 12, "codon_fraction": 1.0},
+            ],
+        )
+        self._set_repeat_call_codon_usages(
+            self.beta,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 1, "codon_fraction": 0.5},
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 1, "codon_fraction": 0.5},
+            ],
+        )
+
+        filter_state = build_stats_filter_state(
+            self.factory.get(
+                "/browser/codon-ratios/",
+                {
+                    "rank": "class",
+                    "min_count": "1",
+                    "residue": "q",
+                },
+            )
+        )
+
+        bundle = build_ranked_codon_composition_summary_bundle(filter_state)
+
+        self.assertEqual(
+            bundle["summary_rows"][0]["codon_shares"],
+            [
+                {"codon": "CAA", "share": 0.75},
+                {"codon": "CAG", "share": 0.25},
+            ],
+        )
+
+    def test_ranked_codon_composition_summary_bundle_respects_run_branch_method_and_residue_filters(self):
+        alpha_alanine = self._create_repeat_call(
+            self.alpha,
+            suffix="alpha_threshold_alanine",
+            residue="A",
+            codon_metric_name="alanine_ratio",
+            codon_ratio_value=0.7,
+            method=RepeatCall.Method.THRESHOLD,
+        )
+        beta_alanine = self._create_repeat_call(
+            self.beta,
+            suffix="beta_threshold_alanine",
+            residue="A",
+            codon_metric_name="alanine_ratio",
+            codon_ratio_value=0.6,
+            method=RepeatCall.Method.THRESHOLD,
+        )
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            repeat_call=alpha_alanine,
+            rows=[
+                {"amino_acid": "A", "codon": "GCA", "codon_count": 4, "codon_fraction": 1.0},
+            ],
+        )
+        self._set_repeat_call_codon_usages(
+            self.beta,
+            repeat_call=beta_alanine,
+            rows=[
+                {"amino_acid": "A", "codon": "GCC", "codon_count": 4, "codon_fraction": 1.0},
+            ],
+        )
+
+        filter_state = build_stats_filter_state(
+            self.factory.get(
+                "/browser/codon-ratios/",
+                {
+                    "run": "run-alpha",
+                    "branch": str(self.alpha["taxa"]["primates"].pk),
+                    "rank": "species",
+                    "method": RepeatCall.Method.THRESHOLD,
+                    "residue": "a",
+                    "min_count": "1",
+                },
+            )
+        )
+
+        group_rows = list(build_ranked_taxon_group_queryset(filter_state))
+        grouped_codon_fraction_sums = list(
+            build_group_codon_fraction_sums_queryset(
+                filter_state,
+                display_taxon_ids=[group_rows[0]["display_taxon_id"]],
+            )
+        )
+        summary_rows = summarize_ranked_codon_composition_groups(
+            group_rows,
+            grouped_codon_fraction_sums,
+            visible_codons=["GCA"],
+        )
+
+        bundle = build_ranked_codon_composition_summary_bundle(filter_state)
+        self.assertEqual(bundle["matching_repeat_calls_count"], 1)
+        self.assertEqual(bundle["total_taxa_count"], 1)
+        self.assertEqual(bundle["visible_codons"], ["GCA"])
+        self.assertEqual(
+            summary_rows,
+            [
+                {
+                    "taxon_id": self.alpha["taxon"].pk,
+                    "taxon_name": "Homo sapiens",
+                    "rank": "species",
+                    "observation_count": 1,
+                    "codon_shares": [
+                        {"codon": "GCA", "share": 1},
+                    ],
+                }
+            ],
+        )
+        self.assertEqual(bundle["summary_rows"], summary_rows)
 
     def test_available_codon_metric_names_are_residue_scoped_and_ignore_null_rows(self):
         self._create_repeat_call(

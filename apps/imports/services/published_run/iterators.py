@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import csv
 from datetime import datetime, timezone
+from math import isfinite
 from pathlib import Path
 from typing import Any
 
 from .contracts import (
+    CODON_USAGE_REQUIRED_COLUMNS,
     ACCESSION_CALL_COUNT_REQUIRED_COLUMNS,
     ACCESSION_STATUS_REQUIRED_COLUMNS,
     DOWNLOAD_MANIFEST_REQUIRED_COLUMNS,
@@ -222,6 +224,32 @@ def iter_repeat_call_rows(path: Path):
             "template_name": _string_value(row.get("template_name")),
             "merge_rule": _string_value(row.get("merge_rule")),
             "score": _string_value(row.get("score")),
+        }
+
+
+def iter_codon_usage_rows(path: Path):
+    for row in _iter_tsv(path, CODON_USAGE_REQUIRED_COLUMNS):
+        method = _require_row_value(row, "method", path)
+        codon_count = _parse_int(row, "codon_count", path)
+        codon_fraction = _parse_float(row, "codon_fraction", path)
+
+        if method not in VALID_METHODS:
+            raise ImportContractError(f"{path} contains an invalid method: {method!r}")
+        if codon_count < 0:
+            raise ImportContractError(f"{path} contains a negative codon_count")
+        if not isfinite(codon_fraction) or codon_fraction < 0 or codon_fraction > 1:
+            raise ImportContractError(f"{path} contains a codon_fraction outside 0..1")
+
+        yield {
+            "call_id": _require_row_value(row, "call_id", path),
+            "method": method,
+            "repeat_residue": _require_row_value(row, "repeat_residue", path),
+            "sequence_id": _require_row_value(row, "sequence_id", path),
+            "protein_id": _require_row_value(row, "protein_id", path),
+            "amino_acid": _require_row_value(row, "amino_acid", path),
+            "codon": _require_row_value(row, "codon", path),
+            "codon_count": codon_count,
+            "codon_fraction": codon_fraction,
         }
 
 

@@ -1,20 +1,17 @@
 (() => {
-  const BOX_FILL = "#dcebef";
-  const BOX_BORDER = "#0f5964";
-  const MEDIAN_COLOR = "#d06e37";
-  const CHART_MODE_FOCUSED = "focused";
-  const CHART_MODE_FULL_RANGE = "full-range";
   const GRID_COLOR = "rgba(23, 36, 44, 0.1)";
-  const MAX_VISIBLE_ROWS_WITH_TAXON_LABELS = 24;
-  const PENDING_SCROLL_KEY = "repeat-codon-ratio-explorer:pending-scroll";
-  const PENDING_SCROLL_MAX_AGE_MS = 15000;
   const TEXT_COLOR = "#17242c";
   const MUTED_TEXT_COLOR = "#63727a";
-  const DEFAULT_VISIBLE_ROWS = 12;
-  const MAX_CHART_HEIGHT = 980;
-  const MIN_CHART_HEIGHT = 380;
-  const ROW_HEIGHT = 38;
-  const CHART_PADDING = 120;
+  const PENDING_SCROLL_KEY = "repeat-codon-composition-explorer:pending-scroll";
+  const PENDING_SCROLL_MAX_AGE_MS = 15000;
+  const PALETTE = [
+    "#0f5964",
+    "#d06e37",
+    "#9db7a5",
+    "#6a8caf",
+    "#d9a441",
+    "#6e7f80",
+  ];
 
   function parsePayload(scriptId) {
     const payloadNode = document.getElementById(scriptId);
@@ -29,92 +26,15 @@
     }
   }
 
-  function clamp(number, minimum, maximum) {
-    return Math.min(Math.max(number, minimum), maximum);
-  }
-
-  function numericValue(value, fallbackValue) {
-    if (Array.isArray(value)) {
-      return numericValue(value[0], fallbackValue);
-    }
-    return typeof value === "number" && Number.isFinite(value) ? value : fallbackValue;
-  }
-
-  function formatCodonRatioValue(value) {
+  function formatShare(value) {
     if (typeof value !== "number" || Number.isNaN(value)) {
       return "-";
     }
-
-    return value.toFixed(2).replace(/\.?0+$/, "");
+    return value.toFixed(3).replace(/\.?0+$/, "");
   }
 
-  function truncateTaxonName(taxonName) {
-    if (taxonName.length <= 28) {
-      return taxonName;
-    }
-    return `${taxonName.slice(0, 25)}...`;
-  }
-
-  function rowCategoryValue(row) {
-    return String(row.taxonId);
-  }
-
-  function rowForAxisValue(rows, axisValue) {
-    return rows.find((row) => rowCategoryValue(row) === String(axisValue)) || null;
-  }
-
-  function chartHeightForRowCount(rowCount) {
-    if (rowCount <= 0) {
-      return MIN_CHART_HEIGHT;
-    }
-    return clamp((rowCount * ROW_HEIGHT) + CHART_PADDING, MIN_CHART_HEIGHT, MAX_CHART_HEIGHT);
-  }
-
-  function defaultZoomState(rowCount) {
-    return {
-      startValue: 0,
-      endValue: Math.max(0, Math.min(rowCount - 1, DEFAULT_VISIBLE_ROWS - 1)),
-    };
-  }
-
-  function normalizeZoomState(rowCount, zoomState) {
-    if (rowCount <= DEFAULT_VISIBLE_ROWS) {
-      return null;
-    }
-
-    const fallback = defaultZoomState(rowCount);
-    const startValue = clamp(
-      Math.round(numericValue(zoomState ? zoomState.startValue : undefined, fallback.startValue)),
-      0,
-      rowCount - 1,
-    );
-    const endValue = clamp(
-      Math.round(numericValue(zoomState ? zoomState.endValue : undefined, fallback.endValue)),
-      startValue,
-      rowCount - 1,
-    );
-    return {
-      startValue,
-      endValue,
-    };
-  }
-
-  function visibleRowCountForZoom(rowCount, zoomState) {
-    if (rowCount <= 0) {
-      return 0;
-    }
-    if (!zoomState) {
-      return rowCount;
-    }
-    return (zoomState.endValue - zoomState.startValue) + 1;
-  }
-
-  function shouldShowObservationCounts(visibleRowCount) {
-    return visibleRowCount <= DEFAULT_VISIBLE_ROWS;
-  }
-
-  function shouldShowTaxonLabels(visibleRowCount) {
-    return visibleRowCount <= MAX_VISIBLE_ROWS_WITH_TAXON_LABELS;
+  function chartHeight(rowCount, minimumHeight) {
+    return Math.max(minimumHeight, (rowCount * 40) + 140);
   }
 
   function savePendingScrollPosition() {
@@ -167,59 +87,7 @@
     }
   }
 
-  function focusedDisplayMin(row) {
-    const iqr = Math.max(0, row.q3 - row.q1);
-    return Math.max(row.min, row.q1 - (1.5 * iqr));
-  }
-
-  function focusedDisplayMax(row) {
-    const iqr = Math.max(0, row.q3 - row.q1);
-    return Math.min(row.max, row.q3 + (1.5 * iqr));
-  }
-
-  function deriveChartRows(rows, mode) {
-    return rows.map((row) => {
-      if (mode !== CHART_MODE_FOCUSED) {
-        return {
-          ...row,
-          displayMin: row.min,
-          displayMax: row.max,
-          maxOverflow: false,
-        };
-      }
-
-      const displayMin = focusedDisplayMin(row);
-      const displayMax = focusedDisplayMax(row);
-      return {
-        ...row,
-        displayMin,
-        displayMax,
-        maxOverflow: row.max > displayMax,
-      };
-    });
-  }
-
-  function codonRatioBounds(rows) {
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return [0, 1];
-    }
-
-    const visibleMin = Math.min(...rows.map((row) => row.displayMin));
-    const visibleMax = Math.max(...rows.map((row) => row.displayMax));
-    const span = visibleMax - visibleMin;
-    const padding = span > 0 ? Math.max(0.05, span * 0.08) : 0.1;
-    return [Math.max(0, visibleMin - padding), visibleMax + padding];
-  }
-
-  function buildEmptyOption(payload) {
-    const hasRows = Array.isArray(payload.rows) && payload.rows.length > 0;
-    const rangeLabel = hasRows
-      ? `${formatCodonRatioValue(payload.x_min)} to ${formatCodonRatioValue(payload.x_max)}`
-      : "No visible taxa";
-    const summaryLabel = hasRows
-      ? `${payload.visibleTaxaCount} taxa ready for chart rendering`
-      : "Adjust the filters to populate the chart";
-
+  function buildEmptyOption(message, detail) {
     return {
       animation: false,
       grid: {
@@ -229,14 +97,9 @@
         bottom: 16,
       },
       xAxis: {
-        type: "value",
-        min: 0,
-        max: 1,
         show: false,
       },
       yAxis: {
-        type: "category",
-        data: [],
         show: false,
       },
       series: [],
@@ -249,7 +112,7 @@
           left: "center",
           top: "42%",
           style: {
-            text: summaryLabel,
+            text: message,
             fontSize: 20,
             fontWeight: 700,
             fill: TEXT_COLOR,
@@ -261,7 +124,7 @@
           left: "center",
           top: "54%",
           style: {
-            text: `Codon ratio span: ${rangeLabel}`,
+            text: detail,
             fontSize: 14,
             fontWeight: 500,
             fill: MUTED_TEXT_COLOR,
@@ -272,192 +135,184 @@
     };
   }
 
-  function heatmapValueBounds(payload) {
-    const minimum = numericValue(payload ? payload.valueMin : undefined, 0);
-    const maximum = numericValue(payload ? payload.valueMax : undefined, 1);
-    if (minimum === maximum) {
-      const padding = minimum === 0 ? 0.1 : Math.abs(minimum) * 0.1;
-      return [Math.max(0, minimum - padding), maximum + padding];
+  function renderOverview() {
+    const payload = parsePayload("codon-composition-overview-payload");
+    const container = document.getElementById("codon-composition-overview");
+    if (!payload || !container || typeof window.echarts === "undefined") {
+      return;
     }
-    return [minimum, maximum];
-  }
 
-  function buildHeatmapEmptyOption(payload) {
-    const taxonCount = numericValue(payload ? payload.visibleTaxaCount : undefined, 0);
-    const binCount = numericValue(payload ? payload.visibleBinCount : undefined, 0);
-    const summaryLabel = taxonCount > 0 || binCount > 0
-      ? `${taxonCount} taxa across ${binCount} bins ready for overview rendering`
-      : "Adjust the filters to populate the overview";
+    const chart = window.echarts.init(container);
+    container.style.height = `${chartHeight(payload.visibleTaxaCount || 0, 320)}px`;
 
-    return {
+    if (!Array.isArray(payload.cells) || payload.cells.length === 0) {
+      chart.setOption(
+        buildEmptyOption(
+          "No visible codon composition cells",
+          "Adjust the filters or choose a residue to populate the overview.",
+        ),
+      );
+      return;
+    }
+
+    chart.setOption({
       animation: false,
       grid: {
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: 16,
-      },
-      xAxis: {
-        type: "value",
-        min: 0,
-        max: 1,
-        show: false,
-      },
-      yAxis: {
-        type: "value",
-        min: 0,
-        max: 1,
-        show: false,
-      },
-      series: [],
-      tooltip: {
-        show: false,
-      },
-      graphic: [
-        {
-          type: "text",
-          left: "center",
-          top: "42%",
-          style: {
-            text: summaryLabel,
-            fontSize: 20,
-            fontWeight: 700,
-            fill: TEXT_COLOR,
-            textAlign: "center",
-          },
-        },
-        {
-          type: "text",
-          left: "center",
-          top: "54%",
-          style: {
-            text: "Median codon ratio per taxon and repeat-length bin",
-            fontSize: 14,
-            fontWeight: 500,
-            fill: MUTED_TEXT_COLOR,
-            textAlign: "center",
-          },
-        },
-      ],
-    };
-  }
-
-  function buildTooltip(row, { focusedMode = false } = {}) {
-    const lines = [
-      `<strong>${row.taxonName}</strong>`,
-      `Observations: ${row.observationCount}`,
-      `Min-Max: ${formatCodonRatioValue(row.min)}-${formatCodonRatioValue(row.max)}`,
-      `Median: ${formatCodonRatioValue(row.median)}`,
-      `IQR: ${formatCodonRatioValue(row.q1)}-${formatCodonRatioValue(row.q3)}`,
-    ];
-    if (focusedMode && row.maxOverflow) {
-      lines.push(`Focused view clips max whisker at ${formatCodonRatioValue(row.displayMax)}`);
-    }
-    return lines.join("<br>");
-  }
-
-  function heatmapTaxonForRowIndex(taxa, rowIndex) {
-    return taxa.find((taxon) => String(taxon.rowIndex) === String(rowIndex)) || null;
-  }
-
-  function buildHeatmapTooltip(cell) {
-    return [
-      `<strong>${cell.taxonName}</strong>`,
-      `Length bin: ${cell.binLabel}`,
-      `Observations: ${cell.observationCount}`,
-      `Median: ${formatCodonRatioValue(cell.median)}`,
-      `IQR: ${formatCodonRatioValue(cell.q1)}-${formatCodonRatioValue(cell.q3)}`,
-      `Min-Max: ${formatCodonRatioValue(cell.min)}-${formatCodonRatioValue(cell.max)}`,
-    ].join("<br>");
-  }
-
-  function markerPoint(row, rowIndex, xValue) {
-    return {
-      value: [xValue, rowIndex],
-      rowIndex,
-    };
-  }
-
-  function overflowMarkerData(rows) {
-    const markers = [];
-    rows.forEach((row, rowIndex) => {
-      if (row.maxOverflow) {
-        markers.push(markerPoint(row, rowIndex, row.displayMax));
-      }
-    });
-    return markers;
-  }
-
-  function averageMedian(rows) {
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return null;
-    }
-
-    const sum = rows.reduce((total, row) => total + row.median, 0);
-    return sum / rows.length;
-  }
-
-  function buildChartOption(payload, mode, zoomState) {
-    if (!Array.isArray(payload.rows) || payload.rows.length === 0) {
-      return buildEmptyOption(payload);
-    }
-
-    const rows = deriveChartRows(payload.rows, mode);
-    const categories = rows.map((row) => rowCategoryValue(row));
-    const boxplotData = rows.map((row) => [row.displayMin, row.q1, row.median, row.q3, row.displayMax]);
-    const [xMin, xMax] = codonRatioBounds(rows);
-    const visibleRowWindow = Math.min(rows.length, DEFAULT_VISIBLE_ROWS);
-    const needsZoom = rows.length > visibleRowWindow;
-    const normalizedZoomState = normalizeZoomState(rows.length, zoomState);
-    const visibleRowCount = visibleRowCountForZoom(rows.length, normalizedZoomState);
-    const showTaxonLabels = shouldShowTaxonLabels(visibleRowCount);
-    const showObservationCounts = shouldShowObservationCounts(visibleRowCount);
-    const overflowMarkers = mode === CHART_MODE_FOCUSED ? overflowMarkerData(rows) : [];
-    const avgMedian = averageMedian(rows);
-
-    return {
-      animationDuration: 250,
-      animationDurationUpdate: 150,
-      grid: {
-        left: 188,
-        right: needsZoom ? 56 : 20,
-        top: 16,
-        bottom: 56,
-        containLabel: false,
+        left: 160,
+        right: 56,
+        top: 32,
+        bottom: 48,
       },
       tooltip: {
         trigger: "item",
-        confine: true,
-        backgroundColor: "rgba(255, 253, 249, 0.98)",
-        borderColor: "rgba(23, 36, 44, 0.12)",
-        borderWidth: 1,
+        formatter(params) {
+          const cell = payload.cells[params.dataIndex];
+          return [
+            `<strong>${cell.taxonName}</strong>`,
+            `Codon: ${cell.codon}`,
+            `Share: ${formatShare(cell.value)}`,
+            `Calls: ${cell.observationCount}`,
+          ].join("<br>");
+        },
+      },
+      xAxis: {
+        type: "category",
+        data: payload.codons.map((row) => row.codon),
+        axisLabel: {
+          color: TEXT_COLOR,
+        },
+        axisLine: {
+          lineStyle: {
+            color: GRID_COLOR,
+          },
+        },
+      },
+      yAxis: {
+        type: "category",
+        data: payload.taxa.map((row) => row.taxonName),
+        axisLabel: {
+          color: TEXT_COLOR,
+        },
+        axisLine: {
+          lineStyle: {
+            color: GRID_COLOR,
+          },
+        },
+      },
+      visualMap: {
+        min: payload.valueMin,
+        max: payload.valueMax,
+        calculable: false,
+        orient: "vertical",
+        right: 0,
+        top: "middle",
+        text: ["High", "Low"],
+        textStyle: {
+          color: MUTED_TEXT_COLOR,
+        },
+        inRange: {
+          color: ["#f2efe6", "#cddfd8", "#0f5964"],
+        },
+      },
+      series: [
+        {
+          type: "heatmap",
+          data: payload.seriesData,
+          label: {
+            show: true,
+            formatter(params) {
+              return formatShare(params.data[2]);
+            },
+            color: TEXT_COLOR,
+            fontSize: 11,
+          },
+          emphasis: {
+            itemStyle: {
+              shadowBlur: 10,
+              shadowColor: "rgba(0, 0, 0, 0.18)",
+            },
+          },
+        },
+      ],
+    });
+
+    window.addEventListener("resize", () => chart.resize());
+  }
+
+  function renderBrowseChart() {
+    const payload = parsePayload("codon-composition-chart-payload");
+    const container = document.getElementById("codon-composition-chart");
+    if (!payload || !container || typeof window.echarts === "undefined") {
+      return;
+    }
+
+    const chart = window.echarts.init(container);
+    container.style.height = `${chartHeight(payload.visibleTaxaCount || 0, 380)}px`;
+
+    if (!Array.isArray(payload.rows) || payload.rows.length === 0 || !Array.isArray(payload.visibleCodons) || payload.visibleCodons.length === 0) {
+      chart.setOption(
+        buildEmptyOption(
+          "No visible codon composition rows",
+          "Adjust the filters or choose a residue to populate the browse chart.",
+        ),
+      );
+      return;
+    }
+
+    const taxonNames = payload.rows.map((row) => row.taxonName);
+    const series = payload.visibleCodons.map((codon, codonIndex) => ({
+      name: codon,
+      type: "bar",
+      stack: "codon-composition",
+      barMaxWidth: 22,
+      itemStyle: {
+        color: PALETTE[codonIndex % PALETTE.length],
+      },
+      data: payload.rows.map((row) => ({
+        value: row.codonShares[codonIndex] || 0,
+        taxonName: row.taxonName,
+        codon,
+        branchExplorerUrl: row.branchExplorerUrl || "",
+      })),
+    }));
+
+    chart.setOption({
+      animation: false,
+      grid: {
+        left: 180,
+        right: 24,
+        top: 72,
+        bottom: 48,
+      },
+      legend: {
+        top: 16,
         textStyle: {
           color: TEXT_COLOR,
-          fontSize: 13,
+        },
+      },
+      tooltip: {
+        trigger: "axis",
+        axisPointer: {
+          type: "shadow",
         },
         formatter(params) {
-          return buildTooltip(rows[params.dataIndex], {
-            focusedMode: mode === CHART_MODE_FOCUSED,
+          if (!Array.isArray(params) || params.length === 0) {
+            return "";
+          }
+          const lines = [`<strong>${params[0].data.taxonName}</strong>`];
+          params.forEach((entry) => {
+            lines.push(`${entry.seriesName}: ${formatShare(entry.data.value)}`);
           });
+          return lines.join("<br>");
         },
       },
       xAxis: {
         type: "value",
-        min: xMin,
-        max: xMax,
-        name: "Codon ratio",
-        nameGap: 22,
-        nameLocation: "middle",
-        nameTextStyle: {
-          color: MUTED_TEXT_COLOR,
-          fontWeight: 700,
-          fontSize: 12,
-        },
+        min: 0,
+        max: 1,
         axisLabel: {
-          color: MUTED_TEXT_COLOR,
-          formatter(value) {
-            return formatCodonRatioValue(value);
-          },
+          color: TEXT_COLOR,
+          formatter: (value) => formatShare(value),
         },
         splitLine: {
           lineStyle: {
@@ -467,426 +322,83 @@
       },
       yAxis: {
         type: "category",
-        data: categories,
-        triggerEvent: true,
-        axisTick: {
-          show: false,
-        },
-        axisLine: {
-          show: false,
-        },
+        data: taxonNames,
         axisLabel: {
-          show: showTaxonLabels,
-          interval: showTaxonLabels ? 0 : "auto",
           color: TEXT_COLOR,
-          fontWeight: 700,
-          lineHeight: 17,
-          margin: 16,
-          rich: {
-            taxon: {
-              color: TEXT_COLOR,
-              fontWeight: 700,
-            },
-            count: {
-              color: MUTED_TEXT_COLOR,
-              fontSize: 12,
-              fontWeight: 600,
-            },
-          },
-          formatter(value) {
-            const row = rowForAxisValue(rows, value);
-            if (!row) {
-              return "";
-            }
-            if (!showObservationCounts) {
-              return `{taxon|${truncateTaxonName(row.taxonName)}}`;
-            }
-            return `{taxon|${truncateTaxonName(row.taxonName)}}\n{count|n=${row.observationCount}}`;
-          },
         },
       },
-      dataZoom: needsZoom
-        ? [
-            {
-              type: "inside",
-              yAxisIndex: 0,
-              zoomOnMouseWheel: false,
-              moveOnMouseMove: true,
-              moveOnMouseWheel: true,
-              startValue: normalizedZoomState.startValue,
-              endValue: normalizedZoomState.endValue,
-            },
-            {
-              type: "slider",
-              yAxisIndex: 0,
-              filterMode: "empty",
-              right: 8,
-              width: 14,
-              top: 24,
-              bottom: 64,
-              brushSelect: false,
-              startValue: normalizedZoomState.startValue,
-              endValue: normalizedZoomState.endValue,
-              fillerColor: "rgba(15, 89, 100, 0.16)",
-              borderColor: "rgba(23, 36, 44, 0.08)",
-              handleStyle: {
-                color: BOX_BORDER,
-                borderColor: BOX_BORDER,
-              },
-              moveHandleStyle: {
-                color: BOX_BORDER,
-              },
-              textStyle: {
-                color: MUTED_TEXT_COLOR,
-              },
-            },
-          ]
-        : [],
-      series: [
-        {
-          name: "Codon ratio distribution",
-          type: "boxplot",
-          cursor: "pointer",
-          data: boxplotData,
-          itemStyle: {
-            color: BOX_FILL,
-            borderColor: BOX_BORDER,
-            borderWidth: 2,
-          },
-          emphasis: {
-            itemStyle: {
-              color: "#eef6f7",
-              borderColor: BOX_BORDER,
-              borderWidth: 2,
-            },
-          },
-          tooltip: {
-            show: true,
-          },
-        },
-        {
-          name: "Median marker",
-          type: "scatter",
-          cursor: "pointer",
-          data: rows.map((row, index) => markerPoint(row, index, row.median)),
-          symbol: "circle",
-          symbolSize: 7,
-          itemStyle: {
-            color: MEDIAN_COLOR,
-          },
-          z: 4,
-          tooltip: {
-            show: false,
-          },
-          markLine: avgMedian === null
-            ? undefined
-            : {
-                silent: true,
-                symbol: "none",
-                lineStyle: {
-                  color: MEDIAN_COLOR,
-                  type: "dashed",
-                  width: 2,
-                  opacity: 0.7,
-                },
-                label: {
-                  show: true,
-                  formatter: `Avg median ${formatCodonRatioValue(avgMedian)}`,
-                  color: MEDIAN_COLOR,
-                  fontWeight: 700,
-                  padding: [0, 0, 8, 0],
-                },
-                data: [
-                  {
-                    xAxis: avgMedian,
-                  },
-                ],
-              },
-        },
-        ...(
-          overflowMarkers.length > 0
-            ? [
-                {
-                  name: "Clipped max marker",
-                  type: "scatter",
-                  cursor: "pointer",
-                  data: overflowMarkers,
-                  symbol: "triangle",
-                  symbolRotate: 90,
-                  symbolSize: 12,
-                  itemStyle: {
-                    color: MEDIAN_COLOR,
-                  },
-                  z: 6,
-                  tooltip: {
-                    show: true,
-                    formatter(params) {
-                      const row = rows[params.data.rowIndex];
-                      return buildTooltip(row, { focusedMode: true });
-                    },
-                  },
-                },
-              ]
-            : []
-        ),
-      ],
-    };
+      series,
+    });
+
+    chart.on("click", (params) => {
+      if (params && params.data && params.data.branchExplorerUrl) {
+        window.location.href = params.data.branchExplorerUrl;
+      }
+    });
+
+    window.addEventListener("resize", () => chart.resize());
   }
 
-  function buildHeatmapOption(payload) {
-    const taxa = Array.isArray(payload && payload.taxa) ? payload.taxa : [];
-    const bins = Array.isArray(payload && payload.bins) ? payload.bins : [];
-    const cells = Array.isArray(payload && payload.cells) ? payload.cells : [];
-
-    if (cells.length === 0) {
-      return buildHeatmapEmptyOption(payload);
+  function renderInspectChart() {
+    const payload = parsePayload("codon-composition-inspect-payload");
+    const container = document.getElementById("codon-composition-inspect-chart");
+    if (!payload || !container || typeof window.echarts === "undefined") {
+      return;
     }
 
-    const showTaxonLabels = shouldShowTaxonLabels(taxa.length);
-    const showObservationCounts = shouldShowObservationCounts(taxa.length);
-    const [valueMin, valueMax] = heatmapValueBounds(payload);
+    const chart = window.echarts.init(container);
+    container.style.height = "320px";
 
-    return {
-      animationDuration: 250,
-      animationDurationUpdate: 150,
-      grid: {
-        left: 188,
-        right: 20,
-        top: 20,
-        bottom: 104,
-        containLabel: false,
-      },
-      tooltip: {
-        trigger: "item",
-        confine: true,
-        backgroundColor: "rgba(255, 253, 249, 0.98)",
-        borderColor: "rgba(23, 36, 44, 0.12)",
-        borderWidth: 1,
-        textStyle: {
-          color: TEXT_COLOR,
-          fontSize: 13,
-        },
-        formatter(params) {
-          if (!params.data || !params.data.cell) {
-            return "";
-          }
-          return buildHeatmapTooltip(params.data.cell);
-        },
-      },
-      xAxis: {
-        type: "category",
-        data: bins.map((lengthBin) => String(lengthBin.columnIndex)),
-        position: "top",
-        axisTick: {
-          show: false,
-        },
-        axisLine: {
-          show: false,
-        },
-        axisLabel: {
-          color: MUTED_TEXT_COLOR,
-          interval: 0,
-          rotate: bins.length > 8 ? 30 : 0,
-          formatter(value) {
-            const lengthBin = bins[Number(value)];
-            return lengthBin ? lengthBin.label : "";
-          },
-        },
-        splitArea: {
-          show: false,
-        },
-      },
-      yAxis: {
-        type: "category",
-        data: taxa.map((taxon) => String(taxon.rowIndex)),
-        axisTick: {
-          show: false,
-        },
-        axisLine: {
-          show: false,
-        },
-        axisLabel: {
-          show: showTaxonLabels,
-          interval: showTaxonLabels ? 0 : "auto",
-          color: TEXT_COLOR,
-          fontWeight: 700,
-          lineHeight: 17,
-          margin: 16,
-          rich: {
-            taxon: {
-              color: TEXT_COLOR,
-              fontWeight: 700,
-            },
-            count: {
-              color: MUTED_TEXT_COLOR,
-              fontSize: 12,
-              fontWeight: 600,
-            },
-          },
-          formatter(value) {
-            const taxon = heatmapTaxonForRowIndex(taxa, value);
-            if (!taxon) {
-              return "";
-            }
-            if (!showObservationCounts) {
-              return `{taxon|${truncateTaxonName(taxon.taxonName)}}`;
-            }
-            return `{taxon|${truncateTaxonName(taxon.taxonName)}}\n{count|n=${taxon.observationCount}}`;
-          },
-        },
-      },
-      visualMap: {
-        min: valueMin,
-        max: valueMax,
-        calculable: true,
-        orient: "horizontal",
-        left: "center",
-        bottom: 24,
-        text: ["Higher median", "Lower median"],
-        textStyle: {
-          color: MUTED_TEXT_COLOR,
-        },
-        inRange: {
-          color: ["#fcf7ed", "#dcebef", "#7cb4b7", "#0f5964"],
-        },
-      },
-      series: [
-        {
-          name: "Median codon ratio",
-          type: "heatmap",
-          data: cells.map((cell) => ({
-            value: [cell.binIndex, cell.taxonIndex, cell.value],
-            cell,
-          })),
-          progressive: 0,
-          itemStyle: {
-            borderColor: "rgba(255, 255, 255, 0.8)",
-            borderWidth: 1,
-          },
-          emphasis: {
-            itemStyle: {
-              borderColor: TEXT_COLOR,
-              borderWidth: 1.5,
-            },
-          },
-        },
-      ],
-    };
-  }
+    if (!Array.isArray(payload.codonShares) || payload.codonShares.length === 0) {
+      chart.setOption(
+        buildEmptyOption(
+          "No inspect composition available",
+          "Choose a residue-scoped branch with imported codon-usage rows.",
+        ),
+      );
+      return;
+    }
 
-  function buildInspectEmptyOption(title) {
-    return {
+    chart.setOption({
       animation: false,
       grid: {
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: 16,
-      },
-      xAxis: {
-        type: "value",
-        min: 0,
-        max: 1,
-        show: false,
-      },
-      yAxis: {
-        type: "value",
-        min: 0,
-        max: 1,
-        show: false,
-      },
-      series: [],
-      tooltip: {
-        show: false,
-      },
-      graphic: [
-        {
-          type: "text",
-          left: "center",
-          top: "46%",
-          style: {
-            text: title,
-            fontSize: 18,
-            fontWeight: 700,
-            fill: TEXT_COLOR,
-            textAlign: "center",
-          },
-        },
-      ],
-    };
-  }
-
-  function buildInspectHistogramOption(payload) {
-    const histogramBins = Array.isArray(payload && payload.histogramBins) ? payload.histogramBins : [];
-    if (histogramBins.length === 0) {
-      return buildInspectEmptyOption("No inspect histogram available");
-    }
-
-    return {
-      animationDuration: 250,
-      animationDurationUpdate: 150,
-      grid: {
-        left: 48,
-        right: 20,
-        top: 24,
-        bottom: 88,
+        left: 64,
+        right: 24,
+        top: 32,
+        bottom: 48,
       },
       tooltip: {
-        trigger: "item",
-        confine: true,
-        backgroundColor: "rgba(255, 253, 249, 0.98)",
-        borderColor: "rgba(23, 36, 44, 0.12)",
-        borderWidth: 1,
-        textStyle: {
-          color: TEXT_COLOR,
-          fontSize: 13,
+        trigger: "axis",
+        axisPointer: {
+          type: "shadow",
         },
         formatter(params) {
-          const histogramBin = histogramBins[params.dataIndex];
-          if (!histogramBin) {
+          if (!Array.isArray(params) || params.length === 0) {
             return "";
           }
+          const entry = params[0];
           return [
-            `<strong>${histogramBin.label}</strong>`,
-            `Observations: ${histogramBin.count}`,
+            `<strong>${payload.scopeLabel}</strong>`,
+            `Codon: ${entry.axisValue}`,
+            `Share: ${formatShare(entry.data)}`,
+            `Calls: ${payload.observationCount}`,
           ].join("<br>");
         },
       },
       xAxis: {
         type: "category",
-        data: histogramBins.map((histogramBin) => histogramBin.label),
-        name: "Codon ratio bin",
-        nameGap: 56,
-        nameLocation: "middle",
-        nameTextStyle: {
-          color: MUTED_TEXT_COLOR,
-          fontWeight: 700,
-          fontSize: 12,
-        },
+        data: payload.visibleCodons,
         axisLabel: {
-          color: MUTED_TEXT_COLOR,
-          interval: 0,
-          rotate: histogramBins.length > 6 ? 25 : 0,
-        },
-        axisTick: {
-          show: false,
-        },
-        axisLine: {
-          show: false,
+          color: TEXT_COLOR,
         },
       },
       yAxis: {
         type: "value",
-        name: "Observations",
-        nameGap: 28,
-        nameLocation: "middle",
-        nameTextStyle: {
-          color: MUTED_TEXT_COLOR,
-          fontWeight: 700,
-          fontSize: 12,
-        },
+        min: 0,
+        max: Math.max(1, payload.maxShare),
         axisLabel: {
-          color: MUTED_TEXT_COLOR,
+          color: TEXT_COLOR,
+          formatter: (value) => formatShare(value),
         },
         splitLine: {
           lineStyle: {
@@ -897,313 +409,31 @@
       series: [
         {
           type: "bar",
-          data: histogramBins.map((histogramBin) => histogramBin.count),
+          barMaxWidth: 36,
           itemStyle: {
-            color: BOX_BORDER,
-            borderRadius: [6, 6, 0, 0],
+            color: "#0f5964",
           },
-          emphasis: {
-            itemStyle: {
-              color: MEDIAN_COLOR,
-            },
-          },
+          data: payload.codonShares.map((row) => row.share),
         },
       ],
-    };
-  }
-
-  function buildInspectBoxplotOption(payload) {
-    const summary = payload ? payload.summary : null;
-    if (!summary) {
-      return buildInspectEmptyOption("No inspect summary available");
-    }
-
-    return {
-      animationDuration: 250,
-      animationDurationUpdate: 150,
-      grid: {
-        left: 72,
-        right: 24,
-        top: 24,
-        bottom: 48,
-      },
-      tooltip: {
-        trigger: "item",
-        confine: true,
-        backgroundColor: "rgba(255, 253, 249, 0.98)",
-        borderColor: "rgba(23, 36, 44, 0.12)",
-        borderWidth: 1,
-        textStyle: {
-          color: TEXT_COLOR,
-          fontSize: 13,
-        },
-        formatter() {
-          return [
-            `<strong>${payload.scopeLabel || "Current scope"}</strong>`,
-            `Min-Max: ${formatCodonRatioValue(summary.min)}-${formatCodonRatioValue(summary.max)}`,
-            `Median: ${formatCodonRatioValue(summary.median)}`,
-            `IQR: ${formatCodonRatioValue(summary.q1)}-${formatCodonRatioValue(summary.q3)}`,
-          ].join("<br>");
-        },
-      },
-      xAxis: {
-        type: "value",
-        min: numericValue(payload ? payload.xMin : undefined, summary.min),
-        max: numericValue(payload ? payload.xMax : undefined, summary.max),
-        name: "Codon ratio",
-        nameGap: 22,
-        nameLocation: "middle",
-        nameTextStyle: {
-          color: MUTED_TEXT_COLOR,
-          fontWeight: 700,
-          fontSize: 12,
-        },
-        axisLabel: {
-          color: MUTED_TEXT_COLOR,
-          formatter(value) {
-            return formatCodonRatioValue(value);
-          },
-        },
-        splitLine: {
-          lineStyle: {
-            color: GRID_COLOR,
-          },
-        },
-      },
-      yAxis: {
-        type: "category",
-        data: ["scope"],
-        axisTick: {
-          show: false,
-        },
-        axisLine: {
-          show: false,
-        },
-        axisLabel: {
-          color: TEXT_COLOR,
-          fontWeight: 700,
-          formatter() {
-            return truncateTaxonName(payload.scopeLabel || "Current scope");
-          },
-        },
-      },
-      series: [
-        {
-          type: "boxplot",
-          data: [[summary.min, summary.q1, summary.median, summary.q3, summary.max]],
-          itemStyle: {
-            color: BOX_FILL,
-            borderColor: BOX_BORDER,
-            borderWidth: 2,
-          },
-          emphasis: {
-            itemStyle: {
-              color: "#eef6f7",
-              borderColor: BOX_BORDER,
-              borderWidth: 2,
-            },
-          },
-        },
-        {
-          type: "scatter",
-          data: [{ value: [summary.median, 0] }],
-          symbol: "circle",
-          symbolSize: 8,
-          itemStyle: {
-            color: MEDIAN_COLOR,
-          },
-          tooltip: {
-            show: false,
-          },
-          z: 4,
-        },
-      ],
-    };
-  }
-
-  function openBranchExplorer(rows, rowIndex) {
-    const row = rows[rowIndex];
-    if (!row || !row.branchExplorerUrl) {
-      return;
-    }
-    savePendingScrollPosition();
-    window.location.assign(row.branchExplorerUrl);
-  }
-
-  function rowIndexForAxisValue(rows, axisValue) {
-    return rows.findIndex((row) => rowCategoryValue(row) === String(axisValue));
-  }
-
-  function rowIndexForChartParams(params) {
-    if (params.data && typeof params.data.rowIndex === "number") {
-      return params.data.rowIndex;
-    }
-    if (typeof params.dataIndex === "number") {
-      return params.dataIndex;
-    }
-    return -1;
-  }
-
-  function installDrilldown(chart, payload) {
-    const rows = Array.isArray(payload.rows) ? payload.rows : [];
-    if (rows.length === 0) {
-      return;
-    }
-
-    chart.off("click");
-    chart.on("click", (params) => {
-      const rowIndex = rowIndexForChartParams(params);
-      if (rowIndex >= 0) {
-        openBranchExplorer(rows, rowIndex);
-        return;
-      }
-
-      if (params.componentType === "yAxis") {
-        const axisRowIndex = rowIndexForAxisValue(rows, params.value);
-        if (axisRowIndex >= 0) {
-          openBranchExplorer(rows, axisRowIndex);
-        }
-      }
-    });
-  }
-
-  function zoomStateFromChart(chart, rowCount) {
-    const dataZoom = chart.getOption().dataZoom;
-    if (!Array.isArray(dataZoom) || dataZoom.length === 0) {
-      return null;
-    }
-
-    return normalizeZoomState(rowCount, {
-      startValue: numericValue(dataZoom[0].startValue, 0),
-      endValue: numericValue(dataZoom[0].endValue, Math.max(0, rowCount - 1)),
-    });
-  }
-
-  function mountCodonInspectCharts() {
-    const payload = parsePayload("codon-ratio-inspect-payload");
-    const histogramContainer = document.getElementById("codon-ratio-inspect-histogram");
-    const boxplotContainer = document.getElementById("codon-ratio-inspect-boxplot");
-    if (!payload || typeof window.echarts === "undefined") {
-      return;
-    }
-
-    if (histogramContainer) {
-      histogramContainer.style.height = "360px";
-      const histogramChart = window.echarts.init(histogramContainer, null, { renderer: "svg" });
-      histogramChart.setOption(buildInspectHistogramOption(payload), { notMerge: true });
-      window.addEventListener("resize", () => {
-        histogramChart.resize();
-      });
-    }
-
-    if (boxplotContainer) {
-      boxplotContainer.style.height = "360px";
-      const boxplotChart = window.echarts.init(boxplotContainer, null, { renderer: "svg" });
-      boxplotChart.setOption(buildInspectBoxplotOption(payload), { notMerge: true });
-      window.addEventListener("resize", () => {
-        boxplotChart.resize();
-      });
-    }
-  }
-
-  function mountCodonRatioChart() {
-    const container = document.getElementById("codon-ratio-chart");
-    const payload = parsePayload("codon-ratio-chart-payload");
-    if (!container || !payload || typeof window.echarts === "undefined") {
-      return;
-    }
-
-    const modeButtons = Array.from(document.querySelectorAll("[data-chart-mode-button]"));
-    container.style.height = `${chartHeightForRowCount(payload.visibleTaxaCount || 0)}px`;
-
-    const chart = window.echarts.init(container, null, { renderer: "svg" });
-    let currentMode = CHART_MODE_FOCUSED;
-    let currentZoomState = normalizeZoomState(payload.visibleTaxaCount || 0, null);
-
-    function syncModeButtons() {
-      modeButtons.forEach((button) => {
-        const isActive = button.dataset.chartMode === currentMode;
-        button.classList.toggle("btn-brand", isActive);
-        button.classList.toggle("btn-outline-secondary", !isActive);
-        button.setAttribute("aria-pressed", isActive ? "true" : "false");
-      });
-    }
-
-    function renderChart() {
-      chart.setOption(buildChartOption(payload, currentMode, currentZoomState), { notMerge: true });
-      installDrilldown(chart, payload);
-    }
-
-    chart.off("datazoom");
-    chart.on("datazoom", () => {
-      const nextZoomState = zoomStateFromChart(chart, payload.visibleTaxaCount || 0);
-      const previousVisibleRowCount = visibleRowCountForZoom(payload.visibleTaxaCount || 0, currentZoomState);
-      const nextVisibleRowCount = visibleRowCountForZoom(payload.visibleTaxaCount || 0, nextZoomState);
-      currentZoomState = nextZoomState;
-      if (shouldShowObservationCounts(previousVisibleRowCount) !== shouldShowObservationCounts(nextVisibleRowCount)) {
-        renderChart();
-      }
     });
 
-    modeButtons.forEach((button) => {
-      button.addEventListener("click", () => {
-        const requestedMode = button.dataset.chartMode;
-        if (requestedMode !== CHART_MODE_FOCUSED && requestedMode !== CHART_MODE_FULL_RANGE) {
-          return;
-        }
-        if (requestedMode === currentMode) {
-          return;
-        }
-        currentMode = requestedMode;
-        syncModeButtons();
-        renderChart();
-      });
-    });
-
-    syncModeButtons();
-    renderChart();
-
-    window.addEventListener("resize", () => {
-      chart.resize();
-    });
+    window.addEventListener("resize", () => chart.resize());
   }
 
-  function mountCodonOverviewHeatmap() {
-    const container = document.getElementById("codon-ratio-heatmap");
-    const payload = parsePayload("codon-ratio-heatmap-payload");
-    if (!container || !payload || typeof window.echarts === "undefined") {
-      return;
-    }
-
-    container.style.height = `${chartHeightForRowCount(payload.visibleTaxaCount || 0)}px`;
-
-    const chart = window.echarts.init(container, null, { renderer: "svg" });
-    chart.setOption(buildHeatmapOption(payload), { notMerge: true });
-
-    window.addEventListener("resize", () => {
-      chart.resize();
-    });
-  }
-
-  function installScrollPreservingLinks() {
+  function bindScrollPreservingLinks() {
     document.querySelectorAll("[data-preserve-scroll-link]").forEach((link) => {
-      link.addEventListener("click", (event) => {
-        if (event.defaultPrevented || event.button !== 0) {
-          return;
-        }
-        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-          return;
-        }
+      link.addEventListener("click", () => {
         savePendingScrollPosition();
       });
     });
   }
 
   document.addEventListener("DOMContentLoaded", () => {
-    mountCodonOverviewHeatmap();
-    mountCodonInspectCharts();
-    mountCodonRatioChart();
-    installScrollPreservingLinks();
     restorePendingScrollPosition();
+    bindScrollPreservingLinks();
+    renderOverview();
+    renderBrowseChart();
+    renderInspectChart();
   });
 })();

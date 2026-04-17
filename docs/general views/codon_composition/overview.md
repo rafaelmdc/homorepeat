@@ -30,8 +30,11 @@ Its job is to answer:
 
 - the browser should use normalized codon-usage rows as the hot-path data
   contract
-- the pipeline should publish a merged `publish/calls/codon_usage.tsv`
+- the existing source artifacts are the finalized codon-usage TSVs already
+  emitted under `publish/calls/finalized/...`
 - the web app should import raw and canonical codon-usage rows directly
+- do not change `homorepeat_pipeline` for this viewer unless the user
+  explicitly approves that boundary change
 - `codon_metric_name`, `codon_metric_value`, and `codon_ratio_value` should not
   define the viewer contract
 

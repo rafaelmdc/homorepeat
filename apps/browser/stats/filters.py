@@ -60,8 +60,21 @@ class StatsFilterState:
         }
 
     def cache_key(self) -> str:
-        payload = json.dumps(self.cache_key_data(), sort_keys=True, separators=(",", ":"))
-        return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+        return _hash_cache_key_payload(self.cache_key_data())
+
+    def composition_cache_key_data(self) -> dict[str, object]:
+        return {
+            **self.cache_key_data(),
+            "codon_metric_name": "",
+        }
+
+    def composition_cache_key(self) -> str:
+        return _hash_cache_key_payload(self.composition_cache_key_data())
+
+
+def _hash_cache_key_payload(payload_data: dict[str, object]) -> str:
+    payload = json.dumps(payload_data, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
 
 def build_stats_filter_state(request) -> StatsFilterState:

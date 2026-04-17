@@ -11,11 +11,13 @@ from apps.browser.models import (
     CanonicalGenome,
     CanonicalProtein,
     CanonicalRepeatCall,
+    CanonicalRepeatCallCodonUsage,
     CanonicalSequence,
     Genome,
     PipelineRun,
     Protein,
     RepeatCall,
+    RepeatCallCodonUsage,
     RunParameter,
     Sequence,
 )
@@ -172,6 +174,47 @@ class CanonicalModelTests(TestCase):
                     aa_sequence="QQQQQQQQQQQ",
                 )
 
+    def test_canonical_repeat_call_codon_usage_is_unique_per_call_amino_acid_and_codon(self):
+        repeat_call = CanonicalRepeatCall.objects.create(
+            latest_pipeline_run=self.pipeline_run,
+            latest_import_batch=self.import_batch,
+            last_seen_at=self.last_seen_at,
+            genome=self.genome,
+            sequence=self.sequence,
+            protein=self.protein,
+            taxon=self.taxa["human"],
+            method=RunParameter.Method.PURE,
+            accession=self.genome.accession,
+            gene_symbol="GENE1",
+            protein_name=self.protein.protein_name,
+            protein_length=self.protein.protein_length,
+            start=10,
+            end=20,
+            length=11,
+            repeat_residue="Q",
+            repeat_count=11,
+            non_repeat_count=0,
+            purity=1.0,
+            aa_sequence="QQQQQQQQQQQ",
+        )
+        CanonicalRepeatCallCodonUsage.objects.create(
+            repeat_call=repeat_call,
+            amino_acid="Q",
+            codon="CAG",
+            codon_count=11,
+            codon_fraction=1.0,
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                CanonicalRepeatCallCodonUsage.objects.create(
+                    repeat_call=repeat_call,
+                    amino_acid="Q",
+                    codon="CAG",
+                    codon_count=11,
+                    codon_fraction=1.0,
+                )
+
 
 class CatalogSyncTests(TestCase):
     def setUp(self):
@@ -215,6 +258,59 @@ class CatalogSyncTests(TestCase):
         self.assertEqual(canonical_repeat_call.source_call_id, "call_alpha")
         self.assertEqual(raw["pipeline_run"].canonical_sync_batch, raw["import_batch"])
         self.assertIsNotNone(raw["pipeline_run"].canonical_synced_at)
+
+    def test_sync_copies_repeat_call_codon_usage_rows_into_canonical_catalog(self):
+        raw = self._create_raw_run(
+            run_id="run-codon-usage",
+            accession="GCF_000001405.40",
+            genome_name="Genome alpha",
+            protein_name="Protein alpha",
+            methods=[RunParameter.Method.PURE],
+            calls=[
+                {
+                    "call_id": "call_alpha",
+                    "method": RunParameter.Method.PURE,
+                    "start": 10,
+                    "end": 20,
+                    "repeat_residue": "Q",
+                }
+            ],
+        )
+        RepeatCallCodonUsage.objects.bulk_create(
+            [
+                RepeatCallCodonUsage(
+                    repeat_call=raw["repeat_calls"][0],
+                    amino_acid="Q",
+                    codon="CAA",
+                    codon_count=1,
+                    codon_fraction=1 / 11,
+                ),
+                RepeatCallCodonUsage(
+                    repeat_call=raw["repeat_calls"][0],
+                    amino_acid="Q",
+                    codon="CAG",
+                    codon_count=10,
+                    codon_fraction=10 / 11,
+                ),
+            ]
+        )
+
+        sync_canonical_catalog_for_run(raw["pipeline_run"], import_batch=raw["import_batch"])
+
+        self.assertEqual(CanonicalRepeatCallCodonUsage.objects.count(), 2)
+        self.assertEqual(
+            list(
+                CanonicalRepeatCallCodonUsage.objects.order_by("codon").values_list(
+                    "repeat_call__source_call_id",
+                    "codon",
+                    "codon_count",
+                )
+            ),
+            [
+                ("call_alpha", "CAA", 1),
+                ("call_alpha", "CAG", 10),
+            ],
+        )
 
     def test_sync_updates_canonical_rows_in_place_for_same_identity(self):
         first = self._create_raw_run(

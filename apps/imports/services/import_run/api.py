@@ -6,10 +6,16 @@ from django.db import transaction
 
 from apps.browser.catalog import sync_canonical_catalog_for_run
 from apps.browser.metadata import build_browser_metadata
-from apps.browser.models import CanonicalGenome, CanonicalProtein, CanonicalRepeatCall, CanonicalSequence
+from apps.browser.models import (
+    CanonicalGenome,
+    CanonicalProtein,
+    CanonicalRepeatCall,
+    CanonicalRepeatCallCodonUsage,
+    CanonicalSequence,
+)
 from apps.browser.models.genomes import Protein, Sequence
 from apps.browser.models.operations import NormalizationWarning
-from apps.browser.models.repeat_calls import RepeatCall
+from apps.browser.models.repeat_calls import RepeatCall, RepeatCallCodonUsage
 from apps.imports.models import ImportBatch
 from apps.imports.services.published_run import ImportContractError, inspect_published_run
 
@@ -125,6 +131,7 @@ def process_import_batch(batch_or_id: ImportBatch | int) -> ImportRunResult:
             pipeline_run,
             import_batch=batch,
             replace_all_repeat_call_methods=batch.replace_existing,
+            reporter=reporter,
         )
         _set_batch_state(
             batch,
@@ -141,11 +148,13 @@ def process_import_batch(batch_or_id: ImportBatch | int) -> ImportRunResult:
                 Sequence,
                 Protein,
                 RepeatCall,
+                RepeatCallCodonUsage,
                 NormalizationWarning,
                 CanonicalGenome,
                 CanonicalSequence,
                 CanonicalProtein,
                 CanonicalRepeatCall,
+                CanonicalRepeatCallCodonUsage,
             ]
         )
     except Exception as exc:

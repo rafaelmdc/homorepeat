@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Codon Ratios{% endblock %}
+{% block title %}Codon Composition{% endblock %}
 {% block body_class %}codon-ratio-explorer-page{% endblock %}
 {% block extra_scripts %}
   <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
@@ -12,12 +12,12 @@
 <section class="landing-band mb-4">
   <div class="landing-band-shell">
     <div class="landing-copy">
-      <span class="section-kicker mb-3">Codon ratios</span>
-      <h1 class="landing-title mb-3">Residue-aware codon-ratio browsing over the current catalog.</h1>
+      <span class="section-kicker mb-3">Codon composition</span>
+      <h1 class="landing-title mb-3">Residue-scoped codon composition across the current catalog.</h1>
       <p class="landing-lead mb-0">
-        Define the lineage, rank, method, residue, target search, and codon
-        metric scope, then compare the visible taxa through grouped codon-ratio
-        summaries.
+        Define the lineage, rank, method, residue, target search, and length
+        scope, then compare the visible taxa through grouped codon mixtures for
+        the selected residue.
       </p>
     </div>
     <aside class="landing-aside">
@@ -33,7 +33,8 @@
       </p>
       <p class="mb-0">
         Display rank: <strong>{{ current_rank }}</strong>. Visible taxa limit:
-        <strong>{{ current_top_n }}</strong>.
+        <strong>{{ current_top_n }}</strong>. Residue:
+        <strong>{{ current_residue|default:"required" }}</strong>.
       </p>
     </aside>
   </div>
@@ -77,24 +78,13 @@
     </div>
     <div class="col-md-4 col-lg-1">
       <label class="form-label" for="id_residue">Residue</label>
-      <select class="form-select" id="id_residue" name="residue">
-        <option value="">All</option>
+      <select class="form-select" id="id_residue" name="residue" required>
+        <option value="">Select</option>
         {% for residue in residue_choices %}
           <option value="{{ residue }}" {% if current_residue == residue %}selected{% endif %}>{{ residue }}</option>
         {% endfor %}
       </select>
     </div>
-    {% if show_codon_metric_selector %}
-      <div class="col-md-6 col-lg-3">
-        <label class="form-label" for="id_codon_metric_name">Codon metric</label>
-        <select class="form-select" id="id_codon_metric_name" name="codon_metric_name">
-          <option value="">All numeric metrics</option>
-          {% for codon_metric_name in available_codon_metric_names %}
-            <option value="{{ codon_metric_name }}" {% if current_codon_metric_name == codon_metric_name %}selected{% endif %}>{{ codon_metric_name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-    {% endif %}
     <div class="col-md-3 col-lg-2">
       <label class="form-label" for="id_length_min">Min length</label>
       <input class="form-control" id="id_length_min" type="number" min="0" name="length_min" value="{{ current_length_min }}">
@@ -109,7 +99,7 @@
     </div>
     <div class="col-md-3 col-lg-2">
       <label class="form-label" for="id_top_n">Top N taxa</label>
-      <input class="form-control" id="id_top_n" type="number" min="1" max="1000" name="top_n" value="{{ current_top_n }}">
+      <input class="form-control" id="id_top_n" type="number" min="1" max="2000" name="top_n" value="{{ current_top_n }}">
     </div>
     <div class="col-12">
       <div class="filter-actions">
@@ -124,36 +114,39 @@
   <div class="section-header">
     <div>
       <p class="section-kicker mb-2">Overview layer</p>
-      <h2>Taxon x length-bin codon overview</h2>
-      <p class="text-secondary mb-0">Color encodes median codon ratio across lineage-ordered taxa and normalized repeat-length bins for the current visible set. Showing {{ heatmap_payload.visibleTaxaCount }} taxon{{ heatmap_payload.visibleTaxaCount|pluralize }} across {{ heatmap_payload.visibleBinCount }} visible length bin{{ heatmap_payload.visibleBinCount|pluralize }}.</p>
+      <h2>Taxon x codon overview for {{ current_residue|default:"the selected residue" }}</h2>
+      <p class="text-secondary mb-0">
+        Color encodes equal-weight mean codon fraction for lineage-ordered taxa
+        and the synonymous codons visible in the current residue scope. Showing
+        {{ overview_payload.visibleTaxaCount }} taxon{{ overview_payload.visibleTaxaCount|pluralize }}
+        across {{ overview_payload.visibleCodonCount }} visible codon{{ overview_payload.visibleCodonCount|pluralize }}.
+      </p>
     </div>
   </div>
 
-  {{ heatmap_payload|json_script:heatmap_payload_id }}
-  <div class="length-chart-shell" id="{{ heatmap_container_id }}"></div>
+  {{ overview_payload|json_script:overview_payload_id }}
+  <div class="length-chart-shell" id="{{ overview_container_id }}"></div>
   <noscript>
-    <p class="surface-note mb-0 mt-3">JavaScript is disabled, so the grouped summary table remains the active fallback view.</p>
+    <p class="surface-note mb-0 mt-3">JavaScript is disabled, so the grouped composition table remains the active fallback view.</p>
   </noscript>
 </section>
 
 <section class="surface-card surface-card-wide mb-4">
   <div class="section-header">
     <div>
-      <p class="section-kicker mb-2">Chart layer</p>
-      <h2>Ranked codon-ratio distributions for the visible taxa</h2>
-      <p class="text-secondary mb-0">Each row shows min, lower quartile, median, upper quartile, and max for the same bounded taxa listed in the summary table. Click a chart row to reopen the explorer scoped to that branch.</p>
-    </div>
-    <div class="mode-switch" data-chart-mode-switch>
-      <span class="mode-switch-label">View</span>
-      <button class="btn btn-brand" type="button" data-chart-mode-button data-chart-mode="focused" aria-pressed="true">Focused</button>
-      <button class="btn btn-outline-secondary" type="button" data-chart-mode-button data-chart-mode="full-range" aria-pressed="false">Full range</button>
+      <p class="section-kicker mb-2">Browse layer</p>
+      <h2>Stacked codon composition for the visible taxa</h2>
+      <p class="text-secondary mb-0">
+        Each row shows residue-scoped codon shares for one visible taxon. The
+        same bounded taxa and codon set are used by the fallback table below.
+      </p>
     </div>
   </div>
 
   {{ chart_payload|json_script:chart_payload_id }}
   <div class="length-chart-shell" id="{{ chart_container_id }}"></div>
   <noscript>
-    <p class="surface-note mb-0 mt-3">JavaScript is disabled, so the summary table remains the active view.</p>
+    <p class="surface-note mb-0 mt-3">JavaScript is disabled, so the grouped composition table remains the browse fallback.</p>
   </noscript>
 </section>
 
@@ -161,8 +154,11 @@
   <div class="section-header">
     <div>
       <p class="section-kicker mb-2">Current filter scope</p>
-      <h2>{{ matching_repeat_calls_count }} matching canonical repeat call{{ matching_repeat_calls_count|pluralize }} with numeric codon ratios</h2>
-      <p class="text-secondary mb-0">Grouped taxon summaries below stay bounded by the current display rank, minimum observation threshold, and Top N limit.</p>
+      <h2>{{ matching_repeat_calls_count }} matching canonical repeat call{{ matching_repeat_calls_count|pluralize }}</h2>
+      <p class="text-secondary mb-0">
+        {{ matching_repeat_calls_with_codon_usage_count }} of those call{{ matching_repeat_calls_with_codon_usage_count|pluralize }}
+        currently expose residue-scoped codon-usage rows for the selected residue.
+      </p>
     </div>
   </div>
 
@@ -178,97 +174,15 @@
   </div>
 </section>
 
-{% if inspect_scope_active %}
-  <section class="surface-card surface-card-wide mb-4">
-    <div class="section-header">
-      <div>
-        <p class="section-kicker mb-2">Inspect layer</p>
-        <h2>Codon-ratio inspection for {{ branch_scope_label }}</h2>
-        <p class="text-secondary mb-0">Inspect the current branch-scoped subset through a histogram-style codon distribution and a boxplot-style summary.</p>
-      </div>
-    </div>
-
-    {% if inspect_payload.summary %}
-      {{ inspect_payload|json_script:inspect_payload_id }}
-      <div class="row g-4 mb-4">
-        <div class="col-xl-7">
-          <div class="length-chart-shell" id="{{ inspect_histogram_container_id }}"></div>
-        </div>
-        <div class="col-xl-5">
-          <div class="length-chart-shell" id="{{ inspect_boxplot_container_id }}"></div>
-        </div>
-      </div>
-      <div class="row g-4 mb-4">
-        <div class="col-md-6 col-xl-2">
-          <article class="metric-panel h-100">
-            <p class="sheet-label">Observations</p>
-            <p class="mb-0">{{ inspect_payload.observationCount }}</p>
-          </article>
-        </div>
-        <div class="col-md-6 col-xl-2">
-          <article class="metric-panel h-100">
-            <p class="sheet-label">Min</p>
-            <p class="mb-0">{{ inspect_summary.min_codon_ratio|floatformat:"-2" }}</p>
-          </article>
-        </div>
-        <div class="col-md-6 col-xl-2">
-          <article class="metric-panel h-100">
-            <p class="sheet-label">Q1</p>
-            <p class="mb-0">{{ inspect_summary.q1|floatformat:"-2" }}</p>
-          </article>
-        </div>
-        <div class="col-md-6 col-xl-2">
-          <article class="metric-panel h-100">
-            <p class="sheet-label">Median</p>
-            <p class="mb-0">{{ inspect_summary.median|floatformat:"-2" }}</p>
-          </article>
-        </div>
-        <div class="col-md-6 col-xl-2">
-          <article class="metric-panel h-100">
-            <p class="sheet-label">Q3</p>
-            <p class="mb-0">{{ inspect_summary.q3|floatformat:"-2" }}</p>
-          </article>
-        </div>
-        <div class="col-md-6 col-xl-2">
-          <article class="metric-panel h-100">
-            <p class="sheet-label">Max</p>
-            <p class="mb-0">{{ inspect_summary.max_codon_ratio|floatformat:"-2" }}</p>
-          </article>
-        </div>
-      </div>
-      <div class="table-responsive">
-        <table class="table align-middle mb-0 data-table">
-          <thead>
-            <tr>
-              <th>Histogram bin</th>
-              <th>Observations</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for histogram_bin in inspect_histogram_bins %}
-              <tr>
-                <td>{{ histogram_bin.label }}</td>
-                <td>{{ histogram_bin.count }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      <noscript>
-        <p class="surface-note mb-0 mt-3">JavaScript is disabled, so the summary cards and histogram table remain the inspect fallback.</p>
-      </noscript>
-    {% else %}
-      <p class="surface-note mb-0">{{ inspect_empty_reason }}</p>
-    {% endif %}
-  </section>
-{% endif %}
-
-<section class="surface-card surface-card-wide">
+<section class="surface-card surface-card-wide mb-4">
   <div class="section-header">
     <div>
       <p class="section-kicker mb-2">Grouped taxa</p>
       <h2>{{ visible_taxa_count }} visible taxon{{ visible_taxa_count|pluralize }} at rank {{ current_rank }}</h2>
-      <p class="text-secondary mb-0">Showing {{ visible_taxa_count }} of {{ total_taxa_count }} taxa at rank {{ current_rank }}. Rows are ordered by observation count and limited by the current Top N setting.</p>
+      <p class="text-secondary mb-0">
+        Showing {{ visible_taxa_count }} of {{ total_taxa_count }} taxa at rank
+        {{ current_rank }}. Shares below stay residue-scoped and equal-call-weighted.
+      </p>
     </div>
   </div>
 
@@ -278,26 +192,22 @@
         <tr>
           <th>Taxon</th>
           <th>Rank</th>
-          <th>Observations</th>
-          <th>Min ratio</th>
-          <th>Q1</th>
-          <th>Median</th>
-          <th>Q3</th>
-          <th>Max ratio</th>
+          <th>Calls</th>
+          {% for codon in visible_codons %}
+            <th>{{ codon }}</th>
+          {% endfor %}
           <th>Actions</th>
         </tr>
       </thead>
-      <tbody data-summary-table-body>
+      <tbody>
         {% for row in summary_rows %}
-          <tr data-summary-row>
+          <tr>
             <td><a href="{{ row.taxon_detail_url }}">{{ row.taxon_name }}</a></td>
             <td>{{ row.rank }}</td>
             <td>{{ row.observation_count }}</td>
-            <td>{{ row.min_codon_ratio|floatformat:"-2" }}</td>
-            <td>{{ row.q1|floatformat:"-2" }}</td>
-            <td>{{ row.median|floatformat:"-2" }}</td>
-            <td>{{ row.q3|floatformat:"-2" }}</td>
-            <td>{{ row.max_codon_ratio|floatformat:"-2" }}</td>
+            {% for codon_share in row.codon_shares %}
+              <td>{{ codon_share.share|floatformat:"-3" }}</td>
+            {% endfor %}
             <td>
               <div class="d-flex flex-wrap gap-2">
                 <a class="btn btn-outline-secondary btn-sm" href="{{ row.taxon_detail_url }}">Taxon</a>
@@ -307,11 +217,68 @@
           </tr>
         {% empty %}
           <tr>
-            <td colspan="9" class="empty-cell">{{ summary_empty_reason }}</td>
+            <td colspan="{{ visible_codons|length|add:4 }}" class="empty-cell">{{ summary_empty_reason }}</td>
           </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </section>
+
+{% if inspect_scope_active %}
+  <section class="surface-card surface-card-wide mb-4">
+    <div class="section-header">
+      <div>
+        <p class="section-kicker mb-2">Inspect layer</p>
+        <h2>Codon composition for {{ branch_scope_label }}</h2>
+        <p class="text-secondary mb-0">
+          Inspect the current branch-scoped subset through one aggregated
+          residue-specific codon mixture.
+        </p>
+      </div>
+    </div>
+
+    {% if inspect_payload.codonShares %}
+      {{ inspect_payload|json_script:inspect_payload_id }}
+      <div class="length-chart-shell mb-4" id="{{ inspect_chart_container_id }}"></div>
+      <div class="row g-4 mb-4">
+        <div class="col-md-6 col-xl-3">
+          <article class="metric-panel h-100">
+            <p class="sheet-label">Calls in scope</p>
+            <p class="mb-0">{{ inspect_payload.observationCount }}</p>
+          </article>
+        </div>
+        <div class="col-md-6 col-xl-9">
+          <article class="metric-panel h-100">
+            <p class="sheet-label">Visible codons</p>
+            <p class="mb-0">{{ inspect_visible_codons|join:", " }}</p>
+          </article>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0 data-table">
+          <thead>
+            <tr>
+              <th>Codon</th>
+              <th>Share</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for codon_share in inspect_codon_shares %}
+              <tr>
+                <td>{{ codon_share.codon }}</td>
+                <td>{{ codon_share.share|floatformat:"-3" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <noscript>
+        <p class="surface-note mb-0 mt-3">JavaScript is disabled, so the inspect table remains the active detail view.</p>
+      </noscript>
+    {% else %}
+      <p class="empty-callout mb-0">{{ inspect_empty_reason }}</p>
+    {% endif %}
+  </section>
+{% endif %}
 {% endblock %}

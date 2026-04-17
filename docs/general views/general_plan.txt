@@ -90,6 +90,10 @@ default to lineage-aware, compact summaries rather than large raw-point views.
   shell for continuity
 - codon viewers support all residues in the product, but codon composition
   remains residue-specific by default
+- do not change `homorepeat_pipeline` as part of viewer work unless the user
+  explicitly approves that boundary change
+- assume the existing finalized codon-usage artifacts already contain the
+  codon-composition information the browser needs, and import them correctly
 - use real biological values first and keep transformed statistical views as
   secondary companion views
 - use normalized codon-usage rows as the hot-path codon browser contract rather
