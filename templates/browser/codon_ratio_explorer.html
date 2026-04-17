@@ -178,6 +178,91 @@
   </div>
 </section>
 
+{% if inspect_scope_active %}
+  <section class="surface-card surface-card-wide mb-4">
+    <div class="section-header">
+      <div>
+        <p class="section-kicker mb-2">Inspect layer</p>
+        <h2>Codon-ratio inspection for {{ branch_scope_label }}</h2>
+        <p class="text-secondary mb-0">Inspect the current branch-scoped subset through a histogram-style codon distribution and a boxplot-style summary.</p>
+      </div>
+    </div>
+
+    {% if inspect_payload.summary %}
+      {{ inspect_payload|json_script:inspect_payload_id }}
+      <div class="row g-4 mb-4">
+        <div class="col-xl-7">
+          <div class="length-chart-shell" id="{{ inspect_histogram_container_id }}"></div>
+        </div>
+        <div class="col-xl-5">
+          <div class="length-chart-shell" id="{{ inspect_boxplot_container_id }}"></div>
+        </div>
+      </div>
+      <div class="row g-4 mb-4">
+        <div class="col-md-6 col-xl-2">
+          <article class="metric-panel h-100">
+            <p class="sheet-label">Observations</p>
+            <p class="mb-0">{{ inspect_payload.observationCount }}</p>
+          </article>
+        </div>
+        <div class="col-md-6 col-xl-2">
+          <article class="metric-panel h-100">
+            <p class="sheet-label">Min</p>
+            <p class="mb-0">{{ inspect_summary.min_codon_ratio|floatformat:"-2" }}</p>
+          </article>
+        </div>
+        <div class="col-md-6 col-xl-2">
+          <article class="metric-panel h-100">
+            <p class="sheet-label">Q1</p>
+            <p class="mb-0">{{ inspect_summary.q1|floatformat:"-2" }}</p>
+          </article>
+        </div>
+        <div class="col-md-6 col-xl-2">
+          <article class="metric-panel h-100">
+            <p class="sheet-label">Median</p>
+            <p class="mb-0">{{ inspect_summary.median|floatformat:"-2" }}</p>
+          </article>
+        </div>
+        <div class="col-md-6 col-xl-2">
+          <article class="metric-panel h-100">
+            <p class="sheet-label">Q3</p>
+            <p class="mb-0">{{ inspect_summary.q3|floatformat:"-2" }}</p>
+          </article>
+        </div>
+        <div class="col-md-6 col-xl-2">
+          <article class="metric-panel h-100">
+            <p class="sheet-label">Max</p>
+            <p class="mb-0">{{ inspect_summary.max_codon_ratio|floatformat:"-2" }}</p>
+          </article>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0 data-table">
+          <thead>
+            <tr>
+              <th>Histogram bin</th>
+              <th>Observations</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for histogram_bin in inspect_histogram_bins %}
+              <tr>
+                <td>{{ histogram_bin.label }}</td>
+                <td>{{ histogram_bin.count }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <noscript>
+        <p class="surface-note mb-0 mt-3">JavaScript is disabled, so the summary cards and histogram table remain the inspect fallback.</p>
+      </noscript>
+    {% else %}
+      <p class="surface-note mb-0">{{ inspect_empty_reason }}</p>
+    {% endif %}
+  </section>
+{% endif %}
+
 <section class="surface-card surface-card-wide">
   <div class="section-header">
     <div>

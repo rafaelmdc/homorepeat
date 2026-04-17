@@ -6,6 +6,8 @@ from apps.browser.stats import (
     build_available_codon_metric_names,
     build_codon_heatmap_payload,
     build_codon_heatmap_summary_bundle,
+    build_codon_inspect_bundle,
+    build_codon_inspect_payload,
     build_filtered_repeat_call_queryset,
     build_ranked_codon_chart_payload,
     build_ranked_codon_summary_bundle,
@@ -46,6 +48,25 @@ class CodonRatioExplorerView(TemplateView):
                 self._get_filter_state()
             ).count()
         return self._matching_repeat_calls_without_codon_count
+
+    def _inspect_scope_active(self) -> bool:
+        return self._get_filter_state().branch_scope_active
+
+    def _get_inspect_bundle(self) -> dict[str, object] | None:
+        if not self._inspect_scope_active():
+            return None
+        if not hasattr(self, "_inspect_bundle"):
+            self._inspect_bundle = build_codon_inspect_bundle(self._get_filter_state())
+        return self._inspect_bundle
+
+    def _inspect_scope_label(self) -> str:
+        filter_state = self._get_filter_state()
+        if filter_state.selected_branch_taxon is not None:
+            branch_rank = filter_state.selected_branch_taxon.rank or filter_state.branch_scope_noun
+            return f"{branch_rank.title()} {filter_state.selected_branch_taxon.taxon_name}"
+        if filter_state.branch_scope_active:
+            return f"{filter_state.branch_scope_noun.title()} {filter_state.branch_scope_label}"
+        return "Current filtered scope"
 
     def _get_facet_choices(self) -> dict[str, list[str]]:
         if not hasattr(self, "_facet_choices"):
@@ -174,6 +195,23 @@ class CodonRatioExplorerView(TemplateView):
         context["show_codon_metric_selector"] = len(available_codon_metric_names) > 1
         context["scope_items"] = self._scope_items()
         context["reset_url"] = reverse("browser:codon-ratios")
+        context["inspect_scope_active"] = self._inspect_scope_active()
+        inspect_bundle = self._get_inspect_bundle()
+        if inspect_bundle is not None:
+            context["inspect_summary"] = inspect_bundle["summary"]
+            context["inspect_histogram_bins"] = inspect_bundle["histogram_bins"]
+            context["inspect_payload"] = build_codon_inspect_payload(
+                inspect_bundle,
+                scope_label=self._inspect_scope_label(),
+            )
+            context["inspect_payload_id"] = "codon-ratio-inspect-payload"
+            context["inspect_histogram_container_id"] = "codon-ratio-inspect-histogram"
+            context["inspect_boxplot_container_id"] = "codon-ratio-inspect-boxplot"
+            context["inspect_empty_reason"] = (
+                "No numeric codon ratios are available inside the current branch scope."
+                if inspect_bundle["observation_count"] == 0
+                else ""
+            )
         context["summary_empty_reason"] = self._summary_empty_reason(
             matching_repeat_calls_count=context["matching_repeat_calls_count"],
             matching_repeat_calls_without_codon_count=matching_repeat_calls_without_codon_count,

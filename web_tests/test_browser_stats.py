@@ -11,6 +11,8 @@ from apps.browser.stats import (
     build_available_codon_metric_names,
     build_codon_heatmap_payload,
     build_codon_heatmap_summary_bundle,
+    build_codon_inspect_bundle,
+    build_codon_inspect_payload,
     build_group_codon_heatmap_values_queryset,
     build_group_codon_ratio_values_queryset,
     build_filtered_repeat_call_queryset,
@@ -832,4 +834,126 @@ class BrowserStatsTests(TestCase):
                 [0, 1, 1.25],
                 [2, 1, 0.8],
             ],
+        )
+
+    def test_codon_inspect_bundle_summarizes_branch_scoped_codon_distribution(self):
+        self._create_repeat_call(
+            self.alpha,
+            suffix="alpha_mid_ratio_inspect",
+            residue="Q",
+            codon_metric_name="codon_ratio",
+            codon_ratio_value=0.9,
+            length=16,
+        )
+
+        bundle = build_codon_inspect_bundle(
+            build_stats_filter_state(
+                self.factory.get(
+                    "/browser/codon-ratios/",
+                    {
+                        "run": "run-alpha",
+                        "branch": str(self.alpha["taxa"]["primates"].pk),
+                        "rank": "species",
+                        "residue": "q",
+                        "codon_metric_name": "codon_ratio",
+                        "min_count": "1",
+                    },
+                )
+            )
+        )
+
+        self.assertEqual(bundle["observation_count"], 2)
+        self.assertEqual(
+            bundle["summary"],
+            {
+                "min_codon_ratio": 0.9,
+                "q1": 0.988,
+                "median": 1.075,
+                "q3": 1.163,
+                "max_codon_ratio": 1.25,
+            },
+        )
+        self.assertEqual(
+            bundle["histogram_bins"],
+            [
+                {
+                    "start": 0.9,
+                    "end": 1.075,
+                    "label": "0.9-1.075",
+                    "count": 1,
+                    "midpoint": 0.988,
+                },
+                {
+                    "start": 1.075,
+                    "end": 1.25,
+                    "label": "1.075-1.25",
+                    "count": 1,
+                    "midpoint": 1.163,
+                },
+            ],
+        )
+
+    def test_codon_inspect_payload_shapes_histogram_and_box_summary(self):
+        payload = build_codon_inspect_payload(
+            {
+                "observation_count": 2,
+                "summary": {
+                    "min_codon_ratio": 0.9,
+                    "q1": 0.988,
+                    "median": 1.075,
+                    "q3": 1.163,
+                    "max_codon_ratio": 1.25,
+                },
+                "histogram_bins": [
+                    {
+                        "start": 0.9,
+                        "end": 1.075,
+                        "label": "0.9-1.075",
+                        "count": 1,
+                        "midpoint": 0.988,
+                    },
+                    {
+                        "start": 1.075,
+                        "end": 1.25,
+                        "label": "1.075-1.25",
+                        "count": 1,
+                        "midpoint": 1.163,
+                    },
+                ],
+            },
+            scope_label="Order Primates",
+        )
+
+        self.assertEqual(
+            payload,
+            {
+                "scopeLabel": "Order Primates",
+                "observationCount": 2,
+                "summary": {
+                    "min": 0.9,
+                    "q1": 0.988,
+                    "median": 1.075,
+                    "q3": 1.163,
+                    "max": 1.25,
+                },
+                "histogramBins": [
+                    {
+                        "label": "0.9-1.075",
+                        "start": 0.9,
+                        "end": 1.075,
+                        "count": 1,
+                        "midpoint": 0.988,
+                    },
+                    {
+                        "label": "1.075-1.25",
+                        "start": 1.075,
+                        "end": 1.25,
+                        "count": 1,
+                        "midpoint": 1.163,
+                    },
+                ],
+                "xMin": 0.9,
+                "xMax": 1.25,
+                "maxBinCount": 1,
+            },
         )

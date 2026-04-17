@@ -180,3 +180,45 @@ def build_codon_heatmap_payload(summary_rows):
         "valueMin": min(cell["value"] for cell in cells),
         "valueMax": max(cell["value"] for cell in cells),
     }
+
+
+def build_codon_inspect_payload(bundle, *, scope_label: str):
+    summary = bundle.get("summary") if bundle else None
+    histogram_bins = bundle.get("histogram_bins") if bundle else []
+    observation_count = bundle.get("observation_count", 0) if bundle else 0
+
+    if not summary:
+        return {
+            "scopeLabel": scope_label,
+            "observationCount": observation_count,
+            "summary": None,
+            "histogramBins": [],
+            "xMin": 0,
+            "xMax": 0,
+            "maxBinCount": 0,
+        }
+
+    return {
+        "scopeLabel": scope_label,
+        "observationCount": observation_count,
+        "summary": {
+            "min": summary["min_codon_ratio"],
+            "q1": summary["q1"],
+            "median": summary["median"],
+            "q3": summary["q3"],
+            "max": summary["max_codon_ratio"],
+        },
+        "histogramBins": [
+            {
+                "label": histogram_bin["label"],
+                "start": histogram_bin["start"],
+                "end": histogram_bin["end"],
+                "count": histogram_bin["count"],
+                "midpoint": histogram_bin["midpoint"],
+            }
+            for histogram_bin in histogram_bins
+        ],
+        "xMin": summary["min_codon_ratio"],
+        "xMax": summary["max_codon_ratio"],
+        "maxBinCount": max((histogram_bin["count"] for histogram_bin in histogram_bins), default=0),
+    }

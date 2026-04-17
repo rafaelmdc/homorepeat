@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from math import ceil, floor
+from math import ceil, floor, sqrt
 
 from .bins import build_length_bin_definition
 
@@ -71,6 +71,49 @@ def summarize_codon_heatmap_groups(group_rows, grouped_length_codon_ratio_values
                 }
             )
     return summary_rows
+
+
+def build_numeric_histogram_bins(values):
+    if not values:
+        return []
+
+    sorted_values = sorted(values)
+    minimum = float(sorted_values[0])
+    maximum = float(sorted_values[-1])
+    if minimum == maximum:
+        normalized_value = normalize_numeric_summary_value(minimum)
+        return [
+            {
+                "start": normalized_value,
+                "end": normalized_value,
+                "label": str(normalized_value),
+                "count": len(sorted_values),
+                "midpoint": normalized_value,
+            }
+        ]
+
+    bin_count = min(10, max(1, ceil(sqrt(len(sorted_values)))))
+    bin_width = (maximum - minimum) / bin_count
+    bin_rows = []
+    for index in range(bin_count):
+        start = minimum + (index * bin_width)
+        end = maximum if index == bin_count - 1 else minimum + ((index + 1) * bin_width)
+        if index == bin_count - 1:
+            count = sum(start <= value <= end for value in sorted_values)
+        else:
+            count = sum(start <= value < end for value in sorted_values)
+        normalized_start = normalize_numeric_summary_value(start)
+        normalized_end = normalize_numeric_summary_value(end)
+        bin_rows.append(
+            {
+                "start": normalized_start,
+                "end": normalized_end,
+                "label": f"{normalized_start}-{normalized_end}",
+                "count": count,
+                "midpoint": normalize_numeric_summary_value(start + ((end - start) / 2)),
+            }
+        )
+    return bin_rows
 
 
 def _summarize_ranked_numeric_groups(group_rows, grouped_values, *, summary_builder):

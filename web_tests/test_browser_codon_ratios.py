@@ -130,7 +130,10 @@ class BrowserCodonRatioExplorerTests(TestCase):
         self.assertEqual(response.context["chart_payload"]["visibleTaxaCount"], 0)
         self.assertEqual(response.context["available_codon_metric_names"], ["codon_ratio"])
         self.assertFalse(response.context["show_codon_metric_selector"])
+        self.assertFalse(response.context["inspect_scope_active"])
         self.assertNotContains(response, 'id="id_codon_metric_name"')
+        self.assertNotContains(response, "Inspect layer")
+        self.assertNotContains(response, 'id="codon-ratio-inspect-payload"')
         self.assertContains(response, 'id="codon-ratio-heatmap-payload"')
         self.assertContains(response, 'id="codon-ratio-heatmap"')
         self.assertContains(response, 'id="codon-ratio-chart-payload"')
@@ -230,6 +233,69 @@ class BrowserCodonRatioExplorerTests(TestCase):
                 [0, 1, 1.25],
                 [2, 1, 0.8],
             ],
+        )
+
+    def test_codon_ratio_explorer_renders_branch_scoped_inspect_section(self):
+        self._create_repeat_call(
+            self.alpha,
+            suffix="alpha_mid_ratio",
+            residue="Q",
+            codon_metric_name="codon_ratio",
+            codon_ratio_value=0.9,
+            length=16,
+        )
+
+        response = self.client.get(
+            reverse("browser:codon-ratios"),
+            {
+                "run": "run-alpha",
+                "branch": str(self.alpha["taxa"]["primates"].pk),
+                "rank": "species",
+                "residue": "q",
+                "codon_metric_name": "codon_ratio",
+                "min_count": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["inspect_scope_active"])
+        self.assertContains(response, "Inspect layer")
+        self.assertContains(response, "Codon-ratio inspection for Primates")
+        self.assertContains(response, 'id="codon-ratio-inspect-payload"')
+        self.assertContains(response, 'id="codon-ratio-inspect-histogram"')
+        self.assertContains(response, 'id="codon-ratio-inspect-boxplot"')
+        self.assertEqual(
+            response.context["inspect_payload"],
+            {
+                "scopeLabel": "Order Primates",
+                "observationCount": 2,
+                "summary": {
+                    "min": 0.9,
+                    "q1": 0.988,
+                    "median": 1.075,
+                    "q3": 1.163,
+                    "max": 1.25,
+                },
+                "histogramBins": [
+                    {
+                        "label": "0.9-1.075",
+                        "start": 0.9,
+                        "end": 1.075,
+                        "count": 1,
+                        "midpoint": 0.988,
+                    },
+                    {
+                        "label": "1.075-1.25",
+                        "start": 1.075,
+                        "end": 1.25,
+                        "count": 1,
+                        "midpoint": 1.163,
+                    },
+                ],
+                "xMin": 0.9,
+                "xMax": 1.25,
+                "maxBinCount": 1,
+            },
         )
 
     def test_codon_ratio_explorer_branch_link_preserves_relevant_filter_state(self):

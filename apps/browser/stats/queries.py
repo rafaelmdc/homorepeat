@@ -10,6 +10,8 @@ from .aggregates import PercentileCont
 from .filters import StatsFilterState
 from .ordering import order_taxon_rows_by_lineage
 from .summaries import (
+    build_codon_ratio_summary,
+    build_numeric_histogram_bins,
     normalize_length_summary_value,
     normalize_numeric_summary_value,
     summarize_codon_heatmap_groups,
@@ -138,6 +140,30 @@ def build_codon_heatmap_summary_bundle(filter_state: StatsFilterState) -> dict[s
         "summary_rows": summary_rows,
         "total_taxa_count": total_taxa_count,
         "visible_taxa_count": len(ordered_group_rows),
+    }
+    cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
+    return bundle
+
+
+def build_codon_inspect_bundle(filter_state: StatsFilterState) -> dict[str, object]:
+    cache_key = f"browser:stats:codon-inspect:{filter_state.cache_key()}"
+    cached_bundle = cache.get(cache_key)
+    if cached_bundle is not None:
+        return cached_bundle
+
+    codon_ratio_values = list(
+        build_filtered_repeat_call_queryset(
+            filter_state,
+            require_codon_ratio=True,
+        )
+        .order_by("codon_ratio_value")
+        .values_list("codon_ratio_value", flat=True)
+    )
+
+    bundle = {
+        "observation_count": len(codon_ratio_values),
+        "summary": build_codon_ratio_summary(codon_ratio_values),
+        "histogram_bins": build_numeric_histogram_bins(codon_ratio_values),
     }
     cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
     return bundle

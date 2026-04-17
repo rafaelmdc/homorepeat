@@ -774,6 +774,253 @@
     };
   }
 
+  function buildInspectEmptyOption(title) {
+    return {
+      animation: false,
+      grid: {
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: 16,
+      },
+      xAxis: {
+        type: "value",
+        min: 0,
+        max: 1,
+        show: false,
+      },
+      yAxis: {
+        type: "value",
+        min: 0,
+        max: 1,
+        show: false,
+      },
+      series: [],
+      tooltip: {
+        show: false,
+      },
+      graphic: [
+        {
+          type: "text",
+          left: "center",
+          top: "46%",
+          style: {
+            text: title,
+            fontSize: 18,
+            fontWeight: 700,
+            fill: TEXT_COLOR,
+            textAlign: "center",
+          },
+        },
+      ],
+    };
+  }
+
+  function buildInspectHistogramOption(payload) {
+    const histogramBins = Array.isArray(payload && payload.histogramBins) ? payload.histogramBins : [];
+    if (histogramBins.length === 0) {
+      return buildInspectEmptyOption("No inspect histogram available");
+    }
+
+    return {
+      animationDuration: 250,
+      animationDurationUpdate: 150,
+      grid: {
+        left: 48,
+        right: 20,
+        top: 24,
+        bottom: 88,
+      },
+      tooltip: {
+        trigger: "item",
+        confine: true,
+        backgroundColor: "rgba(255, 253, 249, 0.98)",
+        borderColor: "rgba(23, 36, 44, 0.12)",
+        borderWidth: 1,
+        textStyle: {
+          color: TEXT_COLOR,
+          fontSize: 13,
+        },
+        formatter(params) {
+          const histogramBin = histogramBins[params.dataIndex];
+          if (!histogramBin) {
+            return "";
+          }
+          return [
+            `<strong>${histogramBin.label}</strong>`,
+            `Observations: ${histogramBin.count}`,
+          ].join("<br>");
+        },
+      },
+      xAxis: {
+        type: "category",
+        data: histogramBins.map((histogramBin) => histogramBin.label),
+        name: "Codon ratio bin",
+        nameGap: 56,
+        nameLocation: "middle",
+        nameTextStyle: {
+          color: MUTED_TEXT_COLOR,
+          fontWeight: 700,
+          fontSize: 12,
+        },
+        axisLabel: {
+          color: MUTED_TEXT_COLOR,
+          interval: 0,
+          rotate: histogramBins.length > 6 ? 25 : 0,
+        },
+        axisTick: {
+          show: false,
+        },
+        axisLine: {
+          show: false,
+        },
+      },
+      yAxis: {
+        type: "value",
+        name: "Observations",
+        nameGap: 28,
+        nameLocation: "middle",
+        nameTextStyle: {
+          color: MUTED_TEXT_COLOR,
+          fontWeight: 700,
+          fontSize: 12,
+        },
+        axisLabel: {
+          color: MUTED_TEXT_COLOR,
+        },
+        splitLine: {
+          lineStyle: {
+            color: GRID_COLOR,
+          },
+        },
+      },
+      series: [
+        {
+          type: "bar",
+          data: histogramBins.map((histogramBin) => histogramBin.count),
+          itemStyle: {
+            color: BOX_BORDER,
+            borderRadius: [6, 6, 0, 0],
+          },
+          emphasis: {
+            itemStyle: {
+              color: MEDIAN_COLOR,
+            },
+          },
+        },
+      ],
+    };
+  }
+
+  function buildInspectBoxplotOption(payload) {
+    const summary = payload ? payload.summary : null;
+    if (!summary) {
+      return buildInspectEmptyOption("No inspect summary available");
+    }
+
+    return {
+      animationDuration: 250,
+      animationDurationUpdate: 150,
+      grid: {
+        left: 72,
+        right: 24,
+        top: 24,
+        bottom: 48,
+      },
+      tooltip: {
+        trigger: "item",
+        confine: true,
+        backgroundColor: "rgba(255, 253, 249, 0.98)",
+        borderColor: "rgba(23, 36, 44, 0.12)",
+        borderWidth: 1,
+        textStyle: {
+          color: TEXT_COLOR,
+          fontSize: 13,
+        },
+        formatter() {
+          return [
+            `<strong>${payload.scopeLabel || "Current scope"}</strong>`,
+            `Min-Max: ${formatCodonRatioValue(summary.min)}-${formatCodonRatioValue(summary.max)}`,
+            `Median: ${formatCodonRatioValue(summary.median)}`,
+            `IQR: ${formatCodonRatioValue(summary.q1)}-${formatCodonRatioValue(summary.q3)}`,
+          ].join("<br>");
+        },
+      },
+      xAxis: {
+        type: "value",
+        min: numericValue(payload ? payload.xMin : undefined, summary.min),
+        max: numericValue(payload ? payload.xMax : undefined, summary.max),
+        name: "Codon ratio",
+        nameGap: 22,
+        nameLocation: "middle",
+        nameTextStyle: {
+          color: MUTED_TEXT_COLOR,
+          fontWeight: 700,
+          fontSize: 12,
+        },
+        axisLabel: {
+          color: MUTED_TEXT_COLOR,
+          formatter(value) {
+            return formatCodonRatioValue(value);
+          },
+        },
+        splitLine: {
+          lineStyle: {
+            color: GRID_COLOR,
+          },
+        },
+      },
+      yAxis: {
+        type: "category",
+        data: ["scope"],
+        axisTick: {
+          show: false,
+        },
+        axisLine: {
+          show: false,
+        },
+        axisLabel: {
+          color: TEXT_COLOR,
+          fontWeight: 700,
+          formatter() {
+            return truncateTaxonName(payload.scopeLabel || "Current scope");
+          },
+        },
+      },
+      series: [
+        {
+          type: "boxplot",
+          data: [[summary.min, summary.q1, summary.median, summary.q3, summary.max]],
+          itemStyle: {
+            color: BOX_FILL,
+            borderColor: BOX_BORDER,
+            borderWidth: 2,
+          },
+          emphasis: {
+            itemStyle: {
+              color: "#eef6f7",
+              borderColor: BOX_BORDER,
+              borderWidth: 2,
+            },
+          },
+        },
+        {
+          type: "scatter",
+          data: [{ value: [summary.median, 0] }],
+          symbol: "circle",
+          symbolSize: 8,
+          itemStyle: {
+            color: MEDIAN_COLOR,
+          },
+          tooltip: {
+            show: false,
+          },
+          z: 4,
+        },
+      ],
+    };
+  }
+
   function openBranchExplorer(rows, rowIndex) {
     const row = rows[rowIndex];
     if (!row || !row.branchExplorerUrl) {
@@ -830,6 +1077,33 @@
       startValue: numericValue(dataZoom[0].startValue, 0),
       endValue: numericValue(dataZoom[0].endValue, Math.max(0, rowCount - 1)),
     });
+  }
+
+  function mountCodonInspectCharts() {
+    const payload = parsePayload("codon-ratio-inspect-payload");
+    const histogramContainer = document.getElementById("codon-ratio-inspect-histogram");
+    const boxplotContainer = document.getElementById("codon-ratio-inspect-boxplot");
+    if (!payload || typeof window.echarts === "undefined") {
+      return;
+    }
+
+    if (histogramContainer) {
+      histogramContainer.style.height = "360px";
+      const histogramChart = window.echarts.init(histogramContainer, null, { renderer: "svg" });
+      histogramChart.setOption(buildInspectHistogramOption(payload), { notMerge: true });
+      window.addEventListener("resize", () => {
+        histogramChart.resize();
+      });
+    }
+
+    if (boxplotContainer) {
+      boxplotContainer.style.height = "360px";
+      const boxplotChart = window.echarts.init(boxplotContainer, null, { renderer: "svg" });
+      boxplotChart.setOption(buildInspectBoxplotOption(payload), { notMerge: true });
+      window.addEventListener("resize", () => {
+        boxplotChart.resize();
+      });
+    }
   }
 
   function mountCodonRatioChart() {
@@ -927,6 +1201,7 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     mountCodonOverviewHeatmap();
+    mountCodonInspectCharts();
     mountCodonRatioChart();
     installScrollPreservingLinks();
     restorePendingScrollPosition();
