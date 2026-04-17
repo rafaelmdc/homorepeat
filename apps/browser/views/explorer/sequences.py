@@ -2,20 +2,21 @@ from django.http import Http404
 from django.urls import reverse
 from django.views.generic import TemplateView
 
-from ..models import CanonicalSequence, PipelineRun, Sequence
-from .canonical_entities import (
+from apps.browser.explorer.canonical import (
     annotate_canonical_sequence_browser_metrics,
     build_canonical_sequence_detail_context,
     scoped_canonical_sequences,
 )
-from .filters import (
+
+from ...models import CanonicalSequence, PipelineRun, Sequence
+from ..filters import (
     _resolve_branch_scope,
     _resolve_current_run,
     _resolve_genome_filter,
     _update_branch_scope_context,
 )
-from .navigation import _url_with_query
-from .pagination import VirtualScrollListView
+from ..navigation import _url_with_query
+from ..pagination import VirtualScrollListView
 
 
 class SequenceListView(VirtualScrollListView):

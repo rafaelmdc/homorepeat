@@ -8,6 +8,7 @@ TEST_NAMES = [
     "test_import_run_keeps_matched_sequences_and_proteins_but_counts_all_batch_proteins",
     "test_import_run_fails_without_replace_for_existing_run",
     "test_import_run_replace_existing_reloads_run_scoped_rows",
+    "test_import_run_keeps_raw_rows_when_canonical_sync_fails",
     "test_import_run_replace_existing_removes_stale_canonical_repeat_entities",
     "test_import_run_canonical_catalog_latest_run_wins_across_runs",
     "test_import_run_rolls_back_on_broken_references",

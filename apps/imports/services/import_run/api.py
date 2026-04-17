@@ -58,6 +58,8 @@ def process_next_pending_import_batch() -> ImportRunResult | None:
 def process_import_batch(batch_or_id: ImportBatch | int) -> ImportRunResult:
     batch = _claim_import_batch(batch_or_id)
     reporter = _ImportBatchStateReporter(batch)
+    pipeline_run = None
+    counts = None
 
     try:
         _set_batch_state(
@@ -106,21 +108,24 @@ def process_import_batch(batch_or_id: ImportBatch | int) -> ImportRunResult:
                 raw_counts=counts,
             )
             pipeline_run.save(update_fields=["browser_metadata"])
-            _set_batch_state(
-                batch,
-                phase=ImportPhase.CATALOG_SYNC,
-                progress_payload={
-                    "message": "Syncing canonical catalog rows.",
-                    "counts": counts,
-                },
-                reporter=reporter,
-                force=True,
-            )
-            sync_canonical_catalog_for_run(
-                pipeline_run,
-                import_batch=batch,
-                replace_all_repeat_call_methods=batch.replace_existing,
-            )
+            batch.pipeline_run = pipeline_run
+            batch.save(update_fields=["pipeline_run"])
+        del prepared
+        _set_batch_state(
+            batch,
+            phase=ImportPhase.CATALOG_SYNC,
+            progress_payload={
+                "message": "Syncing canonical catalog rows.",
+                "counts": counts,
+            },
+            reporter=reporter,
+            force=True,
+        )
+        sync_canonical_catalog_for_run(
+            pipeline_run,
+            import_batch=batch,
+            replace_all_repeat_call_methods=batch.replace_existing,
+        )
         _set_batch_state(
             batch,
             phase=ImportPhase.CATALOG_SYNC,

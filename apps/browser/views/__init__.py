@@ -1,20 +1,28 @@
 from ..metadata import resolve_browser_facets, resolve_run_browser_metadata
-from .base import BrowserListView
-from .accessions import AccessionDetailView, AccessionsListView
-from .genomes import GenomeDetailView, GenomeListView
-from .home import BrowserHomeView
-from .operations import (
+from .explorer import (
     AccessionCallCountListView,
+    AccessionDetailView,
     AccessionStatusListView,
+    AccessionsListView,
+    BrowserHomeView,
     DownloadManifestEntryListView,
+    GenomeDetailView,
+    GenomeListView,
     NormalizationWarningListView,
+    ProteinDetailView,
+    ProteinListView,
+    RepeatCallDetailView,
+    RepeatCallListView,
+    RunDetailView,
+    RunListView,
+    SequenceDetailView,
+    SequenceListView,
+    TaxonDetailView,
+    TaxonListView,
 )
-from .proteins import ProteinDetailView, ProteinListView
-from .repeat_calls import RepeatCallDetailView, RepeatCallListView
-from .runs import RunDetailView, RunListView
-from .sequences import SequenceDetailView, SequenceListView
-from .taxonomy import TaxonDetailView, TaxonListView
+from .base import BrowserListView
 from .pagination import CursorPage, CursorPaginatedListView, CursorPaginator, VirtualScrollListView
+from .stats import CodonRatioExplorerView, RepeatLengthExplorerView
 
 __all__ = [
     "AccessionCallCountListView",
@@ -23,6 +31,7 @@ __all__ = [
     "AccessionsListView",
     "BrowserHomeView",
     "BrowserListView",
+    "CodonRatioExplorerView",
     "CursorPage",
     "CursorPaginatedListView",
     "CursorPaginator",
@@ -32,6 +41,7 @@ __all__ = [
     "NormalizationWarningListView",
     "ProteinDetailView",
     "ProteinListView",
+    "RepeatLengthExplorerView",
     "RepeatCallDetailView",
     "RepeatCallListView",
     "RunDetailView",

@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Repeat Lengths{% endblock %}
+{% block body_class %}repeat-length-explorer-page{% endblock %}
+{% block extra_scripts %}
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <script src="{% static 'js/repeat-length-explorer.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+<section class="landing-band mb-4">
+  <div class="landing-band-shell">
+    <div class="landing-copy">
+      <span class="section-kicker mb-3">Repeat lengths</span>
+      <h1 class="landing-title mb-3">Lineage-aware repeat length exploration over the current catalog.</h1>
+      <p class="landing-lead mb-0">
+        Define the lineage, rank, method, residue, target search, and length
+        scope, then compare the visible taxa through grouped repeat-length
+        summaries.
+      </p>
+    </div>
+    <aside class="landing-aside">
+      <p class="sheet-label">Current scope</p>
+      <p class="mb-2">
+        {% if current_run %}
+          Latest state imported by run <strong>{{ current_run.run_id }}</strong>{% if branch_scope_active %}, {{ branch_scope_noun }} <strong>{{ branch_scope_label }}</strong>{% endif %}.
+        {% elif branch_scope_active %}
+          {{ branch_scope_noun|title }} <strong>{{ branch_scope_label }}</strong> across canonical repeat calls.
+        {% else %}
+          Browsing all canonical repeat calls across the current catalog.
+        {% endif %}
+      </p>
+      <p class="mb-0">
+        Display rank: <strong>{{ current_rank }}</strong>. Visible taxa limit:
+        <strong>{{ current_top_n }}</strong>.
+      </p>
+    </aside>
+  </div>
+</section>
+
+<section class="filter-card mb-4">
+  <form class="row g-3 align-items-end" method="get">
+    <div class="col-lg-3">
+      <label class="form-label" for="id_q">Target search</label>
+      <input class="form-control" id="id_q" type="text" name="q" value="{{ current_q }}" placeholder="Gene, protein, or accession prefix">
+    </div>
+    <div class="col-md-4 col-lg-2">
+      <label class="form-label" for="id_run">Latest run</label>
+      <select class="form-select" id="id_run" name="run">
+        <option value="">All runs</option>
+        {% for pipeline_run in run_choices %}
+          <option value="{{ pipeline_run.run_id }}" {% if current_run_id == pipeline_run.run_id %}selected{% endif %}>{{ pipeline_run.run_id }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4 col-lg-2">
+      <label class="form-label" for="id_branch_q">Branch search</label>
+      <input class="form-control" id="id_branch_q" type="text" name="branch_q" value="{{ current_branch_input }}" placeholder="Taxonomy ID or name prefix">
+    </div>
+    <div class="col-md-4 col-lg-2">
+      <label class="form-label" for="id_rank">Display rank</label>
+      <select class="form-select" id="id_rank" name="rank">
+        {% for rank in rank_choices %}
+          <option value="{{ rank.value }}" {% if current_rank == rank.value %}selected{% endif %}>{{ rank.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4 col-lg-2">
+      <label class="form-label" for="id_method">Method</label>
+      <select class="form-select" id="id_method" name="method">
+        <option value="">All methods</option>
+        {% for method in method_choices %}
+          <option value="{{ method }}" {% if current_method == method %}selected{% endif %}>{{ method }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4 col-lg-1">
+      <label class="form-label" for="id_residue">Residue</label>
+      <select class="form-select" id="id_residue" name="residue">
+        <option value="">All</option>
+        {% for residue in residue_choices %}
+          <option value="{{ residue }}" {% if current_residue == residue %}selected{% endif %}>{{ residue }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3 col-lg-2">
+      <label class="form-label" for="id_length_min">Min length</label>
+      <input class="form-control" id="id_length_min" type="number" min="0" name="length_min" value="{{ current_length_min }}">
+    </div>
+    <div class="col-md-3 col-lg-2">
+      <label class="form-label" for="id_length_max">Max length</label>
+      <input class="form-control" id="id_length_max" type="number" min="0" name="length_max" value="{{ current_length_max }}">
+    </div>
+    <div class="col-md-3 col-lg-2">
+      <label class="form-label" for="id_min_count">Min observations</label>
+      <input class="form-control" id="id_min_count" type="number" min="1" name="min_count" value="{{ current_min_count }}">
+    </div>
+    <div class="col-md-3 col-lg-2">
+      <label class="form-label" for="id_top_n">Top N taxa</label>
+      <input class="form-control" id="id_top_n" type="number" min="1" max="1000" name="top_n" value="{{ current_top_n }}">
+    </div>
+    <div class="col-12">
+      <div class="filter-actions">
+        <button class="btn btn-primary" type="submit">Apply</button>
+        <a class="btn btn-outline-secondary" href="{{ reset_url }}">Reset</a>
+      </div>
+    </div>
+  </form>
+</section>
+
+<section class="surface-card surface-card-wide mb-4">
+  <div class="section-header">
+    <div>
+      <p class="section-kicker mb-2">Chart layer</p>
+      <h2>Ranked length distributions for the visible taxa</h2>
+      <p class="text-secondary mb-0">Each row shows min, lower quartile, median, upper quartile, and max for the same bounded taxa listed in the summary table. Click a chart row to reopen the explorer scoped to that branch.</p>
+    </div>
+    <div class="mode-switch" data-chart-mode-switch>
+      <span class="mode-switch-label">View</span>
+      <button class="btn btn-brand" type="button" data-chart-mode-button data-chart-mode="focused" aria-pressed="true">Focused</button>
+      <button class="btn btn-outline-secondary" type="button" data-chart-mode-button data-chart-mode="full-range" aria-pressed="false">Full range</button>
+    </div>
+  </div>
+
+  {{ chart_payload|json_script:chart_payload_id }}
+  <div class="length-chart-shell" id="{{ chart_container_id }}"></div>
+  <noscript>
+    <p class="surface-note mb-0 mt-3">JavaScript is disabled, so the summary table remains the active view.</p>
+  </noscript>
+</section>
+
+<section class="surface-card surface-card-wide mb-4">
+  <div class="section-header">
+    <div>
+      <p class="section-kicker mb-2">Current filter scope</p>
+      <h2>{{ matching_repeat_calls_count }} matching canonical repeat call{{ matching_repeat_calls_count|pluralize }}</h2>
+      <p class="text-secondary mb-0">Normalized filter handling is active and grouped taxon summaries are rendered below for the current visible set.</p>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    {% for item in scope_items %}
+      <div class="col-md-6 col-xl-4">
+        <article class="metric-panel h-100">
+          <p class="sheet-label">{{ item.label }}</p>
+          <p class="mb-0">{{ item.value }}</p>
+        </article>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="surface-card surface-card-wide" data-summary-section data-summary-page-size="25">
+  <div class="section-header">
+    <div>
+      <p class="section-kicker mb-2">Grouped taxa</p>
+      <h2>{{ visible_taxa_count }} visible taxon{{ visible_taxa_count|pluralize }} at rank {{ current_rank }}</h2>
+      <p class="text-secondary mb-0">Showing {{ visible_taxa_count }} of {{ total_taxa_count }} taxa at rank {{ current_rank }}. Rows are ordered by observation count and limited by the current Top N setting.</p>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table align-middle mb-0 data-table">
+      <thead>
+        <tr>
+          <th>Taxon</th>
+          <th>Rank</th>
+          <th>Observations</th>
+          <th>Min</th>
+          <th>Q1</th>
+          <th>Median</th>
+          <th>Q3</th>
+          <th>Max</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody data-summary-table-body>
+        {% for row in summary_rows %}
+          <tr data-summary-row>
+            <td><a href="{{ row.taxon_detail_url }}">{{ row.taxon_name }}</a></td>
+            <td>{{ row.rank }}</td>
+            <td>{{ row.observation_count }}</td>
+            <td>{{ row.min_length }}</td>
+            <td>{{ row.q1 }}</td>
+            <td>{{ row.median }}</td>
+            <td>{{ row.q3 }}</td>
+            <td>{{ row.max_length }}</td>
+            <td>
+              <div class="d-flex flex-wrap gap-2">
+                <a class="btn btn-outline-secondary btn-sm" href="{{ row.taxon_detail_url }}">Taxon</a>
+                <a class="btn btn-outline-dark btn-sm" href="{{ row.branch_explorer_url }}" data-preserve-scroll-link>Open branch</a>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="9" class="empty-cell">{{ summary_empty_reason }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <nav class="pagination-bar" aria-label="Grouped taxa pagination" data-summary-pagination hidden>
+    <button class="btn btn-outline-secondary" type="button" data-summary-pagination-previous>Previous</button>
+    <span class="pagination-status" aria-live="polite" data-summary-pagination-status></span>
+    <button class="btn btn-outline-secondary" type="button" data-summary-pagination-next>Next</button>
+  </nav>
+</section>
+{% endblock %}

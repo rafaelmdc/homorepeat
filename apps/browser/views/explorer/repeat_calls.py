@@ -4,12 +4,13 @@ from django.http import Http404
 from django.urls import reverse
 from django.views.generic import TemplateView
 
-from ..models import CanonicalRepeatCall, PipelineRun, RepeatCall
-from .canonical_entities import (
+from apps.browser.explorer.canonical import (
     build_canonical_repeat_call_detail_context,
     scoped_canonical_repeat_calls,
 )
-from .filters import (
+
+from ...models import CanonicalRepeatCall, PipelineRun, RepeatCall
+from ..filters import (
     _resolve_branch_scope,
     _resolve_current_run,
     _resolve_genome_filter,
@@ -17,13 +18,13 @@ from .filters import (
     _resolve_sequence_filter,
     _update_branch_scope_context,
 )
-from .formatting import _parse_float, _parse_positive_int
-from .navigation import _url_with_query
-from .pagination import VirtualScrollListView
+from ..formatting import _parse_float, _parse_positive_int
+from ..navigation import _url_with_query
+from ..pagination import VirtualScrollListView
 
 
 def resolve_browser_facets(*, pipeline_run=None, pipeline_runs=None):
-    return import_module(__package__).resolve_browser_facets(
+    return import_module("apps.browser.views").resolve_browser_facets(
         pipeline_run=pipeline_run,
         pipeline_runs=pipeline_runs,
     )
@@ -209,6 +210,33 @@ class RepeatCallDetailView(TemplateView):
         context["taxon_detail_url"] = _url_with_query(
             reverse("browser:taxon-detail", args=[repeat_call.taxon.pk]),
             run=repeat_call.latest_pipeline_run.run_id,
+        )
+        context["length_explorer_url"] = _url_with_query(
+            reverse("browser:lengths"),
+            run=repeat_call.latest_pipeline_run.run_id,
+            branch=repeat_call.taxon.pk,
+            q=(
+                repeat_call.gene_symbol
+                or repeat_call.protein.protein_id
+                or repeat_call.protein_name
+                or repeat_call.accession
+            ),
+            method=repeat_call.method,
+            residue=repeat_call.repeat_residue,
+        )
+        context["codon_ratio_explorer_url"] = _url_with_query(
+            reverse("browser:codon-ratios"),
+            run=repeat_call.latest_pipeline_run.run_id,
+            branch=repeat_call.taxon.pk,
+            q=(
+                repeat_call.gene_symbol
+                or repeat_call.protein.protein_id
+                or repeat_call.protein_name
+                or repeat_call.accession
+            ),
+            method=repeat_call.method,
+            residue=repeat_call.repeat_residue,
+            codon_metric_name=repeat_call.codon_metric_name,
         )
         context["repeatcall_list_url"] = _url_with_query(
             reverse("browser:repeatcall-list"),

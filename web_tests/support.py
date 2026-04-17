@@ -2,6 +2,52 @@ import json
 from pathlib import Path
 
 
+_TEST_CODON_TRIPLETS = {
+    "A": "GCT",
+    "N": "AAC",
+    "Q": "CAG",
+}
+
+_TEST_DEFAULT_CODON_RATIO_VALUES = {
+    "A": 0.75,
+    "N": 0.5,
+    "Q": 1.25,
+}
+
+
+def _test_codon_triplet_for_residue(residue: str) -> str:
+    return _TEST_CODON_TRIPLETS.get((residue or "").upper(), "NNN")
+
+
+def build_test_repeat_call_values(
+    *,
+    residue: str,
+    length: int,
+    purity: float,
+    codon_metric_name: str = "codon_ratio",
+    codon_ratio_value: float | None = None,
+) -> dict[str, object]:
+    residue = (residue or "Q").upper()
+    repeat_count = max(1, min(length, int(round(length * purity))))
+    non_repeat_count = max(length - repeat_count, 0)
+    filler = "A" if residue != "A" else "Q"
+    resolved_codon_ratio_value = (
+        _TEST_DEFAULT_CODON_RATIO_VALUES.get(residue, 1.0)
+        if codon_ratio_value is None
+        else codon_ratio_value
+    )
+
+    return {
+        "repeat_count": repeat_count,
+        "non_repeat_count": non_repeat_count,
+        "aa_sequence": (residue * repeat_count) + (filler * non_repeat_count),
+        "codon_sequence": _test_codon_triplet_for_residue(residue) * length,
+        "codon_metric_name": codon_metric_name,
+        "codon_metric_value": str(resolved_codon_ratio_value),
+        "codon_ratio_value": resolved_codon_ratio_value,
+    }
+
+
 def build_minimal_publish_root(base_dir: Path, *, run_id: str = "run-alpha") -> Path:
     publish_root = base_dir / "publish"
     batch_root = publish_root / "acquisition" / "batches" / "batch_0001"
@@ -248,6 +294,9 @@ def create_imported_run_fixture(
     accession: str,
     taxon_key: str = "human",
     genome_name: str | None = None,
+    repeat_residue: str = "Q",
+    codon_metric_name: str = "codon_ratio",
+    codon_ratio_value: float | None = None,
 ):
     from apps.browser.models import (
         AccessionCallCount,
@@ -266,6 +315,15 @@ def create_imported_run_fixture(
 
     taxa = ensure_test_taxonomy()
     selected_taxon = taxa[taxon_key]
+    residue = repeat_residue.upper()
+    protein_length = 300
+    repeat_call_values = build_test_repeat_call_values(
+        residue=residue,
+        length=11,
+        purity=1.0,
+        codon_metric_name=codon_metric_name,
+        codon_ratio_value=codon_ratio_value,
+    )
 
     pipeline_run = PipelineRun.objects.create(
         run_id=run_id,
@@ -301,7 +359,7 @@ def create_imported_run_fixture(
         sequence_id=sequence_id,
         sequence_name=f"NM_{run_id}",
         sequence_length=900,
-        nucleotide_sequence="CAG" * 30,
+        nucleotide_sequence=_test_codon_triplet_for_residue(residue) * protein_length,
         gene_symbol="GENE1",
         assembly_accession=accession,
     )
@@ -312,16 +370,16 @@ def create_imported_run_fixture(
         taxon=selected_taxon,
         protein_id=protein_id,
         protein_name=f"NP_{run_id}",
-        protein_length=300,
+        protein_length=protein_length,
         accession=accession,
-        amino_acid_sequence="Q" * 30,
+        amino_acid_sequence=residue * protein_length,
         gene_symbol="GENE1",
         assembly_accession=accession,
     )
     run_parameter = RunParameter.objects.create(
         pipeline_run=pipeline_run,
         method=RunParameter.Method.PURE,
-        repeat_residue="Q",
+        repeat_residue=residue,
         param_name="min_repeat_count",
         param_value="6",
     )
@@ -344,7 +402,7 @@ def create_imported_run_fixture(
         batch=batch,
         assembly_accession=accession,
         method=RunParameter.Method.PURE,
-        repeat_residue="Q",
+        repeat_residue=residue,
         detect_status="success",
         finalize_status="success",
         n_repeat_calls=1,
@@ -364,11 +422,15 @@ def create_imported_run_fixture(
         start=10,
         end=20,
         length=11,
-        repeat_residue="Q",
-        repeat_count=11,
-        non_repeat_count=0,
+        repeat_residue=residue,
         purity=1.0,
-        aa_sequence="QQQQQQQQQQQ",
+        repeat_count=repeat_call_values["repeat_count"],
+        non_repeat_count=repeat_call_values["non_repeat_count"],
+        aa_sequence=repeat_call_values["aa_sequence"],
+        codon_sequence=repeat_call_values["codon_sequence"],
+        codon_metric_name=repeat_call_values["codon_metric_name"],
+        codon_metric_value=repeat_call_values["codon_metric_value"],
+        codon_ratio_value=repeat_call_values["codon_ratio_value"],
     )
     import_batch = ImportBatch.objects.create(
         pipeline_run=pipeline_run,

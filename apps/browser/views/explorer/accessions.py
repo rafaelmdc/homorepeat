@@ -2,18 +2,19 @@ from django.http import Http404
 from django.urls import reverse
 from django.views.generic import TemplateView
 
-from ..models import CanonicalGenome, PipelineRun, RepeatCall
-from .canonical_genomes import (
+from apps.browser.explorer.accessions import build_accession_list_summary
+from apps.browser.explorer.canonical import (
     annotate_canonical_genome_browser_metrics,
-    build_accession_list_summary,
     build_canonical_genome_detail_context,
     scoped_canonical_genomes,
     scoped_source_genomes,
 )
-from .filters import _resolve_branch_scope, _resolve_current_run, _update_branch_scope_context
-from .formatting import _ordering_label
-from .navigation import _url_with_query
-from .pagination import VirtualScrollListView
+
+from ...models import CanonicalGenome, PipelineRun, RepeatCall
+from ..filters import _resolve_branch_scope, _resolve_current_run, _update_branch_scope_context
+from ..formatting import _ordering_label
+from ..navigation import _url_with_query
+from ..pagination import VirtualScrollListView
 
 
 class AccessionsListView(VirtualScrollListView):

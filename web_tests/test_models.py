@@ -5,6 +5,7 @@ from apps.browser.models import (
     AccessionCallCount,
     AccessionStatus,
     AcquisitionBatch,
+    CanonicalRepeatCall,
     DownloadManifestEntry,
     Genome,
     NormalizationWarning,
@@ -422,6 +423,63 @@ class BiologicalModelTests(TestCase):
         self.assertEqual(repeat_call.accession, self.genome.accession)
         self.assertEqual(repeat_call.protein_name, self.protein.protein_name)
         self.assertEqual(repeat_call.protein_length, self.protein.protein_length)
+
+    def test_repeat_call_can_store_nullable_numeric_codon_ratio_value(self):
+        repeat_call = RepeatCall.objects.create(
+            pipeline_run=self.run_alpha,
+            genome=self.genome,
+            sequence=self.sequence,
+            protein=self.protein,
+            taxon=self.species,
+            call_id="call_with_codon_ratio",
+            method=RepeatCall.Method.PURE,
+            accession=self.genome.accession,
+            gene_symbol=self.protein.gene_symbol,
+            protein_name=self.protein.protein_name,
+            protein_length=self.protein.protein_length,
+            start=10,
+            end=20,
+            length=11,
+            repeat_residue="Q",
+            repeat_count=11,
+            non_repeat_count=0,
+            purity=1.0,
+            aa_sequence="QQQQQQQQQQQ",
+            codon_ratio_value=1.25,
+        )
+        repeat_call_without_value = RepeatCall.objects.create(
+            pipeline_run=self.run_alpha,
+            genome=self.genome,
+            sequence=self.sequence,
+            protein=self.protein,
+            taxon=self.species,
+            call_id="call_without_codon_ratio",
+            method=RepeatCall.Method.PURE,
+            accession=self.genome.accession,
+            gene_symbol=self.protein.gene_symbol,
+            protein_name=self.protein.protein_name,
+            protein_length=self.protein.protein_length,
+            start=30,
+            end=40,
+            length=11,
+            repeat_residue="Q",
+            repeat_count=11,
+            non_repeat_count=0,
+            purity=1.0,
+            aa_sequence="QQQQQQQQQQQ",
+        )
+
+        self.assertEqual(repeat_call.codon_ratio_value, 1.25)
+        self.assertIsNone(repeat_call_without_value.codon_ratio_value)
+
+    def test_repeat_call_models_expose_nullable_codon_ratio_value_field(self):
+        repeat_call_field = RepeatCall._meta.get_field("codon_ratio_value")
+        canonical_repeat_call_field = CanonicalRepeatCall._meta.get_field("codon_ratio_value")
+
+        self.assertTrue(repeat_call_field.null)
+        self.assertTrue(repeat_call_field.blank)
+        self.assertTrue(canonical_repeat_call_field.null)
+        self.assertTrue(canonical_repeat_call_field.blank)
 
     def test_biological_run_scoped_models_expose_imported_observation_labels(self):
         self.assertEqual(Genome._meta.verbose_name_plural, "imported genome observations")

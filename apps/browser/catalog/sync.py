@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import islice
 
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Exists, OuterRef
 from django.utils import timezone
 
 from apps.browser.models import (
@@ -30,6 +31,15 @@ class CatalogSyncResult:
     replaced_repeat_calls: int
 
 
+@dataclass(frozen=True)
+class _CanonicalGenomeRef:
+    pk: int
+    accession: str
+
+
+CANONICAL_SYNC_BATCH_SIZE = 1000
+
+
 def sync_canonical_catalog_for_run(
     pipeline_run: PipelineRun,
     *,
@@ -43,46 +53,29 @@ def sync_canonical_catalog_for_run(
     if last_seen_at is None:
         last_seen_at = timezone.now()
 
-    raw_genomes = list(pipeline_run.genomes.select_related("taxon"))
-    raw_sequences = list(pipeline_run.sequences.select_related("genome", "taxon"))
-    raw_proteins = list(pipeline_run.proteins.select_related("genome", "sequence", "taxon"))
-    raw_repeat_calls = list(
-        pipeline_run.repeat_calls.select_related("genome", "sequence", "protein", "taxon")
-    )
+    raw_genomes = _raw_genome_queryset(pipeline_run)
+    raw_sequences = _raw_sequence_queryset(pipeline_run)
+    raw_proteins = _raw_protein_queryset(pipeline_run)
+    raw_repeat_calls = _raw_repeat_call_queryset(pipeline_run)
 
     with transaction.atomic():
-        canonical_genomes_by_raw_pk = _sync_canonical_genomes(
+        _prune_stale_canonical_genomes(pipeline_run)
+        canonical_genomes_by_raw_pk, genome_count = _sync_canonical_genomes(
             raw_genomes,
             pipeline_run=pipeline_run,
             import_batch=import_batch,
             last_seen_at=last_seen_at,
         )
-        _prune_stale_canonical_genomes(
-            pipeline_run,
-            current_accessions={genome.accession for genome in raw_genomes},
-        )
-        _prune_stale_canonical_sequences(
-            pipeline_run,
-            current_sequence_keys={
-                (canonical_genomes_by_raw_pk[sequence.genome_id].accession, sequence.sequence_id)
-                for sequence in raw_sequences
-            },
-        )
-        canonical_sequences_by_raw_pk = _sync_canonical_sequences(
+        _prune_stale_canonical_sequences(pipeline_run)
+        canonical_sequences_by_raw_pk, sequence_count = _sync_canonical_sequences(
             raw_sequences,
             canonical_genomes_by_raw_pk=canonical_genomes_by_raw_pk,
             pipeline_run=pipeline_run,
             import_batch=import_batch,
             last_seen_at=last_seen_at,
         )
-        _prune_stale_canonical_proteins(
-            pipeline_run,
-            current_protein_keys={
-                (canonical_genomes_by_raw_pk[protein.genome_id].accession, protein.protein_id)
-                for protein in raw_proteins
-            },
-        )
-        canonical_proteins_by_raw_pk = _sync_canonical_proteins(
+        _prune_stale_canonical_proteins(pipeline_run)
+        canonical_proteins_by_raw_pk, protein_count = _sync_canonical_proteins(
             raw_proteins,
             canonical_genomes_by_raw_pk=canonical_genomes_by_raw_pk,
             canonical_sequences_by_raw_pk=canonical_sequences_by_raw_pk,
@@ -92,9 +85,8 @@ def sync_canonical_catalog_for_run(
         )
 
         touched_methods = _touched_methods_for_run(pipeline_run, raw_repeat_calls)
-        replaced_repeat_calls = _replace_canonical_repeat_calls(
+        repeat_call_count, replaced_repeat_calls = _replace_canonical_repeat_calls(
             raw_repeat_calls,
-            raw_proteins=raw_proteins,
             canonical_genomes_by_raw_pk=canonical_genomes_by_raw_pk,
             canonical_sequences_by_raw_pk=canonical_sequences_by_raw_pk,
             canonical_proteins_by_raw_pk=canonical_proteins_by_raw_pk,
@@ -105,9 +97,7 @@ def sync_canonical_catalog_for_run(
             replace_all_repeat_call_methods=replace_all_repeat_call_methods,
         )
 
-        _refresh_canonical_protein_repeat_call_counts(
-            canonical_proteins_by_raw_pk.values(),
-        )
+        _refresh_canonical_protein_repeat_call_counts(pipeline_run=pipeline_run)
         _record_pipeline_run_canonical_sync(
             pipeline_run,
             import_batch=import_batch,
@@ -115,11 +105,111 @@ def sync_canonical_catalog_for_run(
         )
 
     return CatalogSyncResult(
-        genomes=len(raw_genomes),
-        sequences=len(raw_sequences),
-        proteins=len(raw_proteins),
-        repeat_calls=len(raw_repeat_calls),
+        genomes=genome_count,
+        sequences=sequence_count,
+        proteins=protein_count,
+        repeat_calls=repeat_call_count,
         replaced_repeat_calls=replaced_repeat_calls,
+    )
+
+
+def _iter_queryset_batches(queryset, *, chunk_size: int = CANONICAL_SYNC_BATCH_SIZE):
+    iterator = queryset.iterator(chunk_size=chunk_size)
+    while True:
+        batch = list(islice(iterator, chunk_size))
+        if not batch:
+            return
+        yield batch
+
+
+def _raw_genome_queryset(pipeline_run: PipelineRun):
+    return pipeline_run.genomes.order_by("pk").only(
+        "id",
+        "genome_id",
+        "source",
+        "accession",
+        "genome_name",
+        "assembly_type",
+        "taxon_id",
+        "assembly_level",
+        "species_name",
+        "analyzed_protein_count",
+        "notes",
+    )
+
+
+def _raw_sequence_queryset(pipeline_run: PipelineRun):
+    return pipeline_run.sequences.order_by("pk").only(
+        "id",
+        "genome_id",
+        "taxon_id",
+        "sequence_id",
+        "sequence_name",
+        "sequence_length",
+        "nucleotide_sequence",
+        "gene_symbol",
+        "transcript_id",
+        "isoform_id",
+        "assembly_accession",
+        "source_record_id",
+        "protein_external_id",
+        "translation_table",
+        "gene_group",
+        "linkage_status",
+        "partial_status",
+    )
+
+
+def _raw_protein_queryset(pipeline_run: PipelineRun):
+    return pipeline_run.proteins.order_by("pk").only(
+        "id",
+        "genome_id",
+        "sequence_id",
+        "taxon_id",
+        "protein_id",
+        "protein_name",
+        "protein_length",
+        "accession",
+        "amino_acid_sequence",
+        "gene_symbol",
+        "translation_method",
+        "translation_status",
+        "assembly_accession",
+        "gene_group",
+        "protein_external_id",
+        "repeat_call_count",
+    )
+
+
+def _raw_repeat_call_queryset(pipeline_run: PipelineRun):
+    return pipeline_run.repeat_calls.order_by("pk").only(
+        "id",
+        "genome_id",
+        "sequence_id",
+        "protein_id",
+        "taxon_id",
+        "call_id",
+        "method",
+        "accession",
+        "gene_symbol",
+        "protein_name",
+        "protein_length",
+        "start",
+        "end",
+        "length",
+        "repeat_residue",
+        "repeat_count",
+        "non_repeat_count",
+        "purity",
+        "aa_sequence",
+        "codon_sequence",
+        "codon_metric_name",
+        "codon_metric_value",
+        "codon_ratio_value",
+        "window_definition",
+        "template_name",
+        "merge_rule",
+        "score",
     )
 
 
@@ -143,57 +233,67 @@ def backfill_canonical_catalog_for_run(
 
 
 def _sync_canonical_genomes(
-    raw_genomes: list[Genome],
+    raw_genomes,
     *,
     pipeline_run: PipelineRun,
     import_batch: ImportBatch,
     last_seen_at,
-) -> dict[int, CanonicalGenome]:
-    if not raw_genomes:
-        return {}
+) -> tuple[dict[int, _CanonicalGenomeRef], int]:
+    canonical_by_raw_pk: dict[int, _CanonicalGenomeRef] = {}
+    genome_count = 0
 
-    CanonicalGenome.objects.bulk_create(
-        [
-            CanonicalGenome(
-                latest_pipeline_run=pipeline_run,
-                latest_import_batch=import_batch,
-                last_seen_at=last_seen_at,
-                genome_id=genome.genome_id,
-                source=genome.source,
-                accession=genome.accession,
-                genome_name=genome.genome_name,
-                assembly_type=genome.assembly_type,
-                taxon=genome.taxon,
-                assembly_level=genome.assembly_level,
-                species_name=genome.species_name,
-                analyzed_protein_count=genome.analyzed_protein_count,
-                notes=genome.notes,
+    for batch in _iter_queryset_batches(raw_genomes):
+        CanonicalGenome.objects.bulk_create(
+            [
+                CanonicalGenome(
+                    latest_pipeline_run=pipeline_run,
+                    latest_import_batch=import_batch,
+                    last_seen_at=last_seen_at,
+                    genome_id=genome.genome_id,
+                    source=genome.source,
+                    accession=genome.accession,
+                    genome_name=genome.genome_name,
+                    assembly_type=genome.assembly_type,
+                    taxon_id=genome.taxon_id,
+                    assembly_level=genome.assembly_level,
+                    species_name=genome.species_name,
+                    analyzed_protein_count=genome.analyzed_protein_count,
+                    notes=genome.notes,
+                )
+                for genome in batch
+            ],
+            update_conflicts=True,
+            update_fields=[
+                "latest_pipeline_run",
+                "latest_import_batch",
+                "last_seen_at",
+                "genome_id",
+                "source",
+                "genome_name",
+                "assembly_type",
+                "taxon",
+                "assembly_level",
+                "species_name",
+                "analyzed_protein_count",
+                "notes",
+            ],
+            unique_fields=["accession"],
+            batch_size=CANONICAL_SYNC_BATCH_SIZE,
+        )
+
+        canonical_by_accession = CanonicalGenome.objects.in_bulk(
+            [genome.accession for genome in batch],
+            field_name="accession",
+        )
+        for genome in batch:
+            canonical_genome = canonical_by_accession[genome.accession]
+            canonical_by_raw_pk[genome.pk] = _CanonicalGenomeRef(
+                pk=canonical_genome.pk,
+                accession=canonical_genome.accession,
             )
-            for genome in raw_genomes
-        ],
-        update_conflicts=True,
-        update_fields=[
-            "latest_pipeline_run",
-            "latest_import_batch",
-            "last_seen_at",
-            "genome_id",
-            "source",
-            "genome_name",
-            "assembly_type",
-            "taxon",
-            "assembly_level",
-            "species_name",
-            "analyzed_protein_count",
-            "notes",
-        ],
-        unique_fields=["accession"],
-    )
+        genome_count += len(batch)
 
-    canonical_by_accession = CanonicalGenome.objects.in_bulk(
-        [genome.accession for genome in raw_genomes],
-        field_name="accession",
-    )
-    return {genome.pk: canonical_by_accession[genome.accession] for genome in raw_genomes}
+    return canonical_by_raw_pk, genome_count
 
 
 def _pipeline_run_has_current_canonical_sync(
@@ -220,232 +320,251 @@ def _record_pipeline_run_canonical_sync(
 
 def _prune_stale_canonical_genomes(
     pipeline_run: PipelineRun,
-    *,
-    current_accessions: set[str],
 ) -> None:
-    stale_genomes = CanonicalGenome.objects.filter(
-        latest_pipeline_run=pipeline_run,
-    ).exclude(accession__in=current_accessions)
-    for genome in stale_genomes:
-        if Genome.objects.filter(accession=genome.accession).exists():
-            continue
-        genome.delete()
+    current_run_genomes = Genome.objects.filter(
+        pipeline_run=pipeline_run,
+        accession=OuterRef("accession"),
+    )
+    any_run_genomes = Genome.objects.filter(accession=OuterRef("accession"))
+    (
+        CanonicalGenome.objects.filter(latest_pipeline_run=pipeline_run)
+        .annotate(
+            present_in_current_run=Exists(current_run_genomes),
+            present_in_any_run=Exists(any_run_genomes),
+        )
+        .filter(present_in_current_run=False, present_in_any_run=False)
+        .delete()
+    )
 
 
 def _prune_stale_canonical_sequences(
     pipeline_run: PipelineRun,
-    *,
-    current_sequence_keys: set[tuple[str, str]],
 ) -> None:
-    stale_sequences = CanonicalSequence.objects.filter(
-        latest_pipeline_run=pipeline_run,
-    ).select_related("genome")
-    for sequence in stale_sequences:
-        key = (sequence.genome.accession, sequence.sequence_id)
-        if key in current_sequence_keys:
-            continue
-        if Sequence.objects.filter(
-            genome__accession=sequence.genome.accession,
-            sequence_id=sequence.sequence_id,
-        ).exists():
-            continue
-        sequence.delete()
+    current_run_sequences = Sequence.objects.filter(
+        pipeline_run=pipeline_run,
+        genome__accession=OuterRef("genome__accession"),
+        sequence_id=OuterRef("sequence_id"),
+    )
+    any_run_sequences = Sequence.objects.filter(
+        genome__accession=OuterRef("genome__accession"),
+        sequence_id=OuterRef("sequence_id"),
+    )
+    (
+        CanonicalSequence.objects.filter(latest_pipeline_run=pipeline_run)
+        .annotate(
+            present_in_current_run=Exists(current_run_sequences),
+            present_in_any_run=Exists(any_run_sequences),
+        )
+        .filter(present_in_current_run=False, present_in_any_run=False)
+        .delete()
+    )
 
 
 def _prune_stale_canonical_proteins(
     pipeline_run: PipelineRun,
-    *,
-    current_protein_keys: set[tuple[str, str]],
 ) -> None:
-    stale_proteins = CanonicalProtein.objects.filter(
-        latest_pipeline_run=pipeline_run,
-    ).select_related("genome")
-    for protein in stale_proteins:
-        key = (protein.genome.accession, protein.protein_id)
-        if key in current_protein_keys:
-            continue
-        if Protein.objects.filter(
-            genome__accession=protein.genome.accession,
-            protein_id=protein.protein_id,
-        ).exists():
-            continue
-        protein.delete()
+    current_run_proteins = Protein.objects.filter(
+        pipeline_run=pipeline_run,
+        genome__accession=OuterRef("genome__accession"),
+        protein_id=OuterRef("protein_id"),
+    )
+    any_run_proteins = Protein.objects.filter(
+        genome__accession=OuterRef("genome__accession"),
+        protein_id=OuterRef("protein_id"),
+    )
+    (
+        CanonicalProtein.objects.filter(latest_pipeline_run=pipeline_run)
+        .annotate(
+            present_in_current_run=Exists(current_run_proteins),
+            present_in_any_run=Exists(any_run_proteins),
+        )
+        .filter(present_in_current_run=False, present_in_any_run=False)
+        .delete()
+    )
 
 
 def _sync_canonical_sequences(
-    raw_sequences: list[Sequence],
+    raw_sequences,
     *,
-    canonical_genomes_by_raw_pk: dict[int, CanonicalGenome],
+    canonical_genomes_by_raw_pk: dict[int, _CanonicalGenomeRef],
     pipeline_run: PipelineRun,
     import_batch: ImportBatch,
     last_seen_at,
-) -> dict[int, CanonicalSequence]:
-    if not raw_sequences:
-        return {}
+) -> tuple[dict[int, int], int]:
+    canonical_by_raw_pk: dict[int, int] = {}
+    sequence_count = 0
 
-    CanonicalSequence.objects.bulk_create(
-        [
-            CanonicalSequence(
-                latest_pipeline_run=pipeline_run,
-                latest_import_batch=import_batch,
-                last_seen_at=last_seen_at,
-                genome=canonical_genomes_by_raw_pk[sequence.genome_id],
-                taxon=sequence.taxon,
-                sequence_id=sequence.sequence_id,
-                sequence_name=sequence.sequence_name,
-                sequence_length=sequence.sequence_length,
-                nucleotide_sequence=sequence.nucleotide_sequence,
-                gene_symbol=sequence.gene_symbol,
-                transcript_id=sequence.transcript_id,
-                isoform_id=sequence.isoform_id,
-                assembly_accession=sequence.assembly_accession,
-                source_record_id=sequence.source_record_id,
-                protein_external_id=sequence.protein_external_id,
-                translation_table=sequence.translation_table,
-                gene_group=sequence.gene_group,
-                linkage_status=sequence.linkage_status,
-                partial_status=sequence.partial_status,
-            )
-            for sequence in raw_sequences
-        ],
-        update_conflicts=True,
-        update_fields=[
-            "latest_pipeline_run",
-            "latest_import_batch",
-            "last_seen_at",
-            "taxon",
-            "sequence_name",
-            "sequence_length",
-            "nucleotide_sequence",
-            "gene_symbol",
-            "transcript_id",
-            "isoform_id",
-            "assembly_accession",
-            "source_record_id",
-            "protein_external_id",
-            "translation_table",
-            "gene_group",
-            "linkage_status",
-            "partial_status",
-        ],
-        unique_fields=["genome", "sequence_id"],
-    )
+    for batch in _iter_queryset_batches(raw_sequences):
+        CanonicalSequence.objects.bulk_create(
+            [
+                CanonicalSequence(
+                    latest_pipeline_run=pipeline_run,
+                    latest_import_batch=import_batch,
+                    last_seen_at=last_seen_at,
+                    genome_id=canonical_genomes_by_raw_pk[sequence.genome_id].pk,
+                    taxon_id=sequence.taxon_id,
+                    sequence_id=sequence.sequence_id,
+                    sequence_name=sequence.sequence_name,
+                    sequence_length=sequence.sequence_length,
+                    nucleotide_sequence=sequence.nucleotide_sequence,
+                    gene_symbol=sequence.gene_symbol,
+                    transcript_id=sequence.transcript_id,
+                    isoform_id=sequence.isoform_id,
+                    assembly_accession=sequence.assembly_accession,
+                    source_record_id=sequence.source_record_id,
+                    protein_external_id=sequence.protein_external_id,
+                    translation_table=sequence.translation_table,
+                    gene_group=sequence.gene_group,
+                    linkage_status=sequence.linkage_status,
+                    partial_status=sequence.partial_status,
+                )
+                for sequence in batch
+            ],
+            update_conflicts=True,
+            update_fields=[
+                "latest_pipeline_run",
+                "latest_import_batch",
+                "last_seen_at",
+                "taxon",
+                "sequence_name",
+                "sequence_length",
+                "nucleotide_sequence",
+                "gene_symbol",
+                "transcript_id",
+                "isoform_id",
+                "assembly_accession",
+                "source_record_id",
+                "protein_external_id",
+                "translation_table",
+                "gene_group",
+                "linkage_status",
+                "partial_status",
+            ],
+            unique_fields=["genome", "sequence_id"],
+            batch_size=CANONICAL_SYNC_BATCH_SIZE,
+        )
 
-    canonical_sequences = CanonicalSequence.objects.filter(
-        genome_id__in={canonical_genomes_by_raw_pk[sequence.genome_id].pk for sequence in raw_sequences},
-        sequence_id__in={sequence.sequence_id for sequence in raw_sequences},
-    )
-    canonical_by_key = {
-        (sequence.genome_id, sequence.sequence_id): sequence
-        for sequence in canonical_sequences
-    }
-    return {
-        sequence.pk: canonical_by_key[(canonical_genomes_by_raw_pk[sequence.genome_id].pk, sequence.sequence_id)]
-        for sequence in raw_sequences
-    }
+        canonical_by_key = {
+            (sequence.genome_id, sequence.sequence_id): sequence.pk
+            for sequence in CanonicalSequence.objects.filter(
+                genome_id__in={canonical_genomes_by_raw_pk[row.genome_id].pk for row in batch},
+                sequence_id__in={row.sequence_id for row in batch},
+            ).only("id", "genome_id", "sequence_id")
+        }
+        for sequence in batch:
+            canonical_by_raw_pk[sequence.pk] = canonical_by_key[
+                (canonical_genomes_by_raw_pk[sequence.genome_id].pk, sequence.sequence_id)
+            ]
+        sequence_count += len(batch)
+
+    return canonical_by_raw_pk, sequence_count
 
 
 def _sync_canonical_proteins(
-    raw_proteins: list[Protein],
+    raw_proteins,
     *,
-    canonical_genomes_by_raw_pk: dict[int, CanonicalGenome],
-    canonical_sequences_by_raw_pk: dict[int, CanonicalSequence],
+    canonical_genomes_by_raw_pk: dict[int, _CanonicalGenomeRef],
+    canonical_sequences_by_raw_pk: dict[int, int],
     pipeline_run: PipelineRun,
     import_batch: ImportBatch,
     last_seen_at,
-) -> dict[int, CanonicalProtein]:
-    if not raw_proteins:
-        return {}
+) -> tuple[dict[int, int], int]:
+    canonical_by_raw_pk: dict[int, int] = {}
+    protein_count = 0
 
-    CanonicalProtein.objects.bulk_create(
-        [
-            CanonicalProtein(
-                latest_pipeline_run=pipeline_run,
-                latest_import_batch=import_batch,
-                last_seen_at=last_seen_at,
-                genome=canonical_genomes_by_raw_pk[protein.genome_id],
-                sequence=canonical_sequences_by_raw_pk[protein.sequence_id],
-                taxon=protein.taxon,
-                protein_id=protein.protein_id,
-                protein_name=protein.protein_name,
-                protein_length=protein.protein_length,
-                accession=protein.accession,
-                amino_acid_sequence=protein.amino_acid_sequence,
-                gene_symbol=protein.gene_symbol,
-                translation_method=protein.translation_method,
-                translation_status=protein.translation_status,
-                assembly_accession=protein.assembly_accession,
-                gene_group=protein.gene_group,
-                protein_external_id=protein.protein_external_id,
-                repeat_call_count=protein.repeat_call_count,
-            )
-            for protein in raw_proteins
-        ],
-        update_conflicts=True,
-        update_fields=[
-            "latest_pipeline_run",
-            "latest_import_batch",
-            "last_seen_at",
-            "sequence",
-            "taxon",
-            "protein_name",
-            "protein_length",
-            "accession",
-            "amino_acid_sequence",
-            "gene_symbol",
-            "translation_method",
-            "translation_status",
-            "assembly_accession",
-            "gene_group",
-            "protein_external_id",
-            "repeat_call_count",
-        ],
-        unique_fields=["genome", "protein_id"],
-    )
+    for batch in _iter_queryset_batches(raw_proteins):
+        CanonicalProtein.objects.bulk_create(
+            [
+                CanonicalProtein(
+                    latest_pipeline_run=pipeline_run,
+                    latest_import_batch=import_batch,
+                    last_seen_at=last_seen_at,
+                    genome_id=canonical_genomes_by_raw_pk[protein.genome_id].pk,
+                    sequence_id=canonical_sequences_by_raw_pk[protein.sequence_id],
+                    taxon_id=protein.taxon_id,
+                    protein_id=protein.protein_id,
+                    protein_name=protein.protein_name,
+                    protein_length=protein.protein_length,
+                    accession=protein.accession,
+                    amino_acid_sequence=protein.amino_acid_sequence,
+                    gene_symbol=protein.gene_symbol,
+                    translation_method=protein.translation_method,
+                    translation_status=protein.translation_status,
+                    assembly_accession=protein.assembly_accession,
+                    gene_group=protein.gene_group,
+                    protein_external_id=protein.protein_external_id,
+                    repeat_call_count=protein.repeat_call_count,
+                )
+                for protein in batch
+            ],
+            update_conflicts=True,
+            update_fields=[
+                "latest_pipeline_run",
+                "latest_import_batch",
+                "last_seen_at",
+                "sequence",
+                "taxon",
+                "protein_name",
+                "protein_length",
+                "accession",
+                "amino_acid_sequence",
+                "gene_symbol",
+                "translation_method",
+                "translation_status",
+                "assembly_accession",
+                "gene_group",
+                "protein_external_id",
+                "repeat_call_count",
+            ],
+            unique_fields=["genome", "protein_id"],
+            batch_size=CANONICAL_SYNC_BATCH_SIZE,
+        )
 
-    canonical_proteins = CanonicalProtein.objects.filter(
-        genome_id__in={canonical_genomes_by_raw_pk[protein.genome_id].pk for protein in raw_proteins},
-        protein_id__in={protein.protein_id for protein in raw_proteins},
-    )
-    canonical_by_key = {
-        (protein.genome_id, protein.protein_id): protein
-        for protein in canonical_proteins
-    }
-    return {
-        protein.pk: canonical_by_key[(canonical_genomes_by_raw_pk[protein.genome_id].pk, protein.protein_id)]
-        for protein in raw_proteins
-    }
+        canonical_by_key = {
+            (protein.genome_id, protein.protein_id): protein.pk
+            for protein in CanonicalProtein.objects.filter(
+                genome_id__in={canonical_genomes_by_raw_pk[row.genome_id].pk for row in batch},
+                protein_id__in={row.protein_id for row in batch},
+            ).only("id", "genome_id", "protein_id")
+        }
+        for protein in batch:
+            canonical_by_raw_pk[protein.pk] = canonical_by_key[
+                (canonical_genomes_by_raw_pk[protein.genome_id].pk, protein.protein_id)
+            ]
+        protein_count += len(batch)
+
+    return canonical_by_raw_pk, protein_count
 
 
 def _touched_methods_for_run(
     pipeline_run: PipelineRun,
-    raw_repeat_calls: list[RepeatCall],
+    raw_repeat_calls,
 ) -> tuple[str, ...]:
     touched_methods = tuple(
         pipeline_run.run_parameters.order_by().values_list("method", flat=True).distinct()
     )
     if touched_methods:
         return touched_methods
-    return tuple(sorted({repeat_call.method for repeat_call in raw_repeat_calls}))
+    return tuple(
+        raw_repeat_calls.order_by().values_list("method", flat=True).distinct()
+    )
 
 
 def _replace_canonical_repeat_calls(
-    raw_repeat_calls: list[RepeatCall],
+    raw_repeat_calls,
     *,
-    raw_proteins: list[Protein],
-    canonical_genomes_by_raw_pk: dict[int, CanonicalGenome],
-    canonical_sequences_by_raw_pk: dict[int, CanonicalSequence],
-    canonical_proteins_by_raw_pk: dict[int, CanonicalProtein],
+    canonical_genomes_by_raw_pk: dict[int, _CanonicalGenomeRef],
+    canonical_sequences_by_raw_pk: dict[int, int],
+    canonical_proteins_by_raw_pk: dict[int, int],
     pipeline_run: PipelineRun,
     import_batch: ImportBatch,
     last_seen_at,
     touched_methods: tuple[str, ...],
     replace_all_repeat_call_methods: bool,
-) -> int:
-    touched_protein_ids = {canonical_proteins_by_raw_pk[protein.pk].pk for protein in raw_proteins}
-    if touched_protein_ids and (replace_all_repeat_call_methods or touched_methods):
+) -> tuple[int, int]:
+    if replace_all_repeat_call_methods or touched_methods:
         delete_queryset = CanonicalRepeatCall.objects.filter(
-            protein_id__in=touched_protein_ids,
+            protein__latest_pipeline_run=pipeline_run,
         )
         if not replace_all_repeat_call_methods:
             delete_queryset = delete_queryset.filter(method__in=touched_methods)
@@ -453,18 +572,19 @@ def _replace_canonical_repeat_calls(
     else:
         replaced_repeat_calls = 0
 
-    if raw_repeat_calls:
+    repeat_call_count = 0
+    for batch in _iter_queryset_batches(raw_repeat_calls):
         CanonicalRepeatCall.objects.bulk_create(
             [
                 CanonicalRepeatCall(
                     latest_pipeline_run=pipeline_run,
                     latest_import_batch=import_batch,
                     last_seen_at=last_seen_at,
-                    latest_repeat_call=repeat_call,
-                    genome=canonical_genomes_by_raw_pk[repeat_call.genome_id],
-                    sequence=canonical_sequences_by_raw_pk[repeat_call.sequence_id],
-                    protein=canonical_proteins_by_raw_pk[repeat_call.protein_id],
-                    taxon=repeat_call.taxon,
+                    latest_repeat_call_id=repeat_call.pk,
+                    genome_id=canonical_genomes_by_raw_pk[repeat_call.genome_id].pk,
+                    sequence_id=canonical_sequences_by_raw_pk[repeat_call.sequence_id],
+                    protein_id=canonical_proteins_by_raw_pk[repeat_call.protein_id],
+                    taxon_id=repeat_call.taxon_id,
                     source_call_id=repeat_call.call_id,
                     method=repeat_call.method,
                     accession=repeat_call.accession,
@@ -482,40 +602,53 @@ def _replace_canonical_repeat_calls(
                     codon_sequence=repeat_call.codon_sequence,
                     codon_metric_name=repeat_call.codon_metric_name,
                     codon_metric_value=repeat_call.codon_metric_value,
+                    codon_ratio_value=repeat_call.codon_ratio_value,
                     window_definition=repeat_call.window_definition,
                     template_name=repeat_call.template_name,
                     merge_rule=repeat_call.merge_rule,
                     score=repeat_call.score,
                 )
-                for repeat_call in raw_repeat_calls
-            ]
+                for repeat_call in batch
+            ],
+            batch_size=CANONICAL_SYNC_BATCH_SIZE,
         )
+        repeat_call_count += len(batch)
 
-    return replaced_repeat_calls
+    return repeat_call_count, replaced_repeat_calls
 
 
 def _refresh_canonical_protein_repeat_call_counts(
-    canonical_proteins,
+    *,
+    pipeline_run: PipelineRun,
 ) -> None:
-    canonical_proteins = list(canonical_proteins)
-    if not canonical_proteins:
-        return
-
-    canonical_protein_ids = [protein.pk for protein in canonical_proteins]
     repeat_call_counts = {
         row["protein_id"]: row["total"]
-        for row in CanonicalRepeatCall.objects.filter(protein_id__in=canonical_protein_ids)
+        for row in CanonicalRepeatCall.objects.filter(protein__latest_pipeline_run=pipeline_run)
         .values("protein_id")
         .annotate(total=Count("pk"))
     }
 
     proteins_to_update = []
-    for protein in canonical_proteins:
+    for protein in CanonicalProtein.objects.filter(latest_pipeline_run=pipeline_run).only(
+        "id",
+        "repeat_call_count",
+    ).iterator(chunk_size=CANONICAL_SYNC_BATCH_SIZE):
         repeat_call_count = repeat_call_counts.get(protein.pk, 0)
         if protein.repeat_call_count == repeat_call_count:
             continue
         protein.repeat_call_count = repeat_call_count
         proteins_to_update.append(protein)
+        if len(proteins_to_update) >= CANONICAL_SYNC_BATCH_SIZE:
+            CanonicalProtein.objects.bulk_update(
+                proteins_to_update,
+                ["repeat_call_count"],
+                batch_size=CANONICAL_SYNC_BATCH_SIZE,
+            )
+            proteins_to_update = []
 
     if proteins_to_update:
-        CanonicalProtein.objects.bulk_update(proteins_to_update, ["repeat_call_count"])
+        CanonicalProtein.objects.bulk_update(
+            proteins_to_update,
+            ["repeat_call_count"],
+            batch_size=CANONICAL_SYNC_BATCH_SIZE,
+        )

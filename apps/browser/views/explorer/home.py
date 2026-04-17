@@ -1,7 +1,7 @@
 from django.views.generic import TemplateView
 
-from .navigation import _browser_directory_sections
-from .querysets import _summary_runs
+from ..navigation import _browser_directory_sections
+from ..querysets import _summary_runs
 
 
 class BrowserHomeView(TemplateView):

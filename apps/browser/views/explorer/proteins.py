@@ -4,26 +4,27 @@ from django.http import Http404
 from django.urls import reverse
 from django.views.generic import TemplateView
 
-from ..models import CanonicalProtein, PipelineRun, Protein
-from .canonical_entities import (
+from apps.browser.explorer.canonical import (
     annotate_canonical_protein_browser_metrics,
     build_canonical_protein_detail_context,
     scoped_canonical_proteins,
 )
-from .filters import (
+
+from ...models import CanonicalProtein, PipelineRun, Protein
+from ..filters import (
     _resolve_branch_scope,
     _resolve_current_run,
     _resolve_genome_filter,
     _resolve_sequence_filter,
     _update_branch_scope_context,
 )
-from .formatting import _parse_float, _parse_positive_int
-from .navigation import _url_with_query
-from .pagination import VirtualScrollListView
+from ..formatting import _parse_float, _parse_positive_int
+from ..navigation import _url_with_query
+from ..pagination import VirtualScrollListView
 
 
 def resolve_browser_facets(*, pipeline_run=None, pipeline_runs=None):
-    return import_module(__package__).resolve_browser_facets(
+    return import_module("apps.browser.views").resolve_browser_facets(
         pipeline_run=pipeline_run,
         pipeline_runs=pipeline_runs,
     )
@@ -200,6 +201,18 @@ class ProteinDetailView(TemplateView):
             reverse("browser:repeatcall-list"),
             run=protein.latest_pipeline_run.run_id,
             protein=protein.protein_id,
+        )
+        context["length_explorer_url"] = _url_with_query(
+            reverse("browser:lengths"),
+            run=protein.latest_pipeline_run.run_id,
+            branch=protein.taxon.pk,
+            q=protein.gene_symbol or protein.protein_id or protein.protein_name or protein.accession,
+        )
+        context["codon_ratio_explorer_url"] = _url_with_query(
+            reverse("browser:codon-ratios"),
+            run=protein.latest_pipeline_run.run_id,
+            branch=protein.taxon.pk,
+            q=protein.gene_symbol or protein.protein_id or protein.protein_name or protein.accession,
         )
         context["sequence_detail_url"] = reverse("browser:sequence-detail", args=[latest_source_protein.sequence_id])
         context["protein_list_url"] = _url_with_query(

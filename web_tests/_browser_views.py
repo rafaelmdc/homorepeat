@@ -1,3 +1,4 @@
+from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
 from django.test import TestCase
@@ -20,7 +21,7 @@ from apps.browser.models import (
 from apps.browser.views import ProteinListView, RepeatCallListView, SequenceListView
 from apps.imports.models import ImportBatch
 
-from .support import create_imported_run_fixture
+from .support import build_test_repeat_call_values, create_imported_run_fixture
 
 
 class BrowserViewTests(TestCase):
@@ -103,10 +104,11 @@ class BrowserViewTests(TestCase):
             genome = protein.genome
             taxon = protein.taxon
 
-        repeat_count = max(1, min(length, int(round(length * purity))))
-        non_repeat_count = max(length - repeat_count, 0)
-        filler = "A" if residue != "A" else "Q"
-        aa_sequence = (residue * repeat_count) + (filler * non_repeat_count)
+        repeat_call_values = build_test_repeat_call_values(
+            residue=residue,
+            length=length,
+            purity=purity,
+        )
         repeat_call = RepeatCall.objects.create(
             pipeline_run=pipeline_run,
             genome=genome,
@@ -123,10 +125,14 @@ class BrowserViewTests(TestCase):
             end=start + length - 1,
             length=length,
             repeat_residue=residue,
-            repeat_count=repeat_count,
-            non_repeat_count=non_repeat_count,
+            repeat_count=repeat_call_values["repeat_count"],
+            non_repeat_count=repeat_call_values["non_repeat_count"],
             purity=purity,
-            aa_sequence=aa_sequence,
+            aa_sequence=repeat_call_values["aa_sequence"],
+            codon_sequence=repeat_call_values["codon_sequence"],
+            codon_metric_name=repeat_call_values["codon_metric_name"],
+            codon_metric_value=repeat_call_values["codon_metric_value"],
+            codon_ratio_value=repeat_call_values["codon_ratio_value"],
         )
         sync_canonical_catalog_for_run(
             pipeline_run,
@@ -143,6 +149,10 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, "Current catalog")
         self.assertContains(response, "Open accession browser")
         self.assertContains(response, reverse("browser:accession-list"))
+        self.assertContains(response, "Repeat lengths")
+        self.assertContains(response, reverse("browser:lengths"))
+        self.assertContains(response, "Codon ratios")
+        self.assertContains(response, reverse("browser:codon-ratios"))
         self.assertContains(response, "Run provenance")
         self.assertContains(response, "Operational provenance")
         self.assertContains(response, reverse("browser:accessionstatus-list"))
@@ -864,7 +874,27 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, "Chordata")
         self.assertContains(response, "GCF_ALPHA")
         self.assertNotContains(response, "GCF_BETA")
+        self.assertContains(response, "Explore branch lengths")
+        self.assertContains(response, "Explore branch codon ratios")
         self.assertContains(response, "Open branch accessions")
+
+        length_query = parse_qs(urlparse(response.context["length_branch_url"]).query)
+        self.assertEqual(length_query["run"], ["run-alpha"])
+        self.assertEqual(length_query["branch"], [str(self.alpha["taxon"].pk)])
+        codon_query = parse_qs(urlparse(response.context["codon_ratio_branch_url"]).query)
+        self.assertEqual(codon_query["run"], ["run-alpha"])
+        self.assertEqual(codon_query["branch"], [str(self.alpha["taxon"].pk)])
+
+    def test_taxon_detail_length_handoff_omits_run_when_unscoped(self):
+        response = self.client.get(reverse("browser:taxon-detail", args=[self.alpha["taxon"].pk]))
+
+        self.assertEqual(response.status_code, 200)
+        length_query = parse_qs(urlparse(response.context["length_branch_url"]).query)
+        self.assertEqual(length_query["branch"], [str(self.alpha["taxon"].pk)])
+        self.assertNotIn("run", length_query)
+        codon_query = parse_qs(urlparse(response.context["codon_ratio_branch_url"]).query)
+        self.assertEqual(codon_query["branch"], [str(self.alpha["taxon"].pk)])
+        self.assertNotIn("run", codon_query)
 
     def test_genome_list_branch_filter_includes_descendant_taxa(self):
         response = self.client.get(reverse("browser:genome-list"), {"branch": str(self.mammalia.pk)})
@@ -1253,6 +1283,16 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, "Stored protein sequence")
         self.assertContains(response, "Q" * 30)
         self.assertContains(response, "CAG" * 30)
+        self.assertContains(response, "Compare branch lengths")
+        self.assertContains(response, "Compare branch codon ratios")
+        protein_length_query = parse_qs(urlparse(response.context["length_explorer_url"]).query)
+        self.assertEqual(protein_length_query["run"], ["run-alpha"])
+        self.assertEqual(protein_length_query["branch"], [str(self.alpha["taxon"].pk)])
+        self.assertEqual(protein_length_query["q"], ["GENE1"])
+        protein_codon_query = parse_qs(urlparse(response.context["codon_ratio_explorer_url"]).query)
+        self.assertEqual(protein_codon_query["run"], ["run-alpha"])
+        self.assertEqual(protein_codon_query["branch"], [str(self.alpha["taxon"].pk)])
+        self.assertEqual(protein_codon_query["q"], ["GENE1"])
         self.assertNotContains(response, "Open run")
 
     def test_repeatcall_list_combined_filters_and_branch_scope_work(self):
@@ -1508,4 +1548,19 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, matched["protein"].protein_name)
         self.assertContains(response, "GCF_ALPHA")
         self.assertContains(response, reverse("browser:sequence-detail", args=[matched["sequence"].pk]))
+        self.assertContains(response, "Compare branch lengths")
+        self.assertContains(response, "Compare branch codon ratios")
+        repeatcall_length_query = parse_qs(urlparse(response.context["length_explorer_url"]).query)
+        self.assertEqual(repeatcall_length_query["run"], ["run-alpha"])
+        self.assertEqual(repeatcall_length_query["branch"], [str(self.alpha["taxon"].pk)])
+        self.assertEqual(repeatcall_length_query["q"], ["DETAILGENE"])
+        self.assertEqual(repeatcall_length_query["method"], [RepeatCall.Method.THRESHOLD])
+        self.assertEqual(repeatcall_length_query["residue"], ["A"])
+        repeatcall_codon_query = parse_qs(urlparse(response.context["codon_ratio_explorer_url"]).query)
+        self.assertEqual(repeatcall_codon_query["run"], ["run-alpha"])
+        self.assertEqual(repeatcall_codon_query["branch"], [str(self.alpha["taxon"].pk)])
+        self.assertEqual(repeatcall_codon_query["q"], ["DETAILGENE"])
+        self.assertEqual(repeatcall_codon_query["method"], [RepeatCall.Method.THRESHOLD])
+        self.assertEqual(repeatcall_codon_query["residue"], ["A"])
+        self.assertEqual(repeatcall_codon_query["codon_metric_name"], ["codon_ratio"])
         self.assertNotContains(response, "Open run")

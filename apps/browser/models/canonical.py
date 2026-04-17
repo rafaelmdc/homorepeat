@@ -155,6 +155,7 @@ class CanonicalProtein(TimestampedModel):
                 fields=["accession", "protein_name", "id"],
                 name="brw_cprot_acc_name_id",
             ),
+            models.Index(fields=["protein_id"], name="brw_cprot_pid_idx"),
             models.Index(fields=["genome"], name="brw_cprot_genome_idx"),
             models.Index(fields=["taxon"], name="brw_cprot_taxon_idx"),
             models.Index(fields=["gene_symbol"], name="brw_cprot_gene_idx"),
@@ -220,6 +221,7 @@ class CanonicalRepeatCall(TimestampedModel):
     codon_sequence = models.TextField(blank=True)
     codon_metric_name = models.CharField(max_length=255, blank=True)
     codon_metric_value = models.CharField(max_length=255, blank=True)
+    codon_ratio_value = models.FloatField(blank=True, null=True)
     window_definition = models.CharField(max_length=255, blank=True)
     template_name = models.CharField(max_length=255, blank=True)
     merge_rule = models.CharField(max_length=255, blank=True)
@@ -251,6 +253,10 @@ class CanonicalRepeatCall(TimestampedModel):
             models.Index(fields=["taxon"], name="brw_crcall_taxon_idx"),
             models.Index(fields=["protein"], name="brw_crcall_protein_idx"),
             models.Index(fields=["length"], name="brw_crcall_length_idx"),
+            models.Index(
+                fields=["latest_pipeline_run", "taxon", "length"],
+                name="brw_crcall_run_tax_len_idx",
+            ),
             models.Index(
                 fields=["method", "repeat_residue", "accession", "id"],
                 name="brw_crcall_mra_idx",

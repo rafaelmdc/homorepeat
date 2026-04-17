@@ -1,0 +1,96 @@
+# Homorepeat General Views Plan
+
+## Purpose
+
+This directory is now the top-level planning surface for the first browser
+viewer family:
+
+1. `Length`
+2. `Codon Ratio`
+3. `Codon Ratio x Length`
+
+The goal is to define these viewers as one coherent system rather than as
+independent charts. The existing length explorer is the current implementation
+baseline, but it is only one slice of the intended viewer architecture.
+
+## Viewer model
+
+Each viewer follows the same 3-tier structure:
+
+- `Tier 1 - Overview`
+  - compressed
+  - lineage-aware
+  - binned and scalable
+- `Tier 2 - Browse`
+  - ranked or comparison-oriented
+  - filterable
+  - compact enough for many taxa
+- `Tier 3 - Inspect`
+  - one taxon, clade, or filtered subset
+  - more classical statistical charts
+
+This structure matters more than any single chart choice. The browser should
+default to lineage-aware, compact summaries rather than large raw-point views.
+
+## Current baseline
+
+- `Length` is technically implemented at `/browser/lengths/`.
+- The current length explorer already provides the reusable browser stats
+  foundation:
+  - `apps/browser/views/stats/lengths.py`
+  - `apps/browser/stats/filters.py`
+  - `apps/browser/stats/queries.py`
+  - `apps/browser/stats/summaries.py`
+  - `apps/browser/stats/payloads.py`
+  - `templates/browser/repeat_length_explorer.html`
+  - `static/js/repeat-length-explorer.js`
+- `Codon Ratio` and `Codon Ratio x Length` should build on that foundation
+  instead of inventing new page patterns.
+
+## First-wave priorities
+
+1. keep the current length explorer as the Tier 2 baseline and align it to the
+   general-views architecture
+2. centralize shared viewer rules and reuse points
+3. define the codon data contract so codon viewers do not depend on ad hoc
+   parsing of text metrics
+4. build the codon-ratio viewer on the shared stats surface
+5. build the codon-ratio x length viewer on the same filters, lineage helpers,
+   and binned-summary helpers
+
+## Directory map
+
+- `shared_foundation.md`
+  - rules and reusable implementation decisions shared by all first-wave
+    viewers
+- `length/overview.md`
+  - how the implemented length explorer fits the target viewer model
+- `length/slices.md`
+  - small, commit-sized next slices for the length viewer
+- `codon_ratio/overview.md`
+  - product definition and technical contract for the codon-ratio viewer
+- `codon_ratio/slices.md`
+  - small, commit-sized implementation slices for the codon-ratio viewer
+- `codon_ratio_x_length/overview.md`
+  - product definition for the flagship comparison viewer
+- `codon_ratio_x_length/slices.md`
+  - small, commit-sized implementation slices for the comparison viewer
+
+## Shared principles
+
+- keep one Django app: `apps.browser`
+- preserve `apps.browser.views` as the stable import surface
+- prefer the smallest reuse-friendly abstraction over broad framework work
+- keep filters normalized through the shared stats layer
+- never ship unbounded raw match sets to the browser
+- lineage-aware taxon ordering is mandatory for overview pages
+- codon viewers support all residues in the product, but codon summaries remain
+  residue-specific by default
+- use real biological values first and keep transformed statistical views as
+  secondary companion views
+
+## Deferred viewers
+
+`Purity`, `Position`, and their comparison pages remain second-wave work. They
+should reuse the same shared foundation once the first-wave viewer family is
+stable.

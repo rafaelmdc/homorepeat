@@ -23,6 +23,16 @@ def _env_list(name: str, default: list[str]) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def _env_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return default
+    try:
+        return int(value.strip())
+    except ValueError:
+        return default
+
+
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "replace-me")
 DEBUG = _env_flag("DJANGO_DEBUG", False)
 ALLOWED_HOSTS = _env_list("DJANGO_ALLOWED_HOSTS", ["localhost", "127.0.0.1"])
@@ -76,6 +86,7 @@ LANGUAGE_CODE = "en-us"
 TIME_ZONE = os.getenv("DJANGO_TIME_ZONE", "UTC")
 USE_TZ = True
 HOMOREPEAT_RUNS_ROOT = os.getenv("HOMOREPEAT_RUNS_ROOT", "").strip()
+HOMOREPEAT_BROWSER_STATS_CACHE_TTL = _env_int("HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60)
 
 if os.getenv("DATABASE_ENGINE", "").strip():
     DATABASES = {

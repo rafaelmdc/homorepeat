@@ -2,8 +2,8 @@ from django.db.models import Q
 from django.urls import reverse
 from django.views.generic import DetailView
 
-from ..models import Genome, PipelineRun, Protein, RepeatCall, Taxon, TaxonClosure
-from .filters import (
+from ...models import Genome, PipelineRun, Protein, RepeatCall, Taxon, TaxonClosure
+from ..filters import (
     _apply_branch_scope_filter,
     _branch_taxon_ids,
     _resolve_branch_scope,
@@ -11,8 +11,8 @@ from .filters import (
     _run_taxon_ids,
     _update_branch_scope_context,
 )
-from .navigation import _url_with_query
-from .pagination import VirtualScrollListView
+from ..navigation import _url_with_query
+from ..pagination import VirtualScrollListView
 
 
 class TaxonListView(VirtualScrollListView):
@@ -116,6 +116,16 @@ class TaxonDetailView(DetailView):
         context["linked_genomes"] = branch_genomes.order_by("accession", "pipeline_run__run_id")[:10]
         context["genome_branch_url"] = _url_with_query(
             reverse("browser:genome-list"),
+            run=current_run.run_id if current_run else None,
+            branch=taxon.pk,
+        )
+        context["length_branch_url"] = _url_with_query(
+            reverse("browser:lengths"),
+            run=current_run.run_id if current_run else None,
+            branch=taxon.pk,
+        )
+        context["codon_ratio_branch_url"] = _url_with_query(
+            reverse("browser:codon-ratios"),
             run=current_run.run_id if current_run else None,
             branch=taxon.pk,
         )

@@ -113,6 +113,76 @@ class ImportRunCommandTests(TestCase):
             self.assertEqual(ImportBatch.objects.get().phase, "completed")
             self.assertIsNotNone(ImportBatch.objects.get().heartbeat_at)
 
+    def test_import_run_parses_numeric_codon_ratio_value_for_raw_and_canonical_repeat_calls(self):
+        with TemporaryDirectory() as tempdir:
+            publish_root = build_minimal_publish_root(Path(tempdir), run_id="run-codon-ratio")
+            stdout = StringIO()
+            (publish_root / "calls" / "repeat_calls.tsv").write_text(
+                "call_id\tmethod\tgenome_id\ttaxon_id\tsequence_id\tprotein_id\tstart\tend\tlength\trepeat_residue\trepeat_count\tnon_repeat_count\tpurity\taa_sequence\tcodon_sequence\tcodon_metric_name\tcodon_metric_value\twindow_definition\ttemplate_name\tmerge_rule\tscore\n"
+                "call_1\tpure\tgenome_1\t9606\tseq_1\tprot_1\t10\t20\t11\tQ\t11\t0\t1.0\tQQQQQQQQQQQ\tCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAG\tcodon_ratio\t1.25\t\t\t\t\n",
+                encoding="utf-8",
+            )
+
+            call_command("import_run", publish_root=str(publish_root), stdout=stdout)
+
+            repeat_call = RepeatCall.objects.get()
+            canonical_repeat_call = CanonicalRepeatCall.objects.get()
+
+            self.assertEqual(repeat_call.codon_metric_value, "1.25")
+            self.assertEqual(repeat_call.codon_ratio_value, 1.25)
+            self.assertEqual(canonical_repeat_call.codon_metric_value, "1.25")
+            self.assertEqual(canonical_repeat_call.codon_ratio_value, 1.25)
+
+    def test_import_run_leaves_blank_and_invalid_codon_ratio_values_null(self):
+        with TemporaryDirectory() as tempdir:
+            publish_root = build_minimal_publish_root(Path(tempdir), run_id="run-codon-ratio-null")
+            stdout = StringIO()
+            (publish_root / "calls" / "repeat_calls.tsv").write_text(
+                "call_id\tmethod\tgenome_id\ttaxon_id\tsequence_id\tprotein_id\tstart\tend\tlength\trepeat_residue\trepeat_count\tnon_repeat_count\tpurity\taa_sequence\tcodon_sequence\tcodon_metric_name\tcodon_metric_value\twindow_definition\ttemplate_name\tmerge_rule\tscore\n"
+                "call_blank\tpure\tgenome_1\t9606\tseq_1\tprot_1\t10\t20\t11\tQ\t11\t0\t1.0\tQQQQQQQQQQQ\t\tcodon_ratio\t\t\t\t\t\n"
+                "call_invalid\tpure\tgenome_1\t9606\tseq_1\tprot_1\t30\t40\t11\tQ\t11\t0\t1.0\tQQQQQQQQQQQ\t\tcodon_ratio\tnot-a-number\t\t\t\t\n",
+                encoding="utf-8",
+            )
+            (publish_root / "status" / "accession_status.tsv").write_text(
+                "assembly_accession\tbatch_id\tdownload_status\tnormalize_status\ttranslate_status\tdetect_status\tfinalize_status\tterminal_status\tfailure_stage\tfailure_reason\tn_genomes\tn_proteins\tn_repeat_calls\tnotes\n"
+                "GCF_000001405.40\tbatch_0001\tsuccess\tsuccess\tsuccess\tsuccess\tsuccess\tcompleted\t\t\t1\t2\t2\t\n",
+                encoding="utf-8",
+            )
+            (publish_root / "status" / "accession_call_counts.tsv").write_text(
+                "assembly_accession\tbatch_id\tmethod\trepeat_residue\tdetect_status\tfinalize_status\tn_repeat_calls\n"
+                "GCF_000001405.40\tbatch_0001\tpure\tQ\tsuccess\tsuccess\t2\n",
+                encoding="utf-8",
+            )
+
+            call_command("import_run", publish_root=str(publish_root), stdout=stdout)
+
+            self.assertEqual(
+                list(
+                    RepeatCall.objects.order_by("call_id").values_list(
+                        "call_id",
+                        "codon_metric_value",
+                        "codon_ratio_value",
+                    )
+                ),
+                [
+                    ("call_blank", "", None),
+                    ("call_invalid", "not-a-number", None),
+                ],
+            )
+            self.assertEqual(
+                list(
+                    CanonicalRepeatCall.objects.order_by("source_call_id").values_list(
+                        "source_call_id",
+                        "codon_metric_value",
+                        "codon_ratio_value",
+                    )
+                ),
+                [
+                    ("call_blank", "", None),
+                    ("call_invalid", "not-a-number", None),
+                ],
+            )
+
     def test_import_run_keeps_matched_sequences_and_proteins_but_counts_all_batch_proteins(self):
         with TemporaryDirectory() as tempdir:
             publish_root = build_multibatch_publish_root(Path(tempdir), run_id="run-multi-batch-retained")
@@ -252,6 +322,52 @@ class ImportRunCommandTests(TestCase):
                     "facets": {
                         "methods": [RunParameter.Method.SEED_EXTEND],
                         "residues": ["A"],
+                    },
+                },
+            )
+
+    def test_import_run_keeps_raw_rows_when_canonical_sync_fails(self):
+        with TemporaryDirectory() as tempdir:
+            publish_root = build_minimal_publish_root(Path(tempdir), run_id="run-sync-failed")
+            stdout = StringIO()
+
+            with patch(
+                "apps.imports.services.import_run.api.sync_canonical_catalog_for_run",
+                side_effect=RuntimeError("sync boom"),
+            ):
+                with self.assertRaises(RuntimeError):
+                    call_command("import_run", publish_root=str(publish_root), stdout=stdout)
+
+            pipeline_run = PipelineRun.objects.get(run_id="run-sync-failed")
+            batch = ImportBatch.objects.get()
+
+            self.assertEqual(batch.status, ImportBatch.Status.FAILED)
+            self.assertEqual(batch.pipeline_run, pipeline_run)
+            self.assertEqual(batch.error_message, "sync boom")
+            self.assertEqual(Genome.objects.count(), 1)
+            self.assertEqual(Sequence.objects.count(), 1)
+            self.assertEqual(Protein.objects.count(), 1)
+            self.assertEqual(RepeatCall.objects.count(), 1)
+            self.assertEqual(CanonicalGenome.objects.count(), 0)
+            self.assertEqual(CanonicalSequence.objects.count(), 0)
+            self.assertEqual(CanonicalProtein.objects.count(), 0)
+            self.assertEqual(CanonicalRepeatCall.objects.count(), 0)
+            self.assertEqual(
+                pipeline_run.browser_metadata,
+                {
+                    "raw_counts": {
+                        "genomes": 1,
+                        "sequences": 1,
+                        "proteins": 1,
+                        "repeat_calls": 1,
+                        "accession_status_rows": 1,
+                        "accession_call_count_rows": 1,
+                        "download_manifest_entries": 1,
+                        "normalization_warnings": 0,
+                    },
+                    "facets": {
+                        "methods": [RunParameter.Method.PURE],
+                        "residues": ["Q"],
                     },
                 },
             )

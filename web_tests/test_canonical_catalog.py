@@ -367,6 +367,35 @@ class CatalogSyncTests(TestCase):
         self.assertFalse(CanonicalRepeatCall.objects.filter(protein=canonical_protein, method=RunParameter.Method.PURE).exists())
         self.assertEqual(canonical_protein.repeat_call_count, 0)
 
+    def test_sync_preserves_numeric_codon_ratio_value(self):
+        raw = self._create_raw_run(
+            run_id="run-codon-ratio",
+            accession="GCF_000001405.40",
+            genome_name="Genome alpha",
+            protein_name="Protein alpha",
+            methods=[RunParameter.Method.PURE],
+            calls=[
+                {
+                    "call_id": "call_alpha",
+                    "method": RunParameter.Method.PURE,
+                    "start": 10,
+                    "end": 20,
+                    "repeat_residue": "Q",
+                    "codon_metric_name": "codon_ratio",
+                    "codon_metric_value": "1.5",
+                    "codon_ratio_value": 1.5,
+                }
+            ],
+        )
+
+        sync_canonical_catalog_for_run(raw["pipeline_run"], import_batch=raw["import_batch"])
+
+        canonical_repeat_call = CanonicalRepeatCall.objects.get()
+
+        self.assertEqual(canonical_repeat_call.codon_metric_name, "codon_ratio")
+        self.assertEqual(canonical_repeat_call.codon_metric_value, "1.5")
+        self.assertEqual(canonical_repeat_call.codon_ratio_value, 1.5)
+
     def _create_raw_run(
         self,
         *,
@@ -476,6 +505,9 @@ class CatalogSyncTests(TestCase):
                     non_repeat_count=0,
                     purity=1.0,
                     aa_sequence=call["repeat_residue"] * ((call["end"] - call["start"]) + 1),
+                    codon_metric_name=call.get("codon_metric_name", ""),
+                    codon_metric_value=call.get("codon_metric_value", ""),
+                    codon_ratio_value=call.get("codon_ratio_value"),
                 )
             )
 

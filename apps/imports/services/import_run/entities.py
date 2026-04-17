@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from math import isfinite
 from typing import Iterable
 
 from django.utils import timezone
@@ -34,6 +35,22 @@ def _delete_run_scoped_rows(pipeline_run: PipelineRun) -> None:
     pipeline_run.run_parameters.all().delete()
     pipeline_run.genomes.all().delete()
     pipeline_run.acquisition_batches.all().delete()
+
+
+def _parse_codon_ratio_value(raw_value: object) -> float | None:
+    if raw_value is None:
+        return None
+
+    text = str(raw_value).strip()
+    if not text:
+        return None
+
+    try:
+        parsed = float(text)
+    except (TypeError, ValueError):
+        return None
+
+    return parsed if isfinite(parsed) else None
 
 
 def _load_genome_rows(inspected: InspectedPublishedRun) -> list[dict[str, object]]:
@@ -304,6 +321,7 @@ def _create_repeat_calls(
                 codon_sequence=str(row.get("codon_sequence", "")),
                 codon_metric_name=str(row.get("codon_metric_name", "")),
                 codon_metric_value=str(row.get("codon_metric_value", "")),
+                codon_ratio_value=_parse_codon_ratio_value(row.get("codon_metric_value", "")),
                 window_definition=str(row.get("window_definition", "")),
                 template_name=str(row.get("template_name", "")),
                 merge_rule=str(row.get("merge_rule", "")),
@@ -735,6 +753,7 @@ def _create_repeat_calls_streamed(
             "codon_sequence",
             "codon_metric_name",
             "codon_metric_value",
+            "codon_ratio_value",
             "window_definition",
             "template_name",
             "merge_rule",
@@ -767,6 +786,7 @@ def _create_repeat_calls_streamed(
                 str(row.get("codon_sequence", "")),
                 str(row.get("codon_metric_name", "")),
                 str(row.get("codon_metric_value", "")),
+                _parse_codon_ratio_value(row.get("codon_metric_value", "")),
                 str(row.get("window_definition", "")),
                 str(row.get("template_name", "")),
                 str(row.get("merge_rule", "")),
@@ -825,6 +845,7 @@ def _create_repeat_calls_streamed(
                 codon_sequence=str(row.get("codon_sequence", "")),
                 codon_metric_name=str(row.get("codon_metric_name", "")),
                 codon_metric_value=str(row.get("codon_metric_value", "")),
+                codon_ratio_value=_parse_codon_ratio_value(row.get("codon_metric_value", "")),
                 window_definition=str(row.get("window_definition", "")),
                 template_name=str(row.get("template_name", "")),
                 merge_rule=str(row.get("merge_rule", "")),
