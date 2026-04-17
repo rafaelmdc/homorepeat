@@ -272,6 +272,76 @@
     };
   }
 
+  function heatmapValueBounds(payload) {
+    const minimum = numericValue(payload ? payload.valueMin : undefined, 0);
+    const maximum = numericValue(payload ? payload.valueMax : undefined, 1);
+    if (minimum === maximum) {
+      const padding = minimum === 0 ? 0.1 : Math.abs(minimum) * 0.1;
+      return [Math.max(0, minimum - padding), maximum + padding];
+    }
+    return [minimum, maximum];
+  }
+
+  function buildHeatmapEmptyOption(payload) {
+    const taxonCount = numericValue(payload ? payload.visibleTaxaCount : undefined, 0);
+    const binCount = numericValue(payload ? payload.visibleBinCount : undefined, 0);
+    const summaryLabel = taxonCount > 0 || binCount > 0
+      ? `${taxonCount} taxa across ${binCount} bins ready for overview rendering`
+      : "Adjust the filters to populate the overview";
+
+    return {
+      animation: false,
+      grid: {
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: 16,
+      },
+      xAxis: {
+        type: "value",
+        min: 0,
+        max: 1,
+        show: false,
+      },
+      yAxis: {
+        type: "value",
+        min: 0,
+        max: 1,
+        show: false,
+      },
+      series: [],
+      tooltip: {
+        show: false,
+      },
+      graphic: [
+        {
+          type: "text",
+          left: "center",
+          top: "42%",
+          style: {
+            text: summaryLabel,
+            fontSize: 20,
+            fontWeight: 700,
+            fill: TEXT_COLOR,
+            textAlign: "center",
+          },
+        },
+        {
+          type: "text",
+          left: "center",
+          top: "54%",
+          style: {
+            text: "Median codon ratio per taxon and repeat-length bin",
+            fontSize: 14,
+            fontWeight: 500,
+            fill: MUTED_TEXT_COLOR,
+            textAlign: "center",
+          },
+        },
+      ],
+    };
+  }
+
   function buildTooltip(row, { focusedMode = false } = {}) {
     const lines = [
       `<strong>${row.taxonName}</strong>`,
@@ -284,6 +354,21 @@
       lines.push(`Focused view clips max whisker at ${formatCodonRatioValue(row.displayMax)}`);
     }
     return lines.join("<br>");
+  }
+
+  function heatmapTaxonForRowIndex(taxa, rowIndex) {
+    return taxa.find((taxon) => String(taxon.rowIndex) === String(rowIndex)) || null;
+  }
+
+  function buildHeatmapTooltip(cell) {
+    return [
+      `<strong>${cell.taxonName}</strong>`,
+      `Length bin: ${cell.binLabel}`,
+      `Observations: ${cell.observationCount}`,
+      `Median: ${formatCodonRatioValue(cell.median)}`,
+      `IQR: ${formatCodonRatioValue(cell.q1)}-${formatCodonRatioValue(cell.q3)}`,
+      `Min-Max: ${formatCodonRatioValue(cell.min)}-${formatCodonRatioValue(cell.max)}`,
+    ].join("<br>");
   }
 
   function markerPoint(row, rowIndex, xValue) {
@@ -548,6 +633,147 @@
     };
   }
 
+  function buildHeatmapOption(payload) {
+    const taxa = Array.isArray(payload && payload.taxa) ? payload.taxa : [];
+    const bins = Array.isArray(payload && payload.bins) ? payload.bins : [];
+    const cells = Array.isArray(payload && payload.cells) ? payload.cells : [];
+
+    if (cells.length === 0) {
+      return buildHeatmapEmptyOption(payload);
+    }
+
+    const showTaxonLabels = shouldShowTaxonLabels(taxa.length);
+    const showObservationCounts = shouldShowObservationCounts(taxa.length);
+    const [valueMin, valueMax] = heatmapValueBounds(payload);
+
+    return {
+      animationDuration: 250,
+      animationDurationUpdate: 150,
+      grid: {
+        left: 188,
+        right: 20,
+        top: 20,
+        bottom: 104,
+        containLabel: false,
+      },
+      tooltip: {
+        trigger: "item",
+        confine: true,
+        backgroundColor: "rgba(255, 253, 249, 0.98)",
+        borderColor: "rgba(23, 36, 44, 0.12)",
+        borderWidth: 1,
+        textStyle: {
+          color: TEXT_COLOR,
+          fontSize: 13,
+        },
+        formatter(params) {
+          if (!params.data || !params.data.cell) {
+            return "";
+          }
+          return buildHeatmapTooltip(params.data.cell);
+        },
+      },
+      xAxis: {
+        type: "category",
+        data: bins.map((lengthBin) => String(lengthBin.columnIndex)),
+        position: "top",
+        axisTick: {
+          show: false,
+        },
+        axisLine: {
+          show: false,
+        },
+        axisLabel: {
+          color: MUTED_TEXT_COLOR,
+          interval: 0,
+          rotate: bins.length > 8 ? 30 : 0,
+          formatter(value) {
+            const lengthBin = bins[Number(value)];
+            return lengthBin ? lengthBin.label : "";
+          },
+        },
+        splitArea: {
+          show: false,
+        },
+      },
+      yAxis: {
+        type: "category",
+        data: taxa.map((taxon) => String(taxon.rowIndex)),
+        axisTick: {
+          show: false,
+        },
+        axisLine: {
+          show: false,
+        },
+        axisLabel: {
+          show: showTaxonLabels,
+          interval: showTaxonLabels ? 0 : "auto",
+          color: TEXT_COLOR,
+          fontWeight: 700,
+          lineHeight: 17,
+          margin: 16,
+          rich: {
+            taxon: {
+              color: TEXT_COLOR,
+              fontWeight: 700,
+            },
+            count: {
+              color: MUTED_TEXT_COLOR,
+              fontSize: 12,
+              fontWeight: 600,
+            },
+          },
+          formatter(value) {
+            const taxon = heatmapTaxonForRowIndex(taxa, value);
+            if (!taxon) {
+              return "";
+            }
+            if (!showObservationCounts) {
+              return `{taxon|${truncateTaxonName(taxon.taxonName)}}`;
+            }
+            return `{taxon|${truncateTaxonName(taxon.taxonName)}}\n{count|n=${taxon.observationCount}}`;
+          },
+        },
+      },
+      visualMap: {
+        min: valueMin,
+        max: valueMax,
+        calculable: true,
+        orient: "horizontal",
+        left: "center",
+        bottom: 24,
+        text: ["Higher median", "Lower median"],
+        textStyle: {
+          color: MUTED_TEXT_COLOR,
+        },
+        inRange: {
+          color: ["#fcf7ed", "#dcebef", "#7cb4b7", "#0f5964"],
+        },
+      },
+      series: [
+        {
+          name: "Median codon ratio",
+          type: "heatmap",
+          data: cells.map((cell) => ({
+            value: [cell.binIndex, cell.taxonIndex, cell.value],
+            cell,
+          })),
+          progressive: 0,
+          itemStyle: {
+            borderColor: "rgba(255, 255, 255, 0.8)",
+            borderWidth: 1,
+          },
+          emphasis: {
+            itemStyle: {
+              borderColor: TEXT_COLOR,
+              borderWidth: 1.5,
+            },
+          },
+        },
+      ],
+    };
+  }
+
   function openBranchExplorer(rows, rowIndex) {
     const row = rows[rowIndex];
     if (!row || !row.branchExplorerUrl) {
@@ -668,6 +894,23 @@
     });
   }
 
+  function mountCodonOverviewHeatmap() {
+    const container = document.getElementById("codon-ratio-heatmap");
+    const payload = parsePayload("codon-ratio-heatmap-payload");
+    if (!container || !payload || typeof window.echarts === "undefined") {
+      return;
+    }
+
+    container.style.height = `${chartHeightForRowCount(payload.visibleTaxaCount || 0)}px`;
+
+    const chart = window.echarts.init(container, null, { renderer: "svg" });
+    chart.setOption(buildHeatmapOption(payload), { notMerge: true });
+
+    window.addEventListener("resize", () => {
+      chart.resize();
+    });
+  }
+
   function installScrollPreservingLinks() {
     document.querySelectorAll("[data-preserve-scroll-link]").forEach((link) => {
       link.addEventListener("click", (event) => {
@@ -683,6 +926,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", () => {
+    mountCodonOverviewHeatmap();
     mountCodonRatioChart();
     installScrollPreservingLinks();
     restorePendingScrollPosition();

@@ -4,6 +4,8 @@ from django.views.generic import TemplateView
 from apps.browser.stats import (
     apply_stats_filter_context,
     build_available_codon_metric_names,
+    build_codon_heatmap_payload,
+    build_codon_heatmap_summary_bundle,
     build_filtered_repeat_call_queryset,
     build_ranked_codon_chart_payload,
     build_ranked_codon_summary_bundle,
@@ -32,6 +34,11 @@ class CodonRatioExplorerView(TemplateView):
                 "summary_rows": [self._with_row_links(row) for row in summary_bundle["summary_rows"]],
             }
         return self._summary_bundle
+
+    def _get_heatmap_summary_bundle(self) -> dict[str, object]:
+        if not hasattr(self, "_heatmap_summary_bundle"):
+            self._heatmap_summary_bundle = build_codon_heatmap_summary_bundle(self._get_filter_state())
+        return self._heatmap_summary_bundle
 
     def _get_matching_repeat_calls_without_codon_count(self) -> int:
         if not hasattr(self, "_matching_repeat_calls_without_codon_count"):
@@ -140,6 +147,7 @@ class CodonRatioExplorerView(TemplateView):
         facet_choices = self._get_facet_choices()
         summary_bundle = self._get_summary_bundle()
         summary_rows = summary_bundle["summary_rows"]
+        heatmap_summary_bundle = self._get_heatmap_summary_bundle()
         available_codon_metric_names = self._get_available_codon_metric_names()
         matching_repeat_calls_without_codon_count = self._get_matching_repeat_calls_without_codon_count()
 
@@ -149,6 +157,9 @@ class CodonRatioExplorerView(TemplateView):
         context["summary_rows"] = summary_rows
         context["total_taxa_count"] = summary_bundle["total_taxa_count"]
         context["visible_taxa_count"] = summary_bundle["visible_taxa_count"]
+        context["heatmap_payload"] = build_codon_heatmap_payload(heatmap_summary_bundle["summary_rows"])
+        context["heatmap_payload_id"] = "codon-ratio-heatmap-payload"
+        context["heatmap_container_id"] = "codon-ratio-heatmap"
         context["chart_payload"] = build_ranked_codon_chart_payload(summary_rows)
         context["chart_payload_id"] = "codon-ratio-chart-payload"
         context["chart_container_id"] = "codon-ratio-chart"

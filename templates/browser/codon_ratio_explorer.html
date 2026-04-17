@@ -123,6 +123,22 @@
 <section class="surface-card surface-card-wide mb-4">
   <div class="section-header">
     <div>
+      <p class="section-kicker mb-2">Overview layer</p>
+      <h2>Taxon x length-bin codon overview</h2>
+      <p class="text-secondary mb-0">Color encodes median codon ratio across lineage-ordered taxa and normalized repeat-length bins for the current visible set. Showing {{ heatmap_payload.visibleTaxaCount }} taxon{{ heatmap_payload.visibleTaxaCount|pluralize }} across {{ heatmap_payload.visibleBinCount }} visible length bin{{ heatmap_payload.visibleBinCount|pluralize }}.</p>
+    </div>
+  </div>
+
+  {{ heatmap_payload|json_script:heatmap_payload_id }}
+  <div class="length-chart-shell" id="{{ heatmap_container_id }}"></div>
+  <noscript>
+    <p class="surface-note mb-0 mt-3">JavaScript is disabled, so the grouped summary table remains the active fallback view.</p>
+  </noscript>
+</section>
+
+<section class="surface-card surface-card-wide mb-4">
+  <div class="section-header">
+    <div>
       <p class="section-kicker mb-2">Chart layer</p>
       <h2>Ranked codon-ratio distributions for the visible taxa</h2>
       <p class="text-secondary mb-0">Each row shows min, lower quartile, median, upper quartile, and max for the same bounded taxa listed in the summary table. Click a chart row to reopen the explorer scoped to that branch.</p>

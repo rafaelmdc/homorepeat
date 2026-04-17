@@ -45,10 +45,11 @@ class BrowserCodonRatioExplorerTests(TestCase):
         codon_metric_name,
         codon_ratio_value,
         method=RepeatCall.Method.PURE,
+        length=11,
     ):
         repeat_call_values = build_test_repeat_call_values(
             residue=residue,
-            length=11,
+            length=length,
             purity=1.0,
             codon_metric_name=codon_metric_name,
             codon_ratio_value=codon_ratio_value,
@@ -66,8 +67,8 @@ class BrowserCodonRatioExplorerTests(TestCase):
             protein_name=run_data["protein"].protein_name,
             protein_length=run_data["protein"].protein_length,
             start=30 + (len(suffix) * 20),
-            end=40 + (len(suffix) * 20),
-            length=11,
+            end=(30 + (len(suffix) * 20)) + length - 1,
+            length=length,
             repeat_residue=residue,
             repeat_count=repeat_call_values["repeat_count"],
             non_repeat_count=repeat_call_values["non_repeat_count"],
@@ -120,15 +121,23 @@ class BrowserCodonRatioExplorerTests(TestCase):
         self.assertEqual(response.context["total_taxa_count"], 0)
         self.assertEqual(response.context["visible_taxa_count"], 0)
         self.assertEqual(response.context["summary_rows"], [])
+        self.assertEqual(response.context["heatmap_payload"]["taxa"], [])
+        self.assertEqual(response.context["heatmap_payload"]["bins"], [])
+        self.assertEqual(response.context["heatmap_payload"]["cells"], [])
+        self.assertEqual(response.context["heatmap_payload"]["visibleTaxaCount"], 0)
+        self.assertEqual(response.context["heatmap_payload"]["visibleBinCount"], 0)
         self.assertEqual(response.context["chart_payload"]["rows"], [])
         self.assertEqual(response.context["chart_payload"]["visibleTaxaCount"], 0)
         self.assertEqual(response.context["available_codon_metric_names"], ["codon_ratio"])
         self.assertFalse(response.context["show_codon_metric_selector"])
         self.assertNotContains(response, 'id="id_codon_metric_name"')
+        self.assertContains(response, 'id="codon-ratio-heatmap-payload"')
+        self.assertContains(response, 'id="codon-ratio-heatmap"')
         self.assertContains(response, 'id="codon-ratio-chart-payload"')
         self.assertContains(response, 'id="codon-ratio-chart"')
         self.assertContains(response, "repeat-codon-ratio-explorer.js")
         self.assertContains(response, "echarts.min.js")
+        self.assertContains(response, "Taxon x length-bin codon overview")
         self.assertContains(response, "Ranked codon-ratio distributions for the visible taxa")
         self.assertContains(response, 'data-chart-mode-switch')
         self.assertContains(response, 'data-chart-mode-button')
@@ -167,6 +176,12 @@ class BrowserCodonRatioExplorerTests(TestCase):
         self.assertEqual(summary_rows[0]["min_codon_ratio"], 1.25)
         self.assertEqual(summary_rows[0]["median"], 1.25)
         self.assertEqual(summary_rows[0]["max_codon_ratio"], 1.25)
+        heatmap_payload = response.context["heatmap_payload"]
+        self.assertEqual(heatmap_payload["visibleTaxaCount"], 1)
+        self.assertEqual(heatmap_payload["visibleBinCount"], 1)
+        self.assertEqual(heatmap_payload["taxa"][0]["taxonName"], "Mammalia")
+        self.assertEqual(heatmap_payload["bins"][0]["label"], "10-14")
+        self.assertEqual(heatmap_payload["cells"][0]["value"], 1.25)
         chart_payload = response.context["chart_payload"]
         self.assertEqual(chart_payload["visibleTaxaCount"], 1)
         self.assertEqual(chart_payload["x_min"], 1.25)
@@ -174,6 +189,48 @@ class BrowserCodonRatioExplorerTests(TestCase):
         self.assertEqual(chart_payload["rows"][0]["taxonName"], "Mammalia")
         self.assertIn("branchExplorerUrl", chart_payload["rows"][0])
         self.assertIn("taxonDetailUrl", chart_payload["rows"][0])
+
+    def test_codon_ratio_explorer_renders_overview_heatmap_payload(self):
+        self._create_repeat_call(
+            self.beta,
+            suffix="beta_long_ratio",
+            residue="Q",
+            codon_metric_name="codon_ratio",
+            codon_ratio_value=0.8,
+            length=22,
+        )
+
+        response = self.client.get(
+            reverse("browser:codon-ratios"),
+            {
+                "rank": "species",
+                "min_count": "1",
+                "top_n": "10",
+                "residue": "q",
+                "codon_metric_name": "codon_ratio",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        heatmap_payload = response.context["heatmap_payload"]
+        self.assertEqual(heatmap_payload["visibleTaxaCount"], 2)
+        self.assertEqual(heatmap_payload["visibleBinCount"], 3)
+        self.assertEqual(
+            [taxon["taxonName"] for taxon in heatmap_payload["taxa"]],
+            ["Homo sapiens", "Mus musculus"],
+        )
+        self.assertEqual(
+            [length_bin["label"] for length_bin in heatmap_payload["bins"]],
+            ["10-14", "15-19", "20-24"],
+        )
+        self.assertEqual(
+            heatmap_payload["seriesData"],
+            [
+                [0, 0, 1.25],
+                [0, 1, 1.25],
+                [2, 1, 0.8],
+            ],
+        )
 
     def test_codon_ratio_explorer_branch_link_preserves_relevant_filter_state(self):
         response = self.client.get(
