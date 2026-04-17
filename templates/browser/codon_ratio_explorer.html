@@ -1,7 +1,12 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Codon Ratios{% endblock %}
 {% block body_class %}codon-ratio-explorer-page{% endblock %}
+{% block extra_scripts %}
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <script src="{% static 'js/repeat-codon-ratio-explorer.js' %}"></script>
+{% endblock %}
 
 {% block content %}
 <section class="landing-band mb-4">
@@ -118,6 +123,27 @@
 <section class="surface-card surface-card-wide mb-4">
   <div class="section-header">
     <div>
+      <p class="section-kicker mb-2">Chart layer</p>
+      <h2>Ranked codon-ratio distributions for the visible taxa</h2>
+      <p class="text-secondary mb-0">Each row shows min, lower quartile, median, upper quartile, and max for the same bounded taxa listed in the summary table. Click a chart row to reopen the explorer scoped to that branch.</p>
+    </div>
+    <div class="mode-switch" data-chart-mode-switch>
+      <span class="mode-switch-label">View</span>
+      <button class="btn btn-brand" type="button" data-chart-mode-button data-chart-mode="focused" aria-pressed="true">Focused</button>
+      <button class="btn btn-outline-secondary" type="button" data-chart-mode-button data-chart-mode="full-range" aria-pressed="false">Full range</button>
+    </div>
+  </div>
+
+  {{ chart_payload|json_script:chart_payload_id }}
+  <div class="length-chart-shell" id="{{ chart_container_id }}"></div>
+  <noscript>
+    <p class="surface-note mb-0 mt-3">JavaScript is disabled, so the summary table remains the active view.</p>
+  </noscript>
+</section>
+
+<section class="surface-card surface-card-wide mb-4">
+  <div class="section-header">
+    <div>
       <p class="section-kicker mb-2">Current filter scope</p>
       <h2>{{ matching_repeat_calls_count }} matching canonical repeat call{{ matching_repeat_calls_count|pluralize }} with numeric codon ratios</h2>
       <p class="text-secondary mb-0">Grouped taxon summaries below stay bounded by the current display rank, minimum observation threshold, and Top N limit.</p>
@@ -160,9 +186,9 @@
           <th>Actions</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody data-summary-table-body>
         {% for row in summary_rows %}
-          <tr>
+          <tr data-summary-row>
             <td><a href="{{ row.taxon_detail_url }}">{{ row.taxon_name }}</a></td>
             <td>{{ row.rank }}</td>
             <td>{{ row.observation_count }}</td>
@@ -174,7 +200,7 @@
             <td>
               <div class="d-flex flex-wrap gap-2">
                 <a class="btn btn-outline-secondary btn-sm" href="{{ row.taxon_detail_url }}">Taxon</a>
-                <a class="btn btn-outline-dark btn-sm" href="{{ row.branch_explorer_url }}">Open branch</a>
+                <a class="btn btn-outline-dark btn-sm" href="{{ row.branch_explorer_url }}" data-preserve-scroll-link>Open branch</a>
               </div>
             </td>
           </tr>

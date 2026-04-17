@@ -5,6 +5,7 @@ from apps.browser.stats import (
     apply_stats_filter_context,
     build_available_codon_metric_names,
     build_filtered_repeat_call_queryset,
+    build_ranked_codon_chart_payload,
     build_ranked_codon_summary_bundle,
     build_stats_filter_state,
 )
@@ -148,6 +149,9 @@ class CodonRatioExplorerView(TemplateView):
         context["summary_rows"] = summary_rows
         context["total_taxa_count"] = summary_bundle["total_taxa_count"]
         context["visible_taxa_count"] = summary_bundle["visible_taxa_count"]
+        context["chart_payload"] = build_ranked_codon_chart_payload(summary_rows)
+        context["chart_payload_id"] = "codon-ratio-chart-payload"
+        context["chart_container_id"] = "codon-ratio-chart"
         context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
         context["rank_choices"] = [
             {"value": rank, "label": rank}

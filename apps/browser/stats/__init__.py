@@ -1,5 +1,5 @@
 from .filters import StatsFilterState, apply_stats_filter_context, build_stats_filter_state
-from .payloads import build_ranked_length_chart_payload
+from .payloads import build_ranked_codon_chart_payload, build_ranked_length_chart_payload
 from .queries import (
     build_available_codon_metric_names,
     build_filtered_repeat_call_queryset,
@@ -27,6 +27,7 @@ __all__ = [
     "build_group_codon_ratio_values_queryset",
     "build_group_length_values_queryset",
     "build_length_summary",
+    "build_ranked_codon_chart_payload",
     "build_ranked_codon_summary_bundle",
     "build_ranked_codon_summary_queryset",
     "build_ranked_length_chart_payload",

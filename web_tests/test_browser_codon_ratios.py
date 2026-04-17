@@ -120,11 +120,20 @@ class BrowserCodonRatioExplorerTests(TestCase):
         self.assertEqual(response.context["total_taxa_count"], 0)
         self.assertEqual(response.context["visible_taxa_count"], 0)
         self.assertEqual(response.context["summary_rows"], [])
+        self.assertEqual(response.context["chart_payload"]["rows"], [])
+        self.assertEqual(response.context["chart_payload"]["visibleTaxaCount"], 0)
         self.assertEqual(response.context["available_codon_metric_names"], ["codon_ratio"])
         self.assertFalse(response.context["show_codon_metric_selector"])
         self.assertNotContains(response, 'id="id_codon_metric_name"')
-        self.assertNotContains(response, "repeat-length-explorer.js")
-        self.assertNotContains(response, "echarts.min.js")
+        self.assertContains(response, 'id="codon-ratio-chart-payload"')
+        self.assertContains(response, 'id="codon-ratio-chart"')
+        self.assertContains(response, "repeat-codon-ratio-explorer.js")
+        self.assertContains(response, "echarts.min.js")
+        self.assertContains(response, "Ranked codon-ratio distributions for the visible taxa")
+        self.assertContains(response, 'data-chart-mode-switch')
+        self.assertContains(response, 'data-chart-mode-button')
+        self.assertContains(response, 'data-chart-mode="focused"')
+        self.assertContains(response, 'data-chart-mode="full-range"')
         self.assertContains(
             response,
             "No taxa reached the current display rank and minimum observation threshold.",
@@ -158,6 +167,13 @@ class BrowserCodonRatioExplorerTests(TestCase):
         self.assertEqual(summary_rows[0]["min_codon_ratio"], 1.25)
         self.assertEqual(summary_rows[0]["median"], 1.25)
         self.assertEqual(summary_rows[0]["max_codon_ratio"], 1.25)
+        chart_payload = response.context["chart_payload"]
+        self.assertEqual(chart_payload["visibleTaxaCount"], 1)
+        self.assertEqual(chart_payload["x_min"], 1.25)
+        self.assertEqual(chart_payload["x_max"], 1.25)
+        self.assertEqual(chart_payload["rows"][0]["taxonName"], "Mammalia")
+        self.assertIn("branchExplorerUrl", chart_payload["rows"][0])
+        self.assertIn("taxonDetailUrl", chart_payload["rows"][0])
 
     def test_codon_ratio_explorer_branch_link_preserves_relevant_filter_state(self):
         response = self.client.get(
@@ -196,6 +212,10 @@ class BrowserCodonRatioExplorerTests(TestCase):
         self.assertEqual(branch_query["min_count"], ["1"])
         self.assertEqual(branch_query["top_n"], ["10"])
         self.assertEqual(branch_query["rank"], ["order"])
+        self.assertEqual(
+            response.context["chart_payload"]["rows"][0]["branchExplorerUrl"],
+            row["branch_explorer_url"],
+        )
 
     def test_codon_ratio_explorer_shows_metric_selector_only_when_scope_has_multiple_metrics(self):
         self._create_repeat_call(
@@ -253,3 +273,10 @@ class BrowserCodonRatioExplorerTests(TestCase):
             response,
             "Canonical repeat calls matched these filters, but none carried numeric codon ratios.",
         )
+
+    def test_codon_ratio_chart_assets_are_page_local(self):
+        response = self.client.get(reverse("browser:home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "repeat-codon-ratio-explorer.js")
+        self.assertNotContains(response, "echarts.min.js")
