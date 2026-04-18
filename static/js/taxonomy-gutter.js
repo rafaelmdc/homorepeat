@@ -174,6 +174,26 @@
     return numericValue(grid ? grid.left : undefined, 0);
   }
 
+  function gridRect(chart) {
+    try {
+      const model = chart.getModel ? chart.getModel() : null;
+      const gridComponent = model && model.getComponent ? model.getComponent("grid", 0) : null;
+      const coordinateSystem = gridComponent ? gridComponent.coordinateSystem : null;
+      const rect = coordinateSystem && coordinateSystem.getRect ? coordinateSystem.getRect() : null;
+      if (!rect) {
+        return null;
+      }
+      return {
+        x: numericValue(rect.x, 0),
+        y: numericValue(rect.y, 0),
+        width: numericValue(rect.width, 0),
+        height: numericValue(rect.height, 0),
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
   function ensureTooltip(chart) {
     if (typeof document === "undefined") {
       return null;
@@ -240,10 +260,25 @@
     tooltip.style.top = `${top}px`;
   }
 
-  function visibleLeafRange(chart, payload) {
+  function visibleLeafRange(chart, payload, options = {}) {
     const leafCount = payload.leaves.length;
     if (leafCount < 1) {
       return null;
+    }
+
+    const explicitZoomState = options.zoomState || null;
+    if (explicitZoomState) {
+      const start = clamp(
+        Math.round(numericValue(explicitZoomState.startValue, 0)),
+        0,
+        leafCount - 1,
+      );
+      const end = clamp(
+        Math.round(numericValue(explicitZoomState.endValue, leafCount - 1)),
+        start,
+        leafCount - 1,
+      );
+      return { start, end };
     }
 
     const option = chart.getOption();
@@ -276,11 +311,16 @@
   }
 
   function buildVisibleState(chart, payload, options) {
-    const range = visibleLeafRange(chart, payload);
+    const range = visibleLeafRange(chart, payload, options);
     if (!range) {
       return null;
     }
 
+    const currentGridRect = gridRect(chart);
+    const visibleLeafCount = (range.end - range.start) + 1;
+    const rowBandHeight = currentGridRect && visibleLeafCount > 0
+      ? currentGridRect.height / visibleLeafCount
+      : null;
     const visibleLeaves = [];
     const rowYByIndex = new Map();
     const leafByNodeId = new Map();
@@ -288,7 +328,9 @@
       if (leaf.rowIndex < range.start || leaf.rowIndex > range.end) {
         return;
       }
-      const y = chart.convertToPixel({ yAxisIndex: 0 }, leaf.axisValue);
+      const y = currentGridRect && rowBandHeight
+        ? currentGridRect.y + (((leaf.rowIndex - range.start) + 0.5) * rowBandHeight)
+        : chart.convertToPixel({ yAxisIndex: 0 }, leaf.axisValue);
       if (typeof y !== "number" || !Number.isFinite(y)) {
         return;
       }
@@ -310,7 +352,7 @@
     const leafLineEndX = widths.showLabels ? leafLabelX - 6 : leafLabelX - 2;
     const braceMarkX = leafLabelX + widths.leafLabelWidth + BRACE_GAP;
     const braceLabelX = braceMarkX + BRACE_MARK_WIDTH + BRACE_LABEL_GAP;
-    const gutterRight = gridLeft(chart) - TREE_TO_GRID_GAP;
+    const gutterRight = (currentGridRect ? currentGridRect.x : gridLeft(chart)) - TREE_TO_GRID_GAP;
 
     const visibleNodesById = new Map();
     payload.nodes.forEach((node) => {
@@ -451,6 +493,43 @@
     };
   }
 
+  function leafHoverText(leaf) {
+    if (!leaf) {
+      return "";
+    }
+    if (leaf.showBrace && leaf.braceLabel) {
+      return `${leaf.taxonName} (${leaf.braceLabel})`;
+    }
+    return leaf.taxonName;
+  }
+
+  function leafHitAreaElement(chart, tooltip, state, leaf, node) {
+    const braceLabelWidth = leaf.showBrace && leaf.braceLabel
+      ? measureTextWidth(leaf.braceLabel, BRACE_FONT, MAX_BRACE_LABEL_WIDTH)
+      : 0;
+    const hitAreaRight = leaf.showBrace && leaf.braceLabel
+      ? state.braceLabelX + braceLabelWidth + 8
+      : state.leafLineEndX + 8;
+
+    return {
+      type: "rect",
+      cursor: leaf.branchExplorerUrl ? "pointer" : "default",
+      silent: false,
+      onclick: () => navigateTo(leaf.branchExplorerUrl),
+      shape: {
+        x: node.x - 2,
+        y: leaf.y - 10,
+        width: Math.max(12, hitAreaRight - node.x + 2),
+        height: 20,
+      },
+      style: {
+        fill: "rgba(0, 0, 0, 0)",
+      },
+      z: 1,
+      ...hoverHandlers(chart, tooltip, leafHoverText(leaf), hitAreaRight, leaf.y),
+    };
+  }
+
   function buildGraphics(chart, payload, state, tooltip) {
     const graphics = [];
     const { widths, visibleNodesById, childrenByParentId, leafByNodeId } = state;
@@ -497,6 +576,8 @@
         return;
       }
 
+      graphics.push(leafHitAreaElement(chart, tooltip, state, leaf, node));
+
       graphics.push(
         lineElement({
           x1: node.x,
@@ -514,6 +595,7 @@
             y: leaf.y,
             cursor: leaf.branchExplorerUrl ? "pointer" : "default",
             onclick: () => navigateTo(leaf.branchExplorerUrl),
+            ...hoverHandlers(chart, tooltip, leafHoverText(leaf), state.leafLabelX, leaf.y),
             style: {
               text: leaf.taxonName,
               fill: LEAF_TEXT_COLOR,
@@ -534,6 +616,7 @@
             y: leaf.y,
             cursor: leaf.branchExplorerUrl ? "pointer" : "default",
             onclick: () => navigateTo(leaf.branchExplorerUrl),
+            ...hoverHandlers(chart, tooltip, leafHoverText(leaf), state.braceMarkX, leaf.y),
             style: {
               text: "{",
               fill: INTERNAL_TEXT_COLOR,
@@ -551,6 +634,7 @@
             y: leaf.y,
             cursor: leaf.branchExplorerUrl ? "pointer" : "default",
             onclick: () => navigateTo(leaf.branchExplorerUrl),
+            ...hoverHandlers(chart, tooltip, leafHoverText(leaf), state.braceLabelX, leaf.y),
             style: {
               text: leaf.braceLabel,
               fill: INTERNAL_TEXT_COLOR,

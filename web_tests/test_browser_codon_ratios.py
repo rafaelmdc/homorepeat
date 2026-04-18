@@ -226,6 +226,10 @@ class BrowserCodonRatioExplorerTests(TestCase):
             [row["taxonName"] for row in response.context["chart_payload"]["rows"]],
             ["Arachnida", "Insecta", "Mammalia"],
         )
+        self.assertEqual(
+            [row["taxonName"] for row in response.context["overview_payload"]["taxa"]],
+            ["Arachnida", "Insecta", "Mammalia"],
+        )
 
     def test_codon_ratio_explorer_renders_overview_heatmap_payload(self):
         self._set_repeat_call_codon_usages(

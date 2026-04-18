@@ -1,6 +1,3 @@
-from .ordering import order_taxon_rows_by_lineage
-
-
 def build_ranked_length_chart_payload(summary_rows):
     if not summary_rows:
         return {
@@ -92,18 +89,16 @@ def build_codon_composition_heatmap_payload(summary_rows, *, visible_codons):
             "valueMax": 0,
         }
 
-    taxon_rows = order_taxon_rows_by_lineage(
-        [
-            {
-                "taxon_id": row["taxon_id"],
-                "taxon_name": row["taxon_name"],
-                "rank": row["rank"],
-                "observation_count": row["observation_count"],
-                "codon_shares": row["codon_shares"],
-            }
-            for row in summary_rows
-        ]
-    )
+    taxon_rows = [
+        {
+            "taxon_id": row["taxon_id"],
+            "taxon_name": row["taxon_name"],
+            "rank": row["rank"],
+            "observation_count": row["observation_count"],
+            "codon_shares": row["codon_shares"],
+        }
+        for row in summary_rows
+    ]
     taxon_index_by_id = {
         row["taxon_id"]: index
         for index, row in enumerate(taxon_rows)
