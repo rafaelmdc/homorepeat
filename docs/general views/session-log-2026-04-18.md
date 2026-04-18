@@ -55,3 +55,4 @@
 - Zoomout behaviour slightly de aligns the tree against the data.
 - Add a "root" node, instead of just making a line at the pylum level for readibility.
 - Add node behavior, when hovering a node/intersection show the label of it, so it's easier to browse.
+- Browser level is not aligned, regardless of zoomout.
