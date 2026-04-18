@@ -595,7 +595,10 @@
         visibleLeafCount: nextVisibleRowCount,
       });
       currentZoomState = nextZoomState;
-      if (previousGutterWidth !== nextGutterWidth) {
+      if (
+        previousVisibleRowCount !== nextVisibleRowCount
+        || previousGutterWidth !== nextGutterWidth
+      ) {
         renderChart();
       }
     });
@@ -813,7 +816,10 @@
         visibleLeafCount: nextVisibleRowCount,
       });
       currentZoomState = nextZoomState;
-      if (previousGutterWidth !== nextGutterWidth) {
+      if (
+        previousVisibleRowCount !== nextVisibleRowCount
+        || previousGutterWidth !== nextGutterWidth
+      ) {
         renderChart();
       }
     });
