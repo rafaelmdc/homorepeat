@@ -141,6 +141,7 @@
       {
         type: "inside",
         yAxisIndex,
+        filterMode: "none",
         zoomOnMouseWheel: false,
         moveOnMouseMove: true,
         moveOnMouseWheel: true,
@@ -150,7 +151,7 @@
       {
         type: "slider",
         yAxisIndex,
-        filterMode: "empty",
+        filterMode: "none",
         right,
         width,
         top,
@@ -402,10 +403,9 @@
       });
     }
 
-    function renderChart() {
-      const visibleRowCount = visibleRowCountForZoom(rowCount, currentZoomState);
+    function buildOverviewPanel(visibleRowCount) {
       const showTaxonLabels = shouldShowTaxonLabels(visibleRowCount);
-      const panel = hasTaxonomyGutter
+      return hasTaxonomyGutter
         ? taxonomyGutterPanel(taxonomyGutterPayload, {
           showLabels: showTaxonLabels,
           visibleLeafCount: visibleRowCount,
@@ -419,6 +419,25 @@
           bottom: 48,
         })
         : null;
+    }
+
+    function refreshOverviewPanel() {
+      const panel = buildOverviewPanel(visibleRowCountForZoom(rowCount, currentZoomState));
+      if (!panel) {
+        return;
+      }
+      chart.setOption(
+        {
+          series: [panel.series],
+        },
+        { lazyUpdate: true },
+      );
+    }
+
+    function renderChart() {
+      const visibleRowCount = visibleRowCountForZoom(rowCount, currentZoomState);
+      const showTaxonLabels = shouldShowTaxonLabels(visibleRowCount);
+      const panel = buildOverviewPanel(visibleRowCount);
       const grid = panel
         ? [
           panel.grid,
@@ -600,7 +619,9 @@
         || previousGutterWidth !== nextGutterWidth
       ) {
         renderChart();
+        return;
       }
+      refreshOverviewPanel();
     });
 
     renderChart();
@@ -660,10 +681,9 @@
       });
     }
 
-    function renderChart() {
-      const visibleRowCount = visibleRowCountForZoom(rowCount, currentZoomState);
+    function buildBrowsePanel(visibleRowCount) {
       const showTaxonLabels = shouldShowTaxonLabels(visibleRowCount);
-      const panel = hasTaxonomyGutter
+      return hasTaxonomyGutter
         ? taxonomyGutterPanel(taxonomyGutterPayload, {
           showLabels: showTaxonLabels,
           visibleLeafCount: visibleRowCount,
@@ -677,6 +697,25 @@
           bottom: 48,
         })
         : null;
+    }
+
+    function refreshBrowsePanel() {
+      const panel = buildBrowsePanel(visibleRowCountForZoom(rowCount, currentZoomState));
+      if (!panel) {
+        return;
+      }
+      chart.setOption(
+        {
+          series: [panel.series],
+        },
+        { lazyUpdate: true },
+      );
+    }
+
+    function renderChart() {
+      const visibleRowCount = visibleRowCountForZoom(rowCount, currentZoomState);
+      const showTaxonLabels = shouldShowTaxonLabels(visibleRowCount);
+      const panel = buildBrowsePanel(visibleRowCount);
       const grid = panel
         ? [
           panel.grid,
@@ -821,7 +860,9 @@
         || previousGutterWidth !== nextGutterWidth
       ) {
         renderChart();
+        return;
       }
+      refreshBrowsePanel();
     });
 
     renderChart();

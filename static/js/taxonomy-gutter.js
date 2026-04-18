@@ -168,33 +168,6 @@
     return layoutWidths(payload, options).total;
   }
 
-  function visibleLeafRangeFromOptions(payload, options = {}) {
-    const leafCount = payload.leaves.length;
-    if (leafCount < 1) {
-      return null;
-    }
-
-    const explicitZoomState = options.zoomState || null;
-    if (!explicitZoomState) {
-      return {
-        start: 0,
-        end: leafCount - 1,
-      };
-    }
-
-    const start = clamp(
-      Math.round(numericValue(explicitZoomState.startValue, 0)),
-      0,
-      leafCount - 1,
-    );
-    const end = clamp(
-      Math.round(numericValue(explicitZoomState.endValue, leafCount - 1)),
-      start,
-      leafCount - 1,
-    );
-    return { start, end };
-  }
-
   function panelLayout(payload, options = {}) {
     const widths = layoutWidths(payload, options);
     const rootX = LEFT_PADDING + widths.internalLabelWidth;
@@ -216,8 +189,7 @@
 
   function buildPanelState(payload, options, params, api) {
     const coordSys = params && params.coordSys ? params.coordSys : null;
-    const range = visibleLeafRangeFromOptions(payload, options);
-    if (!coordSys || !range) {
+    if (!coordSys) {
       return null;
     }
 
@@ -225,14 +197,24 @@
     const visibleLeaves = [];
     const rowYByIndex = new Map();
     const leafByNodeId = new Map();
+    const estimatedVisibleLeafCount = Math.max(
+      1,
+      Math.round(numericValue(options ? options.visibleLeafCount : undefined, payload.leaves.length)),
+    );
+    const estimatedBandHeight = coordSys.height > 0
+      ? coordSys.height / estimatedVisibleLeafCount
+      : 0;
+    const visibilityPadding = Number.isFinite(estimatedBandHeight) && estimatedBandHeight > 0
+      ? estimatedBandHeight / 2
+      : 8;
 
     payload.leaves.forEach((leaf) => {
-      if (leaf.rowIndex < range.start || leaf.rowIndex > range.end) {
-        return;
-      }
       const pixel = api.coord([0, leaf.axisValue]);
       const y = Array.isArray(pixel) ? pixel[1] : null;
       if (typeof y !== "number" || !Number.isFinite(y)) {
+        return;
+      }
+      if (y < (coordSys.y - visibilityPadding) || y > (coordSys.y + coordSys.height + visibilityPadding)) {
         return;
       }
       visibleLeaves.push({ ...leaf, y });
@@ -244,11 +226,24 @@
       return null;
     }
 
+    const visibleRowIndexes = visibleLeaves
+      .map((leaf) => leaf.rowIndex)
+      .sort((left, right) => left - right);
+
     const visibleNodesById = new Map();
     payload.nodes.forEach((node) => {
-      const clippedStart = Math.max(node.rowStart, range.start);
-      const clippedEnd = Math.min(node.rowEnd, range.end);
-      if (clippedStart > clippedEnd) {
+      let clippedStart = null;
+      let clippedEnd = null;
+      visibleRowIndexes.forEach((rowIndex) => {
+        if (rowIndex < node.rowStart || rowIndex > node.rowEnd) {
+          return;
+        }
+        if (clippedStart === null) {
+          clippedStart = rowIndex;
+        }
+        clippedEnd = rowIndex;
+      });
+      if (clippedStart === null || clippedEnd === null) {
         return;
       }
       const topY = rowYByIndex.get(clippedStart);
@@ -554,6 +549,10 @@
         coordinateSystem: "cartesian2d",
         xAxisIndex,
         yAxisIndex,
+        encode: {
+          x: -1,
+          y: -1,
+        },
         animation: false,
         silent: false,
         clip: true,
