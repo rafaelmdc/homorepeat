@@ -3,9 +3,13 @@ from __future__ import annotations
 from django.conf import settings
 from django.core.cache import cache
 from django.db import connection
-from django.db.models import Count, F, Max, Min, Q, Sum
+from django.db.models import Count, Exists, F, Max, Min, OuterRef, Q, Sum
 
-from ..models import CanonicalRepeatCall, CanonicalRepeatCallCodonUsage
+from ..models import (
+    CanonicalCodonCompositionSummary,
+    CanonicalRepeatCall,
+    CanonicalRepeatCallCodonUsage,
+)
 from .aggregates import PercentileCont
 from .filters import StatsFilterState
 from .ordering import order_taxon_rows_by_lineage
@@ -67,30 +71,29 @@ def build_ranked_codon_composition_summary_bundle(filter_state: StatsFilterState
     if cached_bundle is not None:
         return cached_bundle
 
-    matching_repeat_calls_count = build_filtered_repeat_call_queryset(filter_state).count()
-    total_taxa_count = build_ranked_taxon_group_count(filter_state)
-    group_rows = list(build_ranked_taxon_group_queryset(filter_state))
-    display_taxon_ids = [row["display_taxon_id"] for row in group_rows]
-    grouped_species_call_codon_fractions = (
-        list(
-            build_group_codon_species_call_fraction_queryset(
+    filtered_repeat_call_queryset = build_filtered_repeat_call_queryset(filter_state)
+    matching_repeat_calls_count = filtered_repeat_call_queryset.count()
+    if _can_use_codon_composition_summary_rollup(filter_state):
+        rollup_bundle = _build_ranked_codon_composition_summary_bundle_from_rollup(
+            filter_state,
+            matching_repeat_calls_count=matching_repeat_calls_count,
+        )
+        if rollup_bundle is None:
+            total_taxa_count, summary_rows, visible_codons = (
+                _build_ranked_codon_composition_summary_bundle_live(
+                    filter_state,
+                    filtered_repeat_call_queryset=filtered_repeat_call_queryset,
+                )
+            )
+        else:
+            total_taxa_count, summary_rows, visible_codons = rollup_bundle
+    else:
+        total_taxa_count, summary_rows, visible_codons = (
+            _build_ranked_codon_composition_summary_bundle_live(
                 filter_state,
-                display_taxon_ids=display_taxon_ids,
+                filtered_repeat_call_queryset=filtered_repeat_call_queryset,
             )
         )
-        if display_taxon_ids
-        else []
-    )
-    visible_codons = sorted({codon for _, _, _, codon, _ in grouped_species_call_codon_fractions})
-    summary_rows = (
-        summarize_ranked_codon_composition_groups(
-            group_rows,
-            grouped_species_call_codon_fractions,
-            visible_codons=visible_codons,
-        )
-        if visible_codons
-        else []
-    )
     if summary_rows:
         summary_rows = order_taxon_rows_by_lineage(summary_rows)
 
@@ -103,6 +106,33 @@ def build_ranked_codon_composition_summary_bundle(filter_state: StatsFilterState
     }
     cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
     return bundle
+
+
+def build_matching_repeat_calls_with_codon_usage_count(filter_state: StatsFilterState) -> int:
+    if not filter_state.residue:
+        return 0
+
+    cache_key = f"browser:stats:codon-usage-count:{filter_state.cache_key()}"
+    cached_count = cache.get(cache_key)
+    if cached_count is not None:
+        return cached_count
+
+    codon_usage_exists = CanonicalRepeatCallCodonUsage.objects.filter(
+        repeat_call_id=OuterRef("pk"),
+        amino_acid=filter_state.residue,
+    )
+    matching_count = (
+        build_filtered_repeat_call_queryset(filter_state)
+        .annotate(has_codon_usage=Exists(codon_usage_exists))
+        .filter(has_codon_usage=True)
+        .count()
+    )
+    cache.set(
+        cache_key,
+        matching_count,
+        timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60),
+    )
+    return matching_count
 
 
 def build_codon_composition_inspect_bundle(filter_state: StatsFilterState) -> dict[str, object]:
@@ -185,6 +215,338 @@ def build_filtered_codon_usage_queryset(filter_state: StatsFilterState):
         repeat_call__in=build_filtered_repeat_call_queryset(filter_state),
         amino_acid=filter_state.residue,
     )
+
+
+def _can_use_codon_composition_summary_rollup(filter_state: StatsFilterState) -> bool:
+    return (
+        bool(filter_state.residue)
+        and filter_state.current_run is None
+        and not filter_state.branch_scope_active
+        and not filter_state.q
+        and not filter_state.method
+        and filter_state.length_min is None
+        and filter_state.length_max is None
+        and filter_state.purity_min is None
+        and filter_state.purity_max is None
+    )
+
+
+def _build_ranked_codon_composition_summary_bundle_from_rollup(
+    filter_state: StatsFilterState,
+    *,
+    matching_repeat_calls_count: int,
+) -> tuple[int, list[dict[str, object]], list[str]] | None:
+    if matching_repeat_calls_count <= 0:
+        return 0, [], []
+
+    base_queryset = CanonicalCodonCompositionSummary.objects.order_by().filter(
+        repeat_residue=filter_state.residue,
+        display_rank=filter_state.rank,
+    )
+    if not base_queryset.exists():
+        return None
+
+    candidate_taxa_queryset = (
+        base_queryset.filter(observation_count__gte=filter_state.min_count)
+        .values(
+            "display_taxon_id",
+            "display_taxon_name",
+            "observation_count",
+            "species_count",
+        )
+        .distinct()
+    )
+    total_taxa_count = candidate_taxa_queryset.count()
+    visible_taxa = list(
+        candidate_taxa_queryset.order_by(
+            "-observation_count",
+            "display_taxon_name",
+            "display_taxon_id",
+        )[: filter_state.top_n]
+    )
+    if not visible_taxa:
+        return total_taxa_count, [], []
+
+    visible_taxon_ids = [row["display_taxon_id"] for row in visible_taxa]
+    visible_codons = list(
+        base_queryset.filter(
+            display_taxon_id__in=visible_taxon_ids,
+            codon_share__gt=0,
+        )
+        .order_by("codon")
+        .values_list("codon", flat=True)
+        .distinct()
+    )
+    if not visible_codons:
+        return total_taxa_count, [], []
+
+    summary_rows_by_taxon_id = {
+        row["display_taxon_id"]: {
+            "taxon_id": row["display_taxon_id"],
+            "taxon_name": row["display_taxon_name"],
+            "rank": filter_state.rank,
+            "observation_count": int(row["observation_count"]),
+            "species_count": int(row["species_count"]),
+            "codon_shares_by_codon": {},
+        }
+        for row in visible_taxa
+    }
+    summary_rows = list(summary_rows_by_taxon_id.values())
+    codon_rows = base_queryset.filter(
+        display_taxon_id__in=visible_taxon_ids,
+        codon__in=visible_codons,
+    ).values_list(
+        "display_taxon_id",
+        "codon",
+        "codon_share",
+    )
+    for display_taxon_id, codon, codon_share in codon_rows:
+        summary_rows_by_taxon_id[display_taxon_id]["codon_shares_by_codon"][codon] = (
+            normalize_numeric_summary_value(float(codon_share))
+        )
+
+    return (
+        total_taxa_count,
+        [
+            {
+                "taxon_id": row["taxon_id"],
+                "taxon_name": row["taxon_name"],
+                "rank": row["rank"],
+                "observation_count": row["observation_count"],
+                "species_count": row["species_count"],
+                "codon_shares": [
+                    {
+                        "codon": codon,
+                        "share": row["codon_shares_by_codon"].get(codon, 0),
+                    }
+                    for codon in visible_codons
+                ],
+            }
+            for row in summary_rows
+        ],
+        visible_codons,
+    )
+
+
+def _build_ranked_codon_composition_summary_bundle_live(
+    filter_state: StatsFilterState,
+    *,
+    filtered_repeat_call_queryset,
+) -> tuple[int, list[dict[str, object]], list[str]]:
+    if connection.vendor == "postgresql":
+        return _build_ranked_codon_composition_summary_bundle_postgresql(
+            filter_state,
+            filtered_repeat_call_queryset=filtered_repeat_call_queryset,
+        )
+
+    total_taxa_count = build_ranked_taxon_group_count(filter_state)
+    group_rows = list(build_ranked_taxon_group_queryset(filter_state))
+    display_taxon_ids = [row["display_taxon_id"] for row in group_rows]
+    grouped_species_call_codon_fractions = (
+        list(
+            build_group_codon_species_call_fraction_queryset(
+                filter_state,
+                display_taxon_ids=display_taxon_ids,
+            )
+        )
+        if display_taxon_ids
+        else []
+    )
+    visible_codons = sorted({codon for _, _, _, codon, _ in grouped_species_call_codon_fractions})
+    summary_rows = (
+        summarize_ranked_codon_composition_groups(
+            group_rows,
+            grouped_species_call_codon_fractions,
+            visible_codons=visible_codons,
+        )
+        if visible_codons
+        else []
+    )
+    return total_taxa_count, summary_rows, visible_codons
+
+
+def _build_ranked_codon_composition_summary_bundle_postgresql(
+    filter_state: StatsFilterState,
+    *,
+    filtered_repeat_call_queryset,
+) -> tuple[int, list[dict[str, object]], list[str]]:
+    filtered_calls_sql, filtered_calls_params = (
+        filtered_repeat_call_queryset.values("id", "taxon_id").query.sql_with_params()
+    )
+    sql = f"""
+        WITH filtered_calls AS MATERIALIZED (
+            {filtered_calls_sql}
+        ),
+        scoped_calls AS MATERIALIZED (
+            SELECT
+                fc.id AS repeat_call_id,
+                fc.taxon_id AS species_taxon_id,
+                tc.ancestor_id AS display_taxon_id,
+                display_taxon.taxon_name AS display_taxon_name,
+                display_taxon.rank AS display_taxon_rank
+            FROM filtered_calls fc
+            INNER JOIN browser_taxonclosure tc
+                ON tc.descendant_id = fc.taxon_id
+            INNER JOIN browser_taxon display_taxon
+                ON display_taxon.id = tc.ancestor_id
+            WHERE display_taxon.rank = %s
+        ),
+        grouped_taxa AS MATERIALIZED (
+            SELECT
+                sc.display_taxon_id,
+                sc.display_taxon_name,
+                sc.display_taxon_rank,
+                COUNT(*)::bigint AS observation_count,
+                COUNT(DISTINCT sc.species_taxon_id)::bigint AS species_count
+            FROM scoped_calls sc
+            GROUP BY
+                sc.display_taxon_id,
+                sc.display_taxon_name,
+                sc.display_taxon_rank
+            HAVING COUNT(*) >= %s
+        ),
+        ranked_taxa AS MATERIALIZED (
+            SELECT
+                gt.display_taxon_id,
+                gt.display_taxon_name,
+                gt.display_taxon_rank,
+                gt.observation_count,
+                gt.species_count,
+                COUNT(*) OVER ()::bigint AS total_taxa_count
+            FROM grouped_taxa gt
+            ORDER BY
+                gt.observation_count DESC,
+                gt.display_taxon_name ASC,
+                gt.display_taxon_id ASC
+            LIMIT %s
+        ),
+        species_call_counts AS MATERIALIZED (
+            SELECT
+                sc.display_taxon_id,
+                sc.species_taxon_id,
+                COUNT(*)::bigint AS call_count
+            FROM scoped_calls sc
+            INNER JOIN ranked_taxa rt
+                ON rt.display_taxon_id = sc.display_taxon_id
+            GROUP BY sc.display_taxon_id, sc.species_taxon_id
+        ),
+        species_codon_sums AS MATERIALIZED (
+            SELECT
+                sc.display_taxon_id,
+                sc.species_taxon_id,
+                cu.codon,
+                SUM(cu.codon_fraction)::double precision AS codon_fraction_sum
+            FROM scoped_calls sc
+            INNER JOIN ranked_taxa rt
+                ON rt.display_taxon_id = sc.display_taxon_id
+            INNER JOIN browser_canonicalrepeatcallcodonusage cu
+                ON cu.repeat_call_id = sc.repeat_call_id
+               AND cu.amino_acid = %s
+            GROUP BY sc.display_taxon_id, sc.species_taxon_id, cu.codon
+        ),
+        display_taxon_codon_shares AS MATERIALIZED (
+            SELECT
+                scs.display_taxon_id,
+                scs.codon,
+                (
+                    SUM(scs.codon_fraction_sum / scc.call_count::double precision)
+                    / MAX(rt.species_count)::double precision
+                )::double precision AS codon_share
+            FROM species_codon_sums scs
+            INNER JOIN species_call_counts scc
+                ON scc.display_taxon_id = scs.display_taxon_id
+               AND scc.species_taxon_id = scs.species_taxon_id
+            INNER JOIN ranked_taxa rt
+                ON rt.display_taxon_id = scs.display_taxon_id
+            GROUP BY scs.display_taxon_id, scs.codon
+        )
+        SELECT
+            rt.display_taxon_id,
+            rt.display_taxon_name,
+            rt.display_taxon_rank,
+            rt.observation_count,
+            rt.species_count,
+            rt.total_taxa_count,
+            dtcs.codon,
+            dtcs.codon_share
+        FROM ranked_taxa rt
+        LEFT JOIN display_taxon_codon_shares dtcs
+            ON dtcs.display_taxon_id = rt.display_taxon_id
+        ORDER BY
+            rt.observation_count DESC,
+            rt.display_taxon_name ASC,
+            rt.display_taxon_id ASC,
+            dtcs.codon ASC
+    """
+    params = [
+        *filtered_calls_params,
+        filter_state.rank,
+        filter_state.min_count,
+        filter_state.top_n,
+        filter_state.residue,
+    ]
+
+    with connection.cursor() as cursor:
+        cursor.execute(sql, params)
+        result_rows = cursor.fetchall()
+
+    total_taxa_count = 0
+    visible_codons = set()
+    summary_rows_by_taxon_id: dict[int, dict[str, object]] = {}
+    ranked_taxon_ids: list[int] = []
+
+    for (
+        display_taxon_id,
+        display_taxon_name,
+        display_taxon_rank,
+        observation_count,
+        species_count,
+        row_total_taxa_count,
+        codon,
+        codon_share,
+    ) in result_rows:
+        total_taxa_count = max(total_taxa_count, int(row_total_taxa_count or 0))
+        if display_taxon_id not in summary_rows_by_taxon_id:
+            summary_rows_by_taxon_id[display_taxon_id] = {
+                "taxon_id": display_taxon_id,
+                "taxon_name": display_taxon_name,
+                "rank": display_taxon_rank,
+                "observation_count": int(observation_count),
+                "species_count": int(species_count),
+                "codon_shares_by_codon": {},
+            }
+            ranked_taxon_ids.append(display_taxon_id)
+
+        if codon is None:
+            continue
+
+        visible_codons.add(codon)
+        summary_rows_by_taxon_id[display_taxon_id]["codon_shares_by_codon"][codon] = (
+            normalize_numeric_summary_value(float(codon_share))
+        )
+
+    ordered_visible_codons = sorted(visible_codons)
+    if not ordered_visible_codons:
+        return total_taxa_count, [], []
+
+    summary_rows = []
+    for display_taxon_id in ranked_taxon_ids:
+        summary_row = summary_rows_by_taxon_id[display_taxon_id]
+        codon_shares_by_codon = summary_row.pop("codon_shares_by_codon")
+        summary_rows.append(
+            {
+                **summary_row,
+                "codon_shares": [
+                    {
+                        "codon": codon,
+                        "share": codon_shares_by_codon.get(codon, 0),
+                    }
+                    for codon in ordered_visible_codons
+                ],
+            }
+        )
+
+    return total_taxa_count, summary_rows, ordered_visible_codons
 
 
 def build_ranked_taxon_group_queryset(filter_state: StatsFilterState):

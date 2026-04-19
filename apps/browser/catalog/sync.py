@@ -21,6 +21,7 @@ from apps.browser.models import (
     Sequence,
 )
 from apps.browser.models.genomes import Genome
+from apps.browser.stats.codon_rollups import rebuild_canonical_codon_composition_summaries
 from apps.imports.models import ImportBatch
 from apps.browser.import_batches import latest_completed_import_batch_for_run
 
@@ -150,6 +151,14 @@ def sync_canonical_catalog_for_run(
             import_batch=import_batch,
             reporter=reporter,
         )
+        _report_catalog_sync_progress(
+            import_batch,
+            reporter=reporter,
+            stage="canonical_codon_composition_summaries",
+            message="Rebuilding canonical codon-composition summaries.",
+            force=True,
+        )
+        rebuild_canonical_codon_composition_summaries()
 
         _refresh_canonical_protein_repeat_call_counts(
             pipeline_run=pipeline_run,

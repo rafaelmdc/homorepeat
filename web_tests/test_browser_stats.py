@@ -1,5 +1,7 @@
+from io import StringIO
 from unittest.mock import patch
 
+from django.core.management import call_command
 from django.utils import timezone
 
 from apps.browser.catalog import sync_canonical_catalog_for_run
@@ -13,6 +15,7 @@ from apps.browser.stats import (
     build_group_codon_species_call_fraction_queryset,
     build_filtered_repeat_call_queryset,
     build_group_length_values_queryset,
+    build_matching_repeat_calls_with_codon_usage_count,
     build_ranked_codon_composition_summary_bundle,
     build_ranked_length_chart_payload,
     build_ranked_length_summary_bundle,
@@ -22,7 +25,12 @@ from apps.browser.stats import (
     summarize_ranked_codon_composition_groups,
     summarize_ranked_length_groups,
 )
-from apps.browser.models import CanonicalRepeatCall, RepeatCall, RepeatCallCodonUsage
+from apps.browser.models import (
+    CanonicalCodonCompositionSummary,
+    CanonicalRepeatCall,
+    RepeatCall,
+    RepeatCallCodonUsage,
+)
 
 from .support import build_test_repeat_call_values, create_imported_run_fixture
 
@@ -496,6 +504,211 @@ class BrowserStatsTests(TestCase):
             [
                 {"codon": "CAA", "share": 0.25},
                 {"codon": "CAG", "share": 0.75},
+            ],
+        )
+
+    def test_matching_repeat_calls_with_codon_usage_count_respects_selected_residue(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 4, "codon_fraction": 1.0},
+            ],
+        )
+        self._set_repeat_call_codon_usages(
+            self.beta,
+            rows=[
+                {"amino_acid": "D", "codon": "GAC", "codon_count": 4, "codon_fraction": 1.0},
+            ],
+        )
+
+        filter_state = build_stats_filter_state(
+            self.factory.get(
+                "/browser/codon-ratios/",
+                {
+                    "rank": "class",
+                    "min_count": "1",
+                    "residue": "q",
+                },
+            )
+        )
+
+        self.assertEqual(build_matching_repeat_calls_with_codon_usage_count(filter_state), 1)
+
+    def test_canonical_codon_composition_summaries_are_rebuilt_during_sync(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 8, "codon_fraction": 1.0},
+            ],
+        )
+        self._set_repeat_call_codon_usages(
+            self.beta,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 1, "codon_fraction": 0.25},
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 3, "codon_fraction": 0.75},
+            ],
+        )
+
+        mammalia_rows = list(
+            CanonicalCodonCompositionSummary.objects.filter(
+                repeat_residue="Q",
+                display_rank="class",
+                display_taxon=self.alpha["taxa"]["mammalia"],
+            )
+            .order_by("codon")
+            .values(
+                "display_taxon_name",
+                "observation_count",
+                "species_count",
+                "codon",
+                "codon_share",
+            )
+        )
+        human_rows = list(
+            CanonicalCodonCompositionSummary.objects.filter(
+                repeat_residue="Q",
+                display_rank="species",
+                display_taxon=self.alpha["taxa"]["human"],
+            )
+            .order_by("codon")
+            .values("codon", "codon_share")
+        )
+
+        self.assertEqual(
+            mammalia_rows,
+            [
+                {
+                    "display_taxon_name": "Mammalia",
+                    "observation_count": 2,
+                    "species_count": 2,
+                    "codon": "CAA",
+                    "codon_share": 0.625,
+                },
+                {
+                    "display_taxon_name": "Mammalia",
+                    "observation_count": 2,
+                    "species_count": 2,
+                    "codon": "CAG",
+                    "codon_share": 0.375,
+                },
+            ],
+        )
+        self.assertEqual(
+            human_rows,
+            [
+                {"codon": "CAA", "codon_share": 1.0},
+                {"codon": "CAG", "codon_share": 0.0},
+            ],
+        )
+
+    def test_backfill_codon_composition_summaries_command_rebuilds_rows(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 8, "codon_fraction": 1.0},
+            ],
+        )
+
+        CanonicalCodonCompositionSummary.objects.all().delete()
+        stdout = StringIO()
+
+        call_command("backfill_codon_composition_summaries", stdout=stdout)
+
+        self.assertGreater(CanonicalCodonCompositionSummary.objects.count(), 0)
+        self.assertIn("Rebuilt codon composition summaries", stdout.getvalue())
+
+    def test_ranked_codon_composition_summary_bundle_uses_postgresql_fast_path(self):
+        filter_state = build_stats_filter_state(
+            self.factory.get(
+                "/browser/codon-ratios/",
+                {
+                    "rank": "class",
+                    "min_count": "1",
+                    "residue": "q",
+                },
+            )
+        )
+
+        expected_summary_rows = [
+            {
+                "taxon_id": self.alpha["taxa"]["mammalia"].pk,
+                "taxon_name": "Mammalia",
+                "rank": "class",
+                "observation_count": 2,
+                "species_count": 2,
+                "codon_shares": [
+                    {"codon": "CAA", "share": 0.5},
+                    {"codon": "CAG", "share": 0.5},
+                ],
+            }
+        ]
+
+        with (
+            patch("apps.browser.stats.queries.connection") as mocked_connection,
+            patch(
+                "apps.browser.stats.queries._build_ranked_codon_composition_summary_bundle_postgresql",
+                return_value=(1, expected_summary_rows, ["CAA", "CAG"]),
+            ) as mocked_fast_path,
+        ):
+            mocked_connection.vendor = "postgresql"
+            bundle = build_ranked_codon_composition_summary_bundle(filter_state)
+
+        mocked_fast_path.assert_called_once()
+        self.assertEqual(bundle["matching_repeat_calls_count"], 2)
+        self.assertEqual(bundle["total_taxa_count"], 1)
+        self.assertEqual(bundle["visible_taxa_count"], 1)
+        self.assertEqual(bundle["visible_codons"], ["CAA", "CAG"])
+        self.assertEqual(bundle["summary_rows"], expected_summary_rows)
+
+    def test_ranked_codon_composition_summary_bundle_prefers_rollup_for_broad_scope(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 8, "codon_fraction": 1.0},
+            ],
+        )
+        self._set_repeat_call_codon_usages(
+            self.beta,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 1, "codon_fraction": 0.25},
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 3, "codon_fraction": 0.75},
+            ],
+        )
+
+        filter_state = build_stats_filter_state(
+            self.factory.get(
+                "/browser/codon-ratios/",
+                {
+                    "rank": "class",
+                    "min_count": "1",
+                    "residue": "q",
+                },
+            )
+        )
+
+        with patch(
+            "apps.browser.stats.queries._build_ranked_codon_composition_summary_bundle_live",
+            side_effect=AssertionError("expected rollup summary path"),
+        ):
+            bundle = build_ranked_codon_composition_summary_bundle(filter_state)
+
+        self.assertEqual(bundle["matching_repeat_calls_count"], 2)
+        self.assertEqual(bundle["total_taxa_count"], 1)
+        self.assertEqual(bundle["visible_codons"], ["CAA", "CAG"])
+        self.assertEqual(
+            bundle["summary_rows"],
+            [
+                {
+                    "taxon_id": self.alpha["taxa"]["mammalia"].pk,
+                    "taxon_name": "Mammalia",
+                    "rank": "class",
+                    "observation_count": 2,
+                    "species_count": 2,
+                    "codon_shares": [
+                        {"codon": "CAA", "share": 0.625},
+                        {"codon": "CAG", "share": 0.375},
+                    ],
+                }
             ],
         )
 

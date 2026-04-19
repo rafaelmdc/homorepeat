@@ -1,5 +1,6 @@
 from .base import TimestampedModel
 from .canonical import (
+    CanonicalCodonCompositionSummary,
     CanonicalGenome,
     CanonicalProtein,
     CanonicalRepeatCall,
@@ -21,6 +22,7 @@ __all__ = [
     "AccessionCallCount",
     "AccessionStatus",
     "AcquisitionBatch",
+    "CanonicalCodonCompositionSummary",
     "CanonicalGenome",
     "CanonicalProtein",
     "CanonicalRepeatCall",

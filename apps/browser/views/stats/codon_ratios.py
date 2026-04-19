@@ -6,12 +6,12 @@ from apps.browser.stats import (
     build_codon_composition_inspect_bundle,
     build_codon_composition_inspect_payload,
     build_codon_overview_payload,
-    build_filtered_codon_usage_queryset,
     build_filtered_repeat_call_queryset,
+    build_matching_repeat_calls_with_codon_usage_count,
     build_ranked_codon_composition_chart_payload,
     build_ranked_codon_composition_summary_bundle,
-    build_taxonomy_gutter_payload,
     build_stats_filter_state,
+    build_taxonomy_gutter_payload,
 )
 from apps.browser.stats.params import ALLOWED_STATS_RANKS, next_lower_rank
 
@@ -41,19 +41,28 @@ class CodonRatioExplorerView(TemplateView):
 
     def _get_matching_repeat_calls_with_codon_usage_count(self) -> int:
         if not hasattr(self, "_matching_repeat_calls_with_codon_usage_count"):
-            self._matching_repeat_calls_with_codon_usage_count = (
-                build_filtered_codon_usage_queryset(self._get_filter_state())
-                .values("repeat_call_id")
-                .distinct()
-                .count()
-            )
+            summary_bundle = self._get_summary_bundle()
+            if summary_bundle["matching_repeat_calls_count"] <= 0:
+                self._matching_repeat_calls_with_codon_usage_count = 0
+            else:
+                self._matching_repeat_calls_with_codon_usage_count = (
+                    build_matching_repeat_calls_with_codon_usage_count(
+                        self._get_filter_state()
+                    )
+                )
         return self._matching_repeat_calls_with_codon_usage_count
 
     def _get_matching_repeat_calls_count(self) -> int:
         if not hasattr(self, "_matching_repeat_calls_count"):
-            self._matching_repeat_calls_count = build_filtered_repeat_call_queryset(
-                self._get_filter_state()
-            ).count()
+            filter_state = self._get_filter_state()
+            if filter_state.residue:
+                self._matching_repeat_calls_count = self._get_summary_bundle()[
+                    "matching_repeat_calls_count"
+                ]
+            else:
+                self._matching_repeat_calls_count = build_filtered_repeat_call_queryset(
+                    filter_state
+                ).count()
         return self._matching_repeat_calls_count
 
     def _inspect_scope_active(self) -> bool:

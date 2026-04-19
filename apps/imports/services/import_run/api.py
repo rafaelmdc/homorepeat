@@ -7,6 +7,7 @@ from django.db import transaction
 from apps.browser.catalog import sync_canonical_catalog_for_run
 from apps.browser.metadata import build_browser_metadata
 from apps.browser.models import (
+    CanonicalCodonCompositionSummary,
     CanonicalGenome,
     CanonicalProtein,
     CanonicalRepeatCall,
@@ -155,6 +156,7 @@ def process_import_batch(batch_or_id: ImportBatch | int) -> ImportRunResult:
                 CanonicalProtein,
                 CanonicalRepeatCall,
                 CanonicalRepeatCallCodonUsage,
+                CanonicalCodonCompositionSummary,
             ]
         )
     except Exception as exc:
