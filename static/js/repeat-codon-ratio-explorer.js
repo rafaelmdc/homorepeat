@@ -3,10 +3,12 @@
   const TEXT_COLOR = "#17242c";
   const MUTED_TEXT_COLOR = "#63727a";
   const DEFAULT_VISIBLE_ROWS = 12;
-  const MAX_CHART_HEIGHT = 980;
+  const MAX_CHART_HEIGHT = 1300;
   const MAX_VISIBLE_ROWS_WITH_TAXON_LABELS = 24;
   const MAX_MATRIX_CELL_LABELS = 16;
   const MAX_MATRIX_COLUMN_LABELS = 18;
+  const MAX_BOTTOM_TREE_LEAF_LABELS = 16;
+  const MAX_BOTTOM_TREE_BRACE_LABELS = 48;
   const PENDING_SCROLL_KEY = "repeat-codon-composition-explorer:pending-scroll";
   const PENDING_SCROLL_MAX_AGE_MS = 15000;
   const ROW_HEIGHT = 38;
@@ -150,6 +152,14 @@
 
   function shouldShowMatrixColumnLabels(taxonCount) {
     return taxonCount > 0 && taxonCount <= MAX_MATRIX_COLUMN_LABELS;
+  }
+
+  function shouldShowBottomTreeLeafLabels(taxonCount) {
+    return taxonCount > 0 && taxonCount <= MAX_BOTTOM_TREE_LEAF_LABELS;
+  }
+
+  function shouldShowBottomTreeBraceLabels(taxonCount) {
+    return taxonCount > 0 && taxonCount <= MAX_BOTTOM_TREE_BRACE_LABELS;
   }
 
   function resolvedMatrixVisualRange(minimumValue, maximumValue) {
@@ -444,19 +454,29 @@
       });
     }
 
-    function overviewBottomTreeHeight() {
+    function overviewBottomTreeHeight(visibleRowCount) {
       if (!hasTaxonomyGutter) {
         return 0;
       }
-      return taxonomyGutterReservedHeight(taxonomyGutterPayload);
+      return taxonomyGutterReservedHeight(taxonomyGutterPayload, {
+        showLabels: shouldShowBottomTreeLeafLabels(visibleRowCount),
+        showBraceLabels: shouldShowBottomTreeBraceLabels(visibleRowCount),
+        visibleLeafCount: visibleRowCount,
+      });
     }
 
     function currentOverviewLayout(visibleRowCount) {
-      const showMatrixColumnLabels = shouldShowMatrixColumnLabels(visibleRowCount);
+      const showBottomTreeLeafLabels = shouldShowBottomTreeLeafLabels(visibleRowCount);
+      const showBottomTreeBraceLabels = shouldShowBottomTreeBraceLabels(visibleRowCount);
+      const showMatrixColumnLabels = !showBottomTreeLeafLabels
+        && !showBottomTreeBraceLabels
+        && shouldShowMatrixColumnLabels(visibleRowCount);
       return {
         top: 32,
-        bottom: overviewBottomTreeHeight() + (showMatrixColumnLabels ? 92 : 28),
+        bottom: overviewBottomTreeHeight(visibleRowCount) + (showMatrixColumnLabels ? 92 : 28),
         showMatrixColumnLabels,
+        showBottomTreeLeafLabels,
+        showBottomTreeBraceLabels,
       };
     }
 
@@ -476,7 +496,7 @@
     function currentOverviewMargins(gutterWidth) {
       return {
         left: hasTaxonomyGutter ? gutterWidth + 20 : 160,
-        right: currentZoomState ? 104 : 56,
+        right: currentZoomState ? 148 : 96,
       };
     }
 
@@ -534,7 +554,9 @@
           bottom: layout.bottom,
           left: margins.left,
           right: margins.right,
-          bottomGutterHeight: overviewBottomTreeHeight(),
+          showLabels: layout.showBottomTreeLeafLabels,
+          showBraceLabels: layout.showBottomTreeBraceLabels,
+          bottomGutterHeight: overviewBottomTreeHeight(visibleRowCount),
         });
       }
     }
@@ -646,11 +668,15 @@
             max: signedPreferenceRange.max,
             calculable: false,
             orient: "vertical",
-            right: 0,
-            top: "middle",
-            text: [`Row more ${payload.codonTwo}-preferring`, `Row more ${payload.codonOne}-preferring`],
+            right: currentZoomState ? 32 : 16,
+            top: "center",
+            itemWidth: 16,
+            itemHeight: 160,
+            text: [`${payload.codonTwo}-preferring`, `${payload.codonOne}-preferring`],
+            textGap: 8,
             textStyle: {
               color: MUTED_TEXT_COLOR,
+              fontSize: 11,
             },
             inRange: {
               color: ["#0f5964", "#f2efe6", "#d06e37"],
@@ -658,7 +684,7 @@
           },
           dataZoom: buildYAxisZoom(rowCount, currentZoomState, {
             yAxisIndex: 0,
-            right: 44,
+            right: 8,
             top: 28,
             bottom: 56,
             width: 12,
@@ -793,13 +819,17 @@
           max: visualRange.max,
           calculable: false,
           orient: "vertical",
-          right: 0,
-          top: "middle",
+          right: currentZoomState ? 32 : 16,
+          top: "center",
+          itemWidth: 16,
+          itemHeight: 160,
           text: payload.displayMetric === "divergence"
             ? ["More divergent", "Less divergent"]
             : ["More similar", "More divergent"],
+          textGap: 8,
           textStyle: {
             color: MUTED_TEXT_COLOR,
+            fontSize: 11,
           },
           inRange: {
             color: ["#d06e37", "#0f5964"],
@@ -807,7 +837,7 @@
         },
         dataZoom: buildYAxisZoom(rowCount, currentZoomState, {
           yAxisIndex: 0,
-          right: 44,
+          right: 8,
           top: 28,
           bottom: 56,
           width: 12,

@@ -28,6 +28,13 @@
   const MAX_BRACE_LABEL_WIDTH = 96;
   const MAX_VISIBLE_ROWS_WITH_INTERNAL_LABELS = 14;
   const BOTTOM_TREE_PADDING = 12;
+  const BOTTOM_LABEL_GAP = 10;
+  const BOTTOM_LABEL_SECTION_GAP = 8;
+  const BOTTOM_LABEL_BOTTOM_PADDING = 10;
+  const BOTTOM_MAX_LEAF_LABEL_EXTENT = 120;
+  const BOTTOM_MAX_BRACE_LABEL_EXTENT = 84;
+  const BOTTOM_LEAF_FONT = "700 11px system-ui, sans-serif";
+  const BOTTOM_BRACE_FONT = "600 10px system-ui, sans-serif";
   const GRAPHIC_ROOT_ID = "taxonomy-gutter-root";
   const TOOLTIP_DATA_KEY = "homorepeatTaxonomyGutterTooltip";
   const OVERLAY_DATA_KEY = "homorepeatTaxonomyGutterOverlay";
@@ -98,6 +105,26 @@
     }
 
     return Math.min(maximumWidth, Math.ceil(String(text).length * 7));
+  }
+
+  function truncateTextToWidth(text, font, maximumWidth) {
+    if (!text || maximumWidth <= 0) {
+      return "";
+    }
+    if (measureTextWidth(text, font, maximumWidth) <= maximumWidth) {
+      return text;
+    }
+
+    const ellipsis = "…";
+    let truncatedText = String(text);
+    while (truncatedText.length > 1) {
+      truncatedText = truncatedText.slice(0, -1);
+      const candidate = `${truncatedText}${ellipsis}`;
+      if (measureTextWidth(candidate, font, maximumWidth) <= maximumWidth) {
+        return candidate;
+      }
+    }
+    return ellipsis;
   }
 
   function internalSplitNodes(payload) {
@@ -171,11 +198,41 @@
     return layoutWidths(payload, options).total;
   }
 
-  function reservedHeight(payload) {
+  function reservedHeight(payload, options = {}) {
     if (!hasPayload(payload)) {
       return 0;
     }
-    return (Math.max(0, numericValue(payload.maxDepth, 0)) * DEPTH_STEP) + (BOTTOM_TREE_PADDING * 2);
+
+    const showLabels = options.showLabels !== false;
+    const showBraceLabels = options.showBraceLabels !== false;
+    let bottomLeafLabelExtent = 0;
+    let bottomBraceLabelExtent = 0;
+    if (showLabels) {
+      payload.leaves.forEach((leaf) => {
+        bottomLeafLabelExtent = Math.max(
+          bottomLeafLabelExtent,
+          measureTextWidth(leaf.taxonName, BOTTOM_LEAF_FONT, BOTTOM_MAX_LEAF_LABEL_EXTENT),
+        );
+      });
+    }
+    if (showBraceLabels) {
+      payload.leaves.forEach((leaf) => {
+        if (!leaf.showBrace || !leaf.braceLabel) {
+          return;
+        }
+        bottomBraceLabelExtent = Math.max(
+          bottomBraceLabelExtent,
+          measureTextWidth(`{ ${leaf.braceLabel}`, BOTTOM_BRACE_FONT, BOTTOM_MAX_BRACE_LABEL_EXTENT),
+        );
+      });
+    }
+    return (
+      (Math.max(0, numericValue(payload.maxDepth, 0)) * DEPTH_STEP)
+      + (BOTTOM_TREE_PADDING * 2)
+      + (showLabels ? BOTTOM_LABEL_GAP + bottomLeafLabelExtent : 0)
+      + (bottomBraceLabelExtent > 0 ? BOTTOM_LABEL_GAP + bottomBraceLabelExtent : 0)
+      + ((showLabels || bottomBraceLabelExtent > 0) ? BOTTOM_LABEL_BOTTOM_PADDING : 0)
+    );
   }
 
   function panelLayout(payload, options = {}) {
@@ -1103,20 +1160,53 @@
     }
 
     const bottomTop = chart.getHeight() - bottomGutterHeight;
+    const showLabels = options.showLabels !== false;
+    const showBraceLabels = options.showBraceLabels !== false;
+    let bottomLeafLabelExtent = 0;
+    let bottomBraceLabelExtent = 0;
     const leafXByIndex = new Map();
+    const visibleLeaves = [];
     payload.leaves.forEach((leaf) => {
       if (leaf.rowIndex < range.start || leaf.rowIndex > range.end) {
         return;
       }
       const ordinal = leaf.rowIndex - range.start;
-      leafXByIndex.set(leaf.rowIndex, currentGridRect.x + ((ordinal + 0.5) * bandWidth));
+      const x = currentGridRect.x + ((ordinal + 0.5) * bandWidth);
+      leafXByIndex.set(leaf.rowIndex, x);
+      const leafLabelText = showLabels
+        ? truncateTextToWidth(leaf.taxonName, BOTTOM_LEAF_FONT, BOTTOM_MAX_LEAF_LABEL_EXTENT)
+        : "";
+      const braceLabelText = showBraceLabels && leaf.showBrace && leaf.braceLabel
+        ? truncateTextToWidth(`{ ${leaf.braceLabel}`, BOTTOM_BRACE_FONT, BOTTOM_MAX_BRACE_LABEL_EXTENT)
+        : "";
+      const leafLabelExtent = showLabels
+        ? measureTextWidth(leafLabelText || leaf.taxonName, BOTTOM_LEAF_FONT, BOTTOM_MAX_LEAF_LABEL_EXTENT)
+        : 0;
+      const braceLabelExtent = braceLabelText
+        ? measureTextWidth(braceLabelText, BOTTOM_BRACE_FONT, BOTTOM_MAX_BRACE_LABEL_EXTENT)
+        : 0;
+      bottomLeafLabelExtent = Math.max(bottomLeafLabelExtent, leafLabelExtent);
+      bottomBraceLabelExtent = Math.max(bottomBraceLabelExtent, braceLabelExtent);
+      visibleLeaves.push({
+        ...leaf,
+        x,
+        bottomLeafLabelText: leafLabelText,
+        bottomBraceLabelText: braceLabelText,
+      });
     });
+
+    const labelSectionHeight = (showLabels || bottomBraceLabelExtent > 0)
+      ? BOTTOM_LABEL_GAP
+        + (showLabels ? bottomLeafLabelExtent : 0)
+        + (bottomBraceLabelExtent > 0 ? BOTTOM_LABEL_SECTION_GAP + bottomBraceLabelExtent : 0)
+        + BOTTOM_LABEL_BOTTOM_PADDING
+      : 0;
 
     const { visibleNodesById, childrenByParentId } = buildHorizontalVisibleTreeState(
       payload,
       leafXByIndex,
       range,
-      (invertedDepth) => bottomTop + BOTTOM_TREE_PADDING + (invertedDepth * DEPTH_STEP),
+      (invertedDepth) => bottomTop + labelSectionHeight + BOTTOM_TREE_PADDING + (invertedDepth * DEPTH_STEP),
     );
     if (visibleNodesById.size === 0) {
       return null;
@@ -1125,6 +1215,13 @@
     return {
       bottomTop,
       bottomHeight: bottomGutterHeight,
+      bandWidth,
+      labelSectionHeight,
+      bottomLeafLabelExtent,
+      bottomBraceLabelExtent,
+      showLabels,
+      showBraceLabels,
+      visibleLeaves,
       visibleNodesById,
       childrenByParentId,
     };
@@ -1436,10 +1533,11 @@
     fill,
     font,
     textAnchor = "start",
+    dominantBaseline = "middle",
   }) {
     element.setAttribute("fill", fill);
     element.setAttribute("text-anchor", textAnchor);
-    element.setAttribute("dominant-baseline", "middle");
+    element.setAttribute("dominant-baseline", dominantBaseline);
     element.style.font = font;
   }
 
@@ -1796,6 +1894,81 @@
       marker.style.pointerEvents = "auto";
       bindHoverEvents(marker, chart, tooltip, nodeTooltipText(node), node.x, node.y);
       root.appendChild(marker);
+    });
+
+    if ((!state.showLabels && !state.showBraceLabels) || !Array.isArray(state.visibleLeaves) || state.visibleLeaves.length === 0) {
+      return;
+    }
+
+    const braceLabelTopY = state.bottomTop + BOTTOM_LABEL_GAP;
+    const braceLabelCenterY = braceLabelTopY + (state.bottomBraceLabelExtent / 2);
+    const leafLabelTopY = braceLabelTopY + (state.showBraceLabels && state.bottomBraceLabelExtent > 0 ? state.bottomBraceLabelExtent + BOTTOM_LABEL_SECTION_GAP : 0);
+    const leafLabelCenterY = leafLabelTopY + (state.bottomLeafLabelExtent / 2);
+    const lastLabelBottomY = state.showLabels && state.bottomLeafLabelExtent > 0
+      ? leafLabelTopY + state.bottomLeafLabelExtent
+      : (state.showBraceLabels && state.bottomBraceLabelExtent > 0 ? braceLabelTopY + state.bottomBraceLabelExtent : null);
+
+    state.visibleLeaves.forEach((leaf) => {
+      const node = visibleNodesById.get(leaf.nodeId);
+      if (!node) {
+        return;
+      }
+
+      if (typeof lastLabelBottomY === "number" && Number.isFinite(lastLabelBottomY)) {
+        root.appendChild(
+          createSvgElement("line", {
+            x1: node.x,
+            y1: lastLabelBottomY + 8,
+            x2: node.x,
+            y2: node.y,
+            stroke: LINE_COLOR,
+            "stroke-width": LINE_WIDTH,
+          }),
+        );
+      }
+
+      const hoverText = leafHoverText(leaf);
+      if (state.showLabels && leaf.bottomLeafLabelText) {
+        const leafLabel = createSvgElement("text", {
+          x: leaf.x,
+          y: leafLabelCenterY,
+        });
+        leafLabel.textContent = leaf.bottomLeafLabelText;
+        applySvgTextStyle(leafLabel, {
+          fill: LEAF_TEXT_COLOR,
+          font: BOTTOM_LEAF_FONT,
+          textAnchor: "middle",
+        });
+        leafLabel.setAttribute("transform", `rotate(-90 ${leaf.x} ${leafLabelCenterY})`);
+        leafLabel.style.pointerEvents = "auto";
+        leafLabel.style.cursor = leaf.branchExplorerUrl ? "pointer" : "default";
+        if (leaf.branchExplorerUrl) {
+          leafLabel.addEventListener("click", () => navigateTo(leaf.branchExplorerUrl));
+        }
+        bindHoverEvents(leafLabel, chart, tooltip, hoverText, leaf.x, leafLabelCenterY);
+        root.appendChild(leafLabel);
+      }
+
+      if (state.showBraceLabels && leaf.showBrace && leaf.braceLabel && leaf.bottomBraceLabelText) {
+        const braceLabel = createSvgElement("text", {
+          x: leaf.x,
+          y: braceLabelCenterY,
+        });
+        braceLabel.textContent = leaf.bottomBraceLabelText;
+        applySvgTextStyle(braceLabel, {
+          fill: INTERNAL_TEXT_COLOR,
+          font: BOTTOM_BRACE_FONT,
+          textAnchor: "middle",
+        });
+        braceLabel.setAttribute("transform", `rotate(-90 ${leaf.x} ${braceLabelCenterY})`);
+        braceLabel.style.pointerEvents = "auto";
+        braceLabel.style.cursor = leaf.branchExplorerUrl ? "pointer" : "default";
+        if (leaf.branchExplorerUrl) {
+          braceLabel.addEventListener("click", () => navigateTo(leaf.branchExplorerUrl));
+        }
+        bindHoverEvents(braceLabel, chart, tooltip, hoverText, leaf.x, braceLabelCenterY);
+        root.appendChild(braceLabel);
+      }
     });
   }
 
