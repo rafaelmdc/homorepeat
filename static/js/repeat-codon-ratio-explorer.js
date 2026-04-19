@@ -206,7 +206,7 @@
         filterMode: "none",
         zoomOnMouseWheel: false,
         moveOnMouseMove: true,
-        moveOnMouseWheel: true,
+        moveOnMouseWheel: false,
         startValue: zoomState.startValue,
         endValue: zoomState.endValue,
       },
@@ -219,6 +219,7 @@
         top,
         bottom,
         brushSelect: false,
+        zoomOnMouseWheel: "shift",
         startValue: zoomState.startValue,
         endValue: zoomState.endValue,
         fillerColor: "rgba(15, 89, 100, 0.16)",
@@ -320,6 +321,37 @@
 
   function resolveZoomState(chart, rowCount, params) {
     return zoomStateFromEventParams(params, rowCount) || zoomStateFromChart(chart, rowCount);
+  }
+
+  function installWheelHandler(chart, rowCount, getCurrentZoomState) {
+    if (rowCount <= 1) return;
+    chart.getDom().addEventListener("wheel", (event) => {
+      event.preventDefault();
+      const zoomState = getCurrentZoomState();
+      if (!zoomState) return;
+      const direction = event.deltaY > 0 ? 1 : -1;
+      const { startValue, endValue } = zoomState;
+      const windowSize = endValue - startValue;
+      let newStart;
+      let newEnd;
+      if (event.shiftKey) {
+        const step = Math.max(1, Math.round(windowSize * 0.15));
+        const newWindowSize = clamp(windowSize + direction * 2 * step, 1, rowCount);
+        const rawPivot = chart.convertFromPixel({ yAxisIndex: 0 }, [event.offsetX, event.offsetY]);
+        const pivot = (typeof rawPivot === "number" && Number.isFinite(rawPivot))
+          ? clamp(rawPivot, startValue, endValue)
+          : (startValue + endValue) / 2;
+        const fraction = windowSize > 0 ? (pivot - startValue) / windowSize : 0.5;
+        newStart = clamp(Math.round(pivot - fraction * newWindowSize), 0, Math.max(0, rowCount - newWindowSize));
+        newEnd = Math.min(newStart + newWindowSize, rowCount - 1);
+        if (newEnd <= newStart) return;
+      } else {
+        const step = Math.max(1, Math.round(windowSize * 0.2));
+        newStart = clamp(Math.round(startValue + direction * step), 0, Math.max(0, rowCount - 1 - windowSize));
+        newEnd = newStart + windowSize;
+      }
+      chart.dispatchAction({ type: "dataZoom", dataZoomIndex: 0, startValue: newStart, endValue: newEnd });
+    }, { passive: false, capture: true });
   }
 
   function savePendingScrollPosition() {
@@ -437,6 +469,7 @@
       ? attachTaxonomyGutter(chart, taxonomyGutterPayload, { position: "bottom" })
       : null;
     let currentZoomState = normalizeZoomState(rowCount, null);
+    installWheelHandler(chart, rowCount, () => currentZoomState);
     const taxonAxisValues = payload.taxa.map((row) => String(row.taxonId));
     const visualRange = resolvedMatrixVisualRange(payload.valueMin, payload.valueMax);
     const signedPreferenceRange = resolvedSignedPreferenceRange(payload.valueMin, payload.valueMax);
@@ -913,6 +946,7 @@
     const hasTaxonomyGutter = hasTaxonomyGutterPayload(taxonomyGutterPayload);
     const gutterOverlay = hasTaxonomyGutter ? attachTaxonomyGutter(chart, taxonomyGutterPayload) : null;
     let currentZoomState = normalizeZoomState(rowCount, null);
+    installWheelHandler(chart, rowCount, () => currentZoomState);
     const taxonLabelByAxisValue = new Map(
       (payload.rows || []).map((row) => [String(row.taxonId), row.taxonName]),
     );
