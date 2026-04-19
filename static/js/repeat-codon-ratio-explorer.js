@@ -11,6 +11,11 @@
   const MAX_BOTTOM_TREE_BRACE_LABELS = 48;
   const PENDING_SCROLL_KEY = "repeat-codon-composition-explorer:pending-scroll";
   const PENDING_SCROLL_MAX_AGE_MS = 15000;
+  const SIGNED_PREFERENCE_LEGEND_EXTENT = 1.25;
+  const DEFAULT_SIGNED_PREFERENCE_MAGNITUDE = SIGNED_PREFERENCE_LEGEND_EXTENT;
+  const MIN_SIGNED_PREFERENCE_MAGNITUDE = 0.05;
+  const SIGNED_PREFERENCE_MAGNITUDE_STEP = 0.05;
+  const SIGNED_PREFERENCE_SCALE_STORAGE_KEY = "repeat-codon-composition-explorer:signed-scale";
   const ROW_HEIGHT = 38;
   const CHART_PADDING = 120;
   const PALETTE = [
@@ -178,13 +183,203 @@
     };
   }
 
-  function resolvedSignedPreferenceRange(minimumValue, maximumValue) {
-    const safeMinimum = numericValue(minimumValue, -1);
-    const safeMaximum = numericValue(maximumValue, 1);
-    const absoluteBound = Math.max(Math.abs(safeMinimum), Math.abs(safeMaximum), 0.05);
+  function normalizedSignedPreferenceMagnitude(value) {
+    const safeMagnitude = clamp(
+      numericValue(value, DEFAULT_SIGNED_PREFERENCE_MAGNITUDE),
+      MIN_SIGNED_PREFERENCE_MAGNITUDE,
+      SIGNED_PREFERENCE_LEGEND_EXTENT,
+    );
+    const roundedMagnitude = Math.round(safeMagnitude / SIGNED_PREFERENCE_MAGNITUDE_STEP)
+      * SIGNED_PREFERENCE_MAGNITUDE_STEP;
+    return Number(
+      clamp(
+        roundedMagnitude,
+        MIN_SIGNED_PREFERENCE_MAGNITUDE,
+        SIGNED_PREFERENCE_LEGEND_EXTENT,
+      ).toFixed(2),
+    );
+  }
+
+  function currentSignedPreferenceRange(magnitude) {
+    const resolvedMagnitude = normalizedSignedPreferenceMagnitude(magnitude);
     return {
-      min: -absoluteBound,
-      max: absoluteBound,
+      magnitude: resolvedMagnitude,
+      min: -resolvedMagnitude,
+      max: resolvedMagnitude,
+    };
+  }
+
+  function loadSignedPreferenceMagnitude() {
+    try {
+      const rawValue = window.sessionStorage.getItem(SIGNED_PREFERENCE_SCALE_STORAGE_KEY);
+      return normalizedSignedPreferenceMagnitude(
+        rawValue == null ? DEFAULT_SIGNED_PREFERENCE_MAGNITUDE : Number.parseFloat(rawValue),
+      );
+    } catch (error) {
+      return DEFAULT_SIGNED_PREFERENCE_MAGNITUDE;
+    }
+  }
+
+  function persistSignedPreferenceMagnitude(magnitude) {
+    try {
+      window.sessionStorage.setItem(
+        SIGNED_PREFERENCE_SCALE_STORAGE_KEY,
+        String(normalizedSignedPreferenceMagnitude(magnitude)),
+      );
+    } catch (error) {
+    }
+  }
+
+  function clipSignedPreferenceValue(value, magnitude) {
+    const safeValue = numericValue(value, 0);
+    const safeMagnitude = normalizedSignedPreferenceMagnitude(magnitude);
+    return clamp(safeValue, -safeMagnitude, safeMagnitude);
+  }
+
+  function signedPreferenceOffsetForValue(value, trackHeight) {
+    if (!(trackHeight > 0)) {
+      return 0;
+    }
+    const safeValue = clamp(
+      numericValue(value, 0),
+      -SIGNED_PREFERENCE_LEGEND_EXTENT,
+      SIGNED_PREFERENCE_LEGEND_EXTENT,
+    );
+    const normalizedOffset = 0.5 - (safeValue / (SIGNED_PREFERENCE_LEGEND_EXTENT * 2));
+    return clamp(normalizedOffset * trackHeight, 0, trackHeight);
+  }
+
+  function signedPreferenceMagnitudeFromPointerOffset(offsetY, trackHeight) {
+    if (!(trackHeight > 0)) {
+      return DEFAULT_SIGNED_PREFERENCE_MAGNITUDE;
+    }
+    const normalizedOffset = clamp(offsetY / trackHeight, 0, 1);
+    const signedValue = (0.5 - normalizedOffset) * 2 * SIGNED_PREFERENCE_LEGEND_EXTENT;
+    return normalizedSignedPreferenceMagnitude(Math.abs(signedValue));
+  }
+
+  function createSignedPreferenceLegend(container, {
+    onMagnitudeChange,
+    onResetMagnitude,
+  }) {
+    container.style.position = "relative";
+    const root = document.createElement("div");
+    root.className = "codon-preference-scale";
+    root.hidden = true;
+    root.innerHTML = `
+      <div class="codon-preference-scale__panel">
+        <div class="codon-preference-scale__header">
+          <div>
+            <div class="codon-preference-scale__title">Current scale</div>
+            <div class="codon-preference-scale__value" data-role="value"></div>
+          </div>
+          <button type="button" class="codon-preference-scale__reset" data-role="reset">Reset</button>
+        </div>
+        <div class="codon-preference-scale__copy" data-role="copy"></div>
+        <div class="codon-preference-scale__body">
+          <div class="codon-preference-scale__label codon-preference-scale__label--positive" data-role="positive-label"></div>
+          <div class="codon-preference-scale__track-shell">
+            <div class="codon-preference-scale__tick-column">
+              <span class="codon-preference-scale__tick codon-preference-scale__tick--top" data-role="tick-top"></span>
+              <span class="codon-preference-scale__tick codon-preference-scale__tick--middle">0</span>
+              <span class="codon-preference-scale__tick codon-preference-scale__tick--bottom" data-role="tick-bottom"></span>
+            </div>
+            <button
+              type="button"
+              class="codon-preference-scale__track"
+              data-role="track"
+              aria-label="Click to set the symmetric heatmap color scale"
+            >
+              <span class="codon-preference-scale__clip codon-preference-scale__clip--top" data-role="top-clip"></span>
+              <span class="codon-preference-scale__clip codon-preference-scale__clip--bottom" data-role="bottom-clip"></span>
+              <span class="codon-preference-scale__active-band" data-role="active-band"></span>
+              <span class="codon-preference-scale__marker codon-preference-scale__marker--positive" data-role="positive-marker"></span>
+              <span class="codon-preference-scale__marker codon-preference-scale__marker--negative" data-role="negative-marker"></span>
+              <span class="codon-preference-scale__zero" data-role="zero-marker"></span>
+            </button>
+          </div>
+          <div class="codon-preference-scale__label codon-preference-scale__label--negative" data-role="negative-label"></div>
+        </div>
+        <div class="codon-preference-scale__hint">Click to choose the symmetric clipping range. Double-click or reset to restore the default.</div>
+      </div>
+    `;
+    container.append(root);
+
+    const valueNode = root.querySelector('[data-role="value"]');
+    const copyNode = root.querySelector('[data-role="copy"]');
+    const positiveLabelNode = root.querySelector('[data-role="positive-label"]');
+    const negativeLabelNode = root.querySelector('[data-role="negative-label"]');
+    const tickTopNode = root.querySelector('[data-role="tick-top"]');
+    const tickBottomNode = root.querySelector('[data-role="tick-bottom"]');
+    const resetButton = root.querySelector('[data-role="reset"]');
+    const track = root.querySelector('[data-role="track"]');
+    const topClip = root.querySelector('[data-role="top-clip"]');
+    const bottomClip = root.querySelector('[data-role="bottom-clip"]');
+    const activeBand = root.querySelector('[data-role="active-band"]');
+    const positiveMarker = root.querySelector('[data-role="positive-marker"]');
+    const negativeMarker = root.querySelector('[data-role="negative-marker"]');
+
+    function trackMagnitudeForEvent(event) {
+      const trackBounds = track.getBoundingClientRect();
+      return signedPreferenceMagnitudeFromPointerOffset(
+        event.clientY - trackBounds.top,
+        trackBounds.height,
+      );
+    }
+
+    function updateTrackMarkers(magnitude) {
+      const trackHeight = track.clientHeight;
+      const positiveMarkerOffset = signedPreferenceOffsetForValue(magnitude, trackHeight);
+      const negativeMarkerOffset = signedPreferenceOffsetForValue(-magnitude, trackHeight);
+      const activeBandHeight = Math.max(0, negativeMarkerOffset - positiveMarkerOffset);
+      activeBand.style.top = `${positiveMarkerOffset}px`;
+      activeBand.style.height = `${activeBandHeight}px`;
+      positiveMarker.style.top = `${positiveMarkerOffset}px`;
+      negativeMarker.style.top = `${negativeMarkerOffset}px`;
+      topClip.style.height = `${Math.max(0, positiveMarkerOffset)}px`;
+      bottomClip.style.top = `${negativeMarkerOffset}px`;
+      bottomClip.style.height = `${Math.max(0, trackHeight - negativeMarkerOffset)}px`;
+    }
+
+    track.addEventListener("click", (event) => {
+      onMagnitudeChange(trackMagnitudeForEvent(event));
+    });
+    track.addEventListener("dblclick", (event) => {
+      event.preventDefault();
+      onResetMagnitude();
+    });
+    resetButton.addEventListener("click", () => {
+      onResetMagnitude();
+    });
+
+    return {
+      render({
+        magnitude,
+        codonOne,
+        codonTwo,
+        rightOffset,
+        top,
+        bottom,
+      }) {
+        const formattedMagnitude = formatShare(magnitude);
+        root.hidden = false;
+        root.style.right = `${rightOffset}px`;
+        root.style.top = `${Math.max(16, top - 4)}px`;
+        root.style.bottom = `${Math.max(16, bottom - 4)}px`;
+        valueNode.textContent = `±${formattedMagnitude}`;
+        copyNode.textContent = `Current scale: ±${formattedMagnitude}`;
+        positiveLabelNode.textContent = `${codonTwo}-preferring`;
+        negativeLabelNode.textContent = `${codonOne}-preferring`;
+        tickTopNode.textContent = `+${formatShare(SIGNED_PREFERENCE_LEGEND_EXTENT)}`;
+        tickBottomNode.textContent = `-${formatShare(SIGNED_PREFERENCE_LEGEND_EXTENT)}`;
+        updateTrackMarkers(magnitude);
+        window.requestAnimationFrame(() => {
+          updateTrackMarkers(magnitude);
+        });
+      },
+      hide() {
+        root.hidden = true;
+      },
     };
   }
 
@@ -472,10 +667,26 @@
     installWheelHandler(chart, rowCount, () => currentZoomState);
     const taxonAxisValues = payload.taxa.map((row) => String(row.taxonId));
     const visualRange = resolvedMatrixVisualRange(payload.valueMin, payload.valueMax);
-    const signedPreferenceRange = resolvedSignedPreferenceRange(payload.valueMin, payload.valueMax);
     const taxonLabelByAxisValue = new Map(
       (payload.taxa || []).map((row) => [String(row.taxonId), row.taxonName]),
     );
+    let currentSignedPreferenceMagnitude = loadSignedPreferenceMagnitude();
+    const signedPreferenceLegend = createSignedPreferenceLegend(container, {
+      onMagnitudeChange(nextMagnitude) {
+        const resolvedMagnitude = normalizedSignedPreferenceMagnitude(nextMagnitude);
+        if (resolvedMagnitude === currentSignedPreferenceMagnitude) {
+          return;
+        }
+        currentSignedPreferenceMagnitude = resolvedMagnitude;
+        persistSignedPreferenceMagnitude(resolvedMagnitude);
+        renderChart();
+      },
+      onResetMagnitude() {
+        currentSignedPreferenceMagnitude = DEFAULT_SIGNED_PREFERENCE_MAGNITUDE;
+        persistSignedPreferenceMagnitude(currentSignedPreferenceMagnitude);
+        renderChart();
+      },
+    });
 
     function overviewGutterWidth(visibleRowCount) {
       if (!hasTaxonomyGutter) {
@@ -527,9 +738,12 @@
     }
 
     function currentOverviewMargins(gutterWidth) {
+      const rightMargin = payload.mode === "signed_preference_map"
+        ? (currentZoomState ? 176 : 132)
+        : (currentZoomState ? 148 : 96);
       return {
         left: hasTaxonomyGutter ? gutterWidth + 20 : 160,
-        right: currentZoomState ? 148 : 96,
+        right: rightMargin,
       };
     }
 
@@ -550,6 +764,7 @@
       || !Array.isArray(payload.taxa)
       || payload.taxa.length === 0
     ) {
+      signedPreferenceLegend.hide();
       chart.setOption(
         buildEmptyOption(
           payload.mode === "signed_preference_map"
@@ -604,8 +819,13 @@
       const margins = currentOverviewMargins(gutterWidth);
       applySquareOverviewHeight(layout, margins);
       if (payload.mode === "signed_preference_map") {
+        const signedPreferenceRange = currentSignedPreferenceRange(currentSignedPreferenceMagnitude);
         const preferenceData = payload.cells.map((cell) => ({
-          value: [String(cell.columnTaxonId), String(cell.rowTaxonId), cell.signedDifference],
+          value: [
+            String(cell.columnTaxonId),
+            String(cell.rowTaxonId),
+            clipSignedPreferenceValue(cell.signedDifference, signedPreferenceRange.magnitude),
+          ],
           rowTaxonId: String(cell.rowTaxonId),
           rowTaxonName: cell.rowTaxonName,
           rowObservationCount: cell.rowObservationCount,
@@ -697,20 +917,10 @@
             },
           },
           visualMap: {
+            show: false,
             min: signedPreferenceRange.min,
             max: signedPreferenceRange.max,
             calculable: false,
-            orient: "vertical",
-            right: currentZoomState ? 32 : 16,
-            top: "center",
-            itemWidth: 16,
-            itemHeight: 160,
-            text: [`${payload.codonTwo}-preferring`, `${payload.codonOne}-preferring`],
-            textGap: 8,
-            textStyle: {
-              color: MUTED_TEXT_COLOR,
-              fontSize: 11,
-            },
             inRange: {
               color: ["#0f5964", "#f2efe6", "#d06e37"],
             },
@@ -758,10 +968,19 @@
             },
           ],
         }, { notMerge: true });
+        signedPreferenceLegend.render({
+          magnitude: signedPreferenceRange.magnitude,
+          codonOne: payload.codonOne,
+          codonTwo: payload.codonTwo,
+          rightOffset: currentZoomState ? 28 : 14,
+          top: layout.top,
+          bottom: layout.bottom,
+        });
         refreshOverviewGutter();
         return;
       }
 
+      signedPreferenceLegend.hide();
       const heatmapData = payload.cells.map((cell) => ({
         value: [
           String(cell.columnTaxonId),
