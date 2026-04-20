@@ -18,7 +18,6 @@ from apps.browser.stats import (
     build_group_length_values_queryset,
     build_length_inspect_bundle,
     build_length_inspect_payload,
-    build_length_overview_payload,
     build_length_profile_vector_bundle,
     build_matching_repeat_calls_with_codon_usage_count,
     build_ranked_codon_composition_summary_bundle,
@@ -26,9 +25,18 @@ from apps.browser.stats import (
     build_ranked_length_summary_bundle,
     build_ranked_taxon_group_queryset,
     build_stats_filter_state,
+    build_tail_burden_overview_payload,
+    build_tail_pairwise_matrix,
     build_taxonomy_gutter_payload,
+    build_typical_length_overview_payload,
+    build_wasserstein_pairwise_matrix,
     summarize_ranked_codon_composition_groups,
     summarize_ranked_length_groups,
+)
+from apps.browser.stats.summaries import (
+    _compute_l1_tail_distance,
+    _compute_tail_feature_vector,
+    _compute_wasserstein1_distance,
 )
 from apps.browser.stats.ordering import order_taxon_rows_by_lineage
 from apps.browser.models import (
@@ -895,65 +903,45 @@ class BrowserStatsTests(TestCase):
             ],
         )
 
-    def test_build_length_overview_payload_uses_pairwise_similarity_mode(self):
-        payload = build_length_overview_payload(
-            [
-                {
-                    "taxon_id": 1,
-                    "taxon_name": "Taxon A",
-                    "rank": "class",
-                    "observation_count": 3,
-                    "species_count": 2,
-                    "length_profile": [1.0, 0.0, 0.0],
-                },
-                {
-                    "taxon_id": 2,
-                    "taxon_name": "Taxon B",
-                    "rank": "class",
-                    "observation_count": 4,
-                    "species_count": 3,
-                    "length_profile": [0.0, 1.0, 0.0],
-                },
-            ],
-        )
+    def test_build_typical_length_overview_payload_uses_divergence_mode(self):
+        rows = [
+            {
+                "taxon_id": 1,
+                "taxon_name": "Taxon A",
+                "rank": "class",
+                "observation_count": 3,
+                "species_count": 2,
+                "length_profile": [1.0, 0.0, 0.0],
+                "raw_lengths": [5, 10, 15],
+            },
+            {
+                "taxon_id": 2,
+                "taxon_name": "Taxon B",
+                "rank": "class",
+                "observation_count": 4,
+                "species_count": 3,
+                "length_profile": [0.0, 1.0, 0.0],
+                "raw_lengths": [20, 25, 30, 35],
+            },
+        ]
+        payload = build_typical_length_overview_payload(rows)
 
         self.assertEqual(payload["mode"], "pairwise_similarity_matrix")
-        self.assertEqual(payload["displayMetric"], "similarity")
+        self.assertEqual(payload["displayMetric"], "divergence")
         self.assertEqual(payload["visibleTaxaCount"], 2)
         self.assertEqual(payload["maxObservationCount"], 4)
         self.assertEqual(payload["maxSpeciesCount"], 3)
-        self.assertEqual(payload["valueMin"], 0)
-        self.assertEqual(payload["valueMax"], 1)
-        self.assertEqual(
-            payload["taxa"],
-            [
-                {
-                    "taxonId": 1,
-                    "taxonName": "Taxon A",
-                    "rank": "class",
-                    "observationCount": 3,
-                    "speciesCount": 2,
-                    "rowIndex": 0,
-                    "columnIndex": 0,
-                },
-                {
-                    "taxonId": 2,
-                    "taxonName": "Taxon B",
-                    "rank": "class",
-                    "observationCount": 4,
-                    "speciesCount": 3,
-                    "rowIndex": 1,
-                    "columnIndex": 1,
-                },
-            ],
-        )
-        self.assertEqual(
-            payload["divergenceMatrix"],
-            [
-                [0.0, 1.0],
-                [1.0, 0.0],
-            ],
-        )
+        taxa = payload["taxa"]
+        self.assertEqual(taxa[0]["taxonId"], 1)
+        self.assertEqual(taxa[0]["rowIndex"], 0)
+        self.assertEqual(taxa[0]["columnIndex"], 0)
+        self.assertEqual(taxa[1]["rowIndex"], 1)
+        self.assertEqual(taxa[1]["columnIndex"], 1)
+        matrix = payload["divergenceMatrix"]
+        self.assertEqual(matrix[0][0], 0.0)
+        self.assertEqual(matrix[1][1], 0.0)
+        self.assertAlmostEqual(matrix[0][1], matrix[1][0], places=6)
+        self.assertGreater(matrix[0][1], 0.0)
 
     def test_order_taxon_rows_by_lineage_uses_curated_metazoa_order_for_root_linked_phyla(self):
         ordered_rows = order_taxon_rows_by_lineage(
@@ -1455,3 +1443,175 @@ class BrowserStatsTests(TestCase):
         self.assertEqual(payload["observationCount"], 0)
         self.assertEqual(payload["ccdfPoints"], [])
         self.assertIsNone(payload["median"])
+
+
+class LengthOverviewMetricsTests(TestCase):
+    # ---- Wasserstein-1 distance ----
+
+    def test_wasserstein1_zero_for_identical_inputs(self):
+        self.assertEqual(_compute_wasserstein1_distance([5, 10, 15], [5, 10, 15]), 0.0)
+
+    def test_wasserstein1_symmetry(self):
+        a = [5, 10, 15]
+        b = [20, 30, 40]
+        self.assertAlmostEqual(
+            _compute_wasserstein1_distance(a, b),
+            _compute_wasserstein1_distance(b, a),
+            places=6,
+        )
+
+    def test_wasserstein1_completely_separated_distributions(self):
+        # a all at 1, b all at 50 (at l_cap); integral of |CDF_a - CDF_b| from 1→50 = 49, /50 = 0.98
+        result = _compute_wasserstein1_distance([1, 1, 1], [50, 50, 50])
+        self.assertAlmostEqual(result, 0.98, places=4)
+
+    def test_wasserstein1_outlier_clamped_not_filtered(self):
+        # 500 gets clamped to 50, not removed — creates a detectable shift
+        result_with_outlier = _compute_wasserstein1_distance([5, 5, 5, 500], [5, 5, 5, 5])
+        self.assertGreater(result_with_outlier, 0.0)
+        self.assertLessEqual(result_with_outlier, 1.0)
+
+    def test_wasserstein1_returns_zero_for_empty_inputs(self):
+        self.assertEqual(_compute_wasserstein1_distance([], []), 0.0)
+        self.assertEqual(_compute_wasserstein1_distance([], [10, 20]), 0.0)
+
+    def test_wasserstein1_result_in_unit_interval(self):
+        result = _compute_wasserstein1_distance([5, 10, 15], [20, 30, 40])
+        self.assertGreaterEqual(result, 0.0)
+        self.assertLessEqual(result, 1.0)
+
+    def test_wasserstein1_concrete_value(self):
+        # a=[5,10,15] b=[20,30,40] l_cap=50 → W1=20 → normalized=0.4 (verified analytically)
+        result = _compute_wasserstein1_distance([5, 10, 15], [20, 30, 40])
+        self.assertAlmostEqual(result, 0.4, places=5)
+
+    # ---- Tail feature vector ----
+
+    def test_tail_feature_all_short_lengths(self):
+        vec = _compute_tail_feature_vector([5, 10, 15, 20])
+        self.assertEqual(vec[0], 0.0)  # p(L>20)
+        self.assertEqual(vec[1], 0.0)  # p(L>30)
+        self.assertEqual(vec[2], 0.0)  # p(L>50)
+
+    def test_tail_feature_threshold_boundaries_strict(self):
+        # strict >: 20 is NOT > 20, 21,30,31,50,51 are → 5/6
+        # 30 is NOT > 30, 31,50,51 are → 3/6
+        # 50 is NOT > 50, 51 is → 1/6
+        vec = _compute_tail_feature_vector([20, 21, 30, 31, 50, 51])
+        self.assertAlmostEqual(vec[0], 5 / 6, places=5)  # p(L>20)
+        self.assertAlmostEqual(vec[1], 3 / 6, places=5)  # p(L>30)
+        self.assertAlmostEqual(vec[2], 1 / 6, places=5)  # p(L>50)
+
+    def test_tail_feature_empty_list(self):
+        self.assertEqual(_compute_tail_feature_vector([]), [0.0, 0.0, 0.0, 0.0])
+
+    def test_tail_feature_q95_capped_at_one(self):
+        # q95 >> l_cap=50, normalized should cap at 1.0
+        vec = _compute_tail_feature_vector([300, 300, 300, 300, 300])
+        self.assertEqual(vec[3], 1.0)
+
+    def test_tail_feature_q95_normalized_by_l_cap(self):
+        # All lengths = 25; q95 = 25; 25/50 = 0.5
+        vec = _compute_tail_feature_vector([25] * 10)
+        self.assertAlmostEqual(vec[3], 0.5, places=5)
+
+    # ---- L1 tail distance ----
+
+    def test_l1_tail_distance_zero_for_identical(self):
+        self.assertEqual(_compute_l1_tail_distance([0.3, 0.2, 0.1, 0.4], [0.3, 0.2, 0.1, 0.4]), 0.0)
+
+    def test_l1_tail_distance_symmetry(self):
+        a = [0.8, 0.5, 0.2, 0.9]
+        b = [0.1, 0.3, 0.0, 0.4]
+        self.assertAlmostEqual(
+            _compute_l1_tail_distance(a, b),
+            _compute_l1_tail_distance(b, a),
+            places=6,
+        )
+
+    def test_l1_tail_distance_max_value(self):
+        # all-ones vs all-zeros → sum = 4, /4 = 1.0
+        self.assertAlmostEqual(
+            _compute_l1_tail_distance([1.0, 1.0, 1.0, 1.0], [0.0, 0.0, 0.0, 0.0]),
+            1.0,
+            places=6,
+        )
+
+    # ---- Pairwise matrix builders ----
+
+    def _make_rows(self, lengths_list):
+        return [
+            {"raw_lengths": lengths, "taxon_id": i, "taxon_name": f"T{i}",
+             "rank": "class", "observation_count": len(lengths), "species_count": 1,
+             "length_profile": []}
+            for i, lengths in enumerate(lengths_list)
+        ]
+
+    def test_wasserstein_matrix_zero_diagonal(self):
+        rows = self._make_rows([[5, 10, 15], [20, 25, 30], [35, 40, 45]])
+        matrix = build_wasserstein_pairwise_matrix(rows)
+        for i in range(3):
+            self.assertEqual(matrix[i][i], 0.0)
+
+    def test_wasserstein_matrix_symmetric(self):
+        rows = self._make_rows([[5, 10, 15], [20, 25, 30], [35, 40, 45]])
+        matrix = build_wasserstein_pairwise_matrix(rows)
+        for i in range(3):
+            for j in range(3):
+                self.assertAlmostEqual(matrix[i][j], matrix[j][i], places=6)
+
+    def test_tail_matrix_zero_diagonal(self):
+        rows = self._make_rows([[5, 10, 15], [20, 25, 30]])
+        matrix = build_tail_pairwise_matrix(rows)
+        for i in range(2):
+            self.assertEqual(matrix[i][i], 0.0)
+
+    def test_tail_matrix_symmetric(self):
+        rows = self._make_rows([[5, 10, 15], [20, 25, 60], [100, 200, 300]])
+        matrix = build_tail_pairwise_matrix(rows)
+        for i in range(3):
+            for j in range(3):
+                self.assertAlmostEqual(matrix[i][j], matrix[j][i], places=6)
+
+    # ---- Payload shapes ----
+
+    def test_build_typical_length_overview_payload_shape(self):
+        rows = self._make_rows([[5, 10, 15], [20, 30, 40]])
+        payload = build_typical_length_overview_payload(rows)
+        self.assertEqual(payload["mode"], "pairwise_similarity_matrix")
+        self.assertEqual(payload["displayMetric"], "divergence")
+        self.assertEqual(payload["visibleTaxaCount"], 2)
+        matrix = payload["divergenceMatrix"]
+        self.assertEqual(matrix[0][0], 0.0)
+        self.assertEqual(matrix[1][1], 0.0)
+        self.assertAlmostEqual(matrix[0][1], matrix[1][0], places=6)
+        taxa = payload["taxa"]
+        self.assertIn("rowIndex", taxa[0])
+        self.assertIn("columnIndex", taxa[0])
+
+    def test_build_tail_burden_overview_payload_shape(self):
+        rows = self._make_rows([[5, 10, 15], [100, 200, 300]])
+        payload = build_tail_burden_overview_payload(rows)
+        self.assertEqual(payload["mode"], "pairwise_similarity_matrix")
+        self.assertEqual(payload["displayMetric"], "divergence")
+        matrix = payload["divergenceMatrix"]
+        self.assertEqual(matrix[0][0], 0.0)
+        self.assertEqual(matrix[1][1], 0.0)
+        self.assertAlmostEqual(matrix[0][1], matrix[1][0], places=6)
+        self.assertGreater(matrix[0][1], 0.0)
+
+    def test_both_overview_payloads_return_empty_shape_for_empty_rows(self):
+        for builder in (build_typical_length_overview_payload, build_tail_burden_overview_payload):
+            payload = builder([])
+            self.assertEqual(payload["mode"], "pairwise_similarity_matrix")
+            self.assertEqual(payload["displayMetric"], "divergence")
+            self.assertEqual(payload["divergenceMatrix"], [])
+            self.assertEqual(payload["visibleTaxaCount"], 0)
+
+    def test_typical_and_tail_payloads_produce_different_matrices(self):
+        # Same central lengths, but one taxon has a very long tail → matrices differ
+        rows = self._make_rows([[10, 12, 14, 16], [10, 12, 14, 200]])
+        typical_matrix = build_typical_length_overview_payload(rows)["divergenceMatrix"]
+        tail_matrix = build_tail_burden_overview_payload(rows)["divergenceMatrix"]
+        # The off-diagonal value should differ between the two metrics
+        self.assertNotAlmostEqual(typical_matrix[0][1], tail_matrix[0][1], places=3)

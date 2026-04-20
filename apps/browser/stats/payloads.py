@@ -1,5 +1,7 @@
 from math import log2
 
+from .summaries import build_tail_pairwise_matrix, build_wasserstein_pairwise_matrix
+
 
 def build_ranked_length_chart_payload(summary_rows):
     if not summary_rows:
@@ -88,7 +90,7 @@ def build_codon_overview_payload(summary_rows, *, visible_codons):
     return build_codon_similarity_matrix_payload(summary_rows, visible_codons=visible_codons)
 
 
-def build_length_overview_payload(profile_rows, *, display_metric="similarity"):
+def build_typical_length_overview_payload(profile_rows):
     if not profile_rows:
         return _build_pairwise_overview_payload(
             [],
@@ -96,42 +98,42 @@ def build_length_overview_payload(profile_rows, *, display_metric="similarity"):
             divergence_matrix=[],
             value_min=0,
             value_max=1,
-            display_metric=display_metric,
+            display_metric="divergence",
             include_display_metric_when_empty=True,
         )
-
-    taxon_rows = [
-        {
-            "taxon_id": row["taxon_id"],
-            "taxon_name": row["taxon_name"],
-            "rank": row["rank"],
-            "observation_count": row["observation_count"],
-            "species_count": row.get("species_count", row["observation_count"]),
-            "length_profile": row["length_profile"],
-        }
-        for row in profile_rows
-    ]
-    divergence_matrix = _build_pairwise_divergence_matrix(
-        [row["length_profile"] for row in taxon_rows]
-    )
-    value_min, value_max = _matrix_value_range(
-        divergence_matrix,
-        transform=(
-            None
-            if display_metric == "divergence"
-            else lambda value: round(max(0.0, 1.0 - value), 6)
-        ),
-        default_min=0,
-        default_max=1,
-    )
-
+    divergence_matrix = build_wasserstein_pairwise_matrix(profile_rows)
+    value_min, value_max = _matrix_value_range(divergence_matrix, default_min=0, default_max=1)
     return _build_pairwise_overview_payload(
-        taxon_rows,
+        profile_rows,
         mode="pairwise_similarity_matrix",
         divergence_matrix=divergence_matrix,
         value_min=value_min,
         value_max=value_max,
-        display_metric=display_metric,
+        display_metric="divergence",
+        extra_taxon_fields=("columnIndex",),
+    )
+
+
+def build_tail_burden_overview_payload(profile_rows):
+    if not profile_rows:
+        return _build_pairwise_overview_payload(
+            [],
+            mode="pairwise_similarity_matrix",
+            divergence_matrix=[],
+            value_min=0,
+            value_max=1,
+            display_metric="divergence",
+            include_display_metric_when_empty=True,
+        )
+    divergence_matrix = build_tail_pairwise_matrix(profile_rows)
+    value_min, value_max = _matrix_value_range(divergence_matrix, default_min=0, default_max=1)
+    return _build_pairwise_overview_payload(
+        profile_rows,
+        mode="pairwise_similarity_matrix",
+        divergence_matrix=divergence_matrix,
+        value_min=value_min,
+        value_max=value_max,
+        display_metric="divergence",
         extra_taxon_fields=("columnIndex",),
     )
 

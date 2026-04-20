@@ -4,6 +4,8 @@
   const MEDIAN_COLOR = "#d06e37";
   const CHART_MODE_FOCUSED = "focused";
   const CHART_MODE_FULL_RANGE = "full-range";
+  const OVERVIEW_MODE_TYPICAL = "typical";
+  const OVERVIEW_MODE_TAIL = "tail";
   const GRID_COLOR = "rgba(23, 36, 44, 0.1)";
   const MAX_VISIBLE_ROWS_WITH_TAXON_LABELS = 24;
   const PENDING_SCROLL_KEY = "repeat-length-explorer:pending-scroll";
@@ -648,29 +650,82 @@
   }
 
   function mountLengthOverview() {
-    const payload = parsePayload("length-overview-payload");
-    const taxonomyGutterPayload = parsePayload("length-overview-taxonomy-gutter-payload");
     const container = document.getElementById("length-overview");
+    const typicalPayload = parsePayload("length-overview-typical-payload");
+    const tailPayload = parsePayload("length-overview-tail-payload");
+    const taxonomyGutterPayload = parsePayload("length-overview-taxonomy-gutter-payload");
     const pairwiseOverviewApi = window.HomorepeatPairwiseOverview;
     if (
-      !payload
-      || !container
+      !container
       || typeof window.echarts === "undefined"
       || !pairwiseOverviewApi
       || typeof pairwiseOverviewApi.renderPairwiseOverview !== "function"
     ) {
       return;
     }
+    if (!typicalPayload && !tailPayload) return;
 
-    pairwiseOverviewApi.renderPairwiseOverview({
-      container,
-      payload,
-      taxonomyGutterPayload,
-      emptyStateMessages: {
-        similarity: "No visible taxon similarity cells",
-      },
-      emptyStateDetail: "Adjust the filters to populate the overview.",
+    const overviewModeButtons = Array.from(document.querySelectorAll("[data-overview-mode-button]"));
+    const overviewDescriptions = Array.from(document.querySelectorAll("[data-overview-description]"));
+    let currentMode = OVERVIEW_MODE_TYPICAL;
+
+    function syncOverviewModeButtons() {
+      overviewModeButtons.forEach((btn) => {
+        const isActive = btn.dataset.overviewMode === currentMode;
+        btn.classList.toggle("btn-brand", isActive);
+        btn.classList.toggle("btn-outline-secondary", !isActive);
+        btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+      });
+      overviewDescriptions.forEach((el) => {
+        el.hidden = el.dataset.overviewMode !== currentMode;
+      });
+    }
+
+    function makeTooltipFormatter(distanceLabel) {
+      return function (params) {
+        const cell = params.data || {};
+        const isSelf = cell.rowTaxonId === cell.columnTaxonId;
+        return [
+          `<strong>${cell.rowTaxonName}</strong> x <strong>${cell.columnTaxonName}</strong>`,
+          `${distanceLabel}: ${typeof cell.divergence === "number" ? cell.divergence.toFixed(4) : "—"}`,
+          `Species support: ${cell.rowSpeciesCount} vs ${cell.columnSpeciesCount}`,
+          `Calls: ${cell.rowObservationCount} vs ${cell.columnObservationCount}`,
+          isSelf ? "Self-comparison: identical by definition." : "",
+        ].filter(Boolean).join("<br>");
+      };
+    }
+
+    const TOOLTIP_FORMATTERS = {
+      [OVERVIEW_MODE_TYPICAL]: makeTooltipFormatter("W1 distance"),
+      [OVERVIEW_MODE_TAIL]: makeTooltipFormatter("Tail L1 distance"),
+    };
+
+    function renderOverview(payload) {
+      const existing = window.echarts.getInstanceByDom(container);
+      if (existing) existing.dispose();
+      pairwiseOverviewApi.renderPairwiseOverview({
+        container,
+        payload,
+        taxonomyGutterPayload,
+        emptyStateMessages: { similarity: "No visible taxon distance cells." },
+        emptyStateDetail: "Adjust the filters to populate the overview.",
+        similarityTooltipFormatter: TOOLTIP_FORMATTERS[currentMode],
+      });
+    }
+
+    overviewModeButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const requested = btn.dataset.overviewMode;
+        if (requested !== OVERVIEW_MODE_TYPICAL && requested !== OVERVIEW_MODE_TAIL) return;
+        if (requested === currentMode) return;
+        currentMode = requested;
+        syncOverviewModeButtons();
+        renderOverview(currentMode === OVERVIEW_MODE_TYPICAL ? typicalPayload : tailPayload);
+      });
     });
+
+    syncOverviewModeButtons();
+    renderOverview(typicalPayload || tailPayload);
   }
 
   function mountLengthChart() {

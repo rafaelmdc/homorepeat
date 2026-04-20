@@ -5,12 +5,13 @@ from apps.browser.stats import (
     apply_stats_filter_context,
     build_length_inspect_bundle,
     build_length_inspect_payload,
-    build_length_overview_payload,
     build_length_profile_vector_bundle,
     build_ranked_length_chart_payload,
     build_ranked_length_summary_bundle,
     build_stats_filter_state,
+    build_tail_burden_overview_payload,
     build_taxonomy_gutter_payload,
+    build_typical_length_overview_payload,
 )
 from apps.browser.stats.params import ALLOWED_STATS_RANKS, next_lower_rank
 
@@ -148,8 +149,10 @@ class RepeatLengthExplorerView(TemplateView):
         context["total_taxa_count"] = summary_bundle["total_taxa_count"]
         context["visible_taxa_count"] = summary_bundle["visible_taxa_count"]
         context["overview_visible_taxa_count"] = len(overview_rows)
-        context["overview_payload"] = build_length_overview_payload(overview_rows)
-        context["overview_payload_id"] = "length-overview-payload"
+        context["overview_typical_payload"] = build_typical_length_overview_payload(overview_rows)
+        context["overview_typical_payload_id"] = "length-overview-typical-payload"
+        context["overview_tail_payload"] = build_tail_burden_overview_payload(overview_rows)
+        context["overview_tail_payload_id"] = "length-overview-tail-payload"
         context["overview_container_id"] = "length-overview"
         context["overview_taxonomy_gutter_payload"] = build_taxonomy_gutter_payload(
             overview_rows,

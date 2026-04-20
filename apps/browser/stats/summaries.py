@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import bisect
 from collections import defaultdict
 from dataclasses import asdict
 from math import ceil, floor
@@ -78,6 +79,7 @@ def summarize_length_profile_vectors(summary_rows, grouped_lengths, *, species_c
                     }
                     for bin_start in visible_bin_starts_in_order
                 ],
+                "raw_lengths": sorted(lengths),
             }
         )
 
@@ -228,3 +230,64 @@ def normalize_numeric_summary_value(value: float):
 
 def normalize_length_summary_value(value: float):
     return normalize_numeric_summary_value(value)
+
+
+def _compute_wasserstein1_distance(lengths_a, lengths_b, l_cap=50):
+    if not lengths_a or not lengths_b:
+        return 0.0
+    clamped_a = sorted(min(x, l_cap) for x in lengths_a)
+    clamped_b = sorted(min(x, l_cap) for x in lengths_b)
+    n_a = len(clamped_a)
+    n_b = len(clamped_b)
+    all_vals = sorted(set(clamped_a) | set(clamped_b) | {l_cap})
+    w1 = 0.0
+    for i in range(len(all_vals) - 1):
+        x = all_vals[i]
+        next_x = all_vals[i + 1]
+        cdf_a = bisect.bisect_right(clamped_a, x) / n_a
+        cdf_b = bisect.bisect_right(clamped_b, x) / n_b
+        w1 += abs(cdf_a - cdf_b) * (next_x - x)
+    return round(w1 / l_cap, 6)
+
+
+def _compute_tail_feature_vector(lengths, l_cap=50):
+    n = len(lengths)
+    if n == 0:
+        return [0.0, 0.0, 0.0, 0.0]
+    p_gt_20 = sum(1 for l in lengths if l > 20) / n
+    p_gt_30 = sum(1 for l in lengths if l > 30) / n
+    p_gt_50 = sum(1 for l in lengths if l > 50) / n
+    q95 = _linear_quantile(sorted(lengths), 0.95)
+    q95_norm = min(q95 / l_cap, 1.0)
+    return [round(p_gt_20, 6), round(p_gt_30, 6), round(p_gt_50, 6), round(q95_norm, 6)]
+
+
+def _compute_l1_tail_distance(tail_a, tail_b):
+    if not tail_a or not tail_b:
+        return 0.0
+    return round(sum(abs(a - b) for a, b in zip(tail_a, tail_b)) / len(tail_a), 6)
+
+
+def build_wasserstein_pairwise_matrix(profile_rows, l_cap=50):
+    n = len(profile_rows)
+    matrix = [[0.0] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(i + 1, n):
+            d = _compute_wasserstein1_distance(
+                profile_rows[i]["raw_lengths"], profile_rows[j]["raw_lengths"], l_cap
+            )
+            matrix[i][j] = d
+            matrix[j][i] = d
+    return matrix
+
+
+def build_tail_pairwise_matrix(profile_rows, l_cap=50):
+    tail_vectors = [_compute_tail_feature_vector(row["raw_lengths"], l_cap) for row in profile_rows]
+    n = len(tail_vectors)
+    matrix = [[0.0] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(i + 1, n):
+            d = _compute_l1_tail_distance(tail_vectors[i], tail_vectors[j])
+            matrix[i][j] = d
+            matrix[j][i] = d
+    return matrix

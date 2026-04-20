@@ -115,20 +115,33 @@
   <div class="section-header">
     <div>
       <p class="section-kicker mb-2">Overview layer</p>
-      <h2>Pairwise repeat-length similarity map</h2>
-      <p class="text-secondary mb-0">
-        Color encodes pairwise repeat-length distribution similarity
-        (<strong>1 - Jensen-Shannon divergence</strong>) for the lineage-ordered
-        visible taxa. <strong>1.0</strong> means identical bounded length
-        profiles, <strong>0.0</strong> means maximally different, and the color
-        scale stretches to the visible matrix range so subtle differences stay
-        readable.
+      <h2>Pairwise repeat-length distance maps</h2>
+      <p class="text-secondary mb-0" data-overview-description data-overview-mode="typical">
+        <strong>Typical profile:</strong> Wasserstein-1 distance between repeat-length distributions clamped at 50 aa.
+        <strong>0</strong> = identical typical shape, <strong>1</strong> = maximally different.
+        Rare long outliers are bounded so they do not dominate the comparison.
+        Showing {{ overview_visible_taxa_count }} visible taxon{{ overview_visible_taxa_count|pluralize }}.
+      </p>
+      <p class="text-secondary mb-0" data-overview-description data-overview-mode="tail" hidden>
+        <strong>Tail burden:</strong> L1 distance between upper-tail feature vectors
+        [p(L&gt;20), p(L&gt;30), p(L&gt;50), q95/50].
+        <strong>0</strong> = identical tail enrichment, <strong>1</strong> = maximally different.
         Showing {{ overview_visible_taxa_count }} visible taxon{{ overview_visible_taxa_count|pluralize }}.
       </p>
     </div>
+    <div class="mode-switch" data-overview-mode-switch>
+      <span class="mode-switch-label">View</span>
+      <button class="btn btn-brand" type="button"
+              data-overview-mode-button data-overview-mode="typical"
+              aria-pressed="true">Typical profile</button>
+      <button class="btn btn-outline-secondary" type="button"
+              data-overview-mode-button data-overview-mode="tail"
+              aria-pressed="false">Tail burden</button>
+    </div>
   </div>
 
-  {{ overview_payload|json_script:overview_payload_id }}
+  {{ overview_typical_payload|json_script:overview_typical_payload_id }}
+  {{ overview_tail_payload|json_script:overview_tail_payload_id }}
   {{ overview_taxonomy_gutter_payload|json_script:overview_taxonomy_gutter_payload_id }}
   <div class="length-chart-shell" id="{{ overview_container_id }}"></div>
   <noscript>
