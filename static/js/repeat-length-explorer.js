@@ -647,6 +647,32 @@
     }, { passive: false, capture: true });
   }
 
+  function mountLengthOverview() {
+    const payload = parsePayload("length-overview-payload");
+    const taxonomyGutterPayload = parsePayload("length-overview-taxonomy-gutter-payload");
+    const container = document.getElementById("length-overview");
+    const pairwiseOverviewApi = window.HomorepeatPairwiseOverview;
+    if (
+      !payload
+      || !container
+      || typeof window.echarts === "undefined"
+      || !pairwiseOverviewApi
+      || typeof pairwiseOverviewApi.renderPairwiseOverview !== "function"
+    ) {
+      return;
+    }
+
+    pairwiseOverviewApi.renderPairwiseOverview({
+      container,
+      payload,
+      taxonomyGutterPayload,
+      emptyStateMessages: {
+        similarity: "No visible taxon similarity cells",
+      },
+      emptyStateDetail: "Adjust the filters to populate the overview.",
+    });
+  }
+
   function mountLengthChart() {
     const container = document.getElementById("repeat-length-chart");
     const payload = parsePayload("repeat-length-chart-payload");
@@ -725,6 +751,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", () => {
+    mountLengthOverview();
     mountLengthChart();
     installScrollPreservingLinks();
     restorePendingScrollPosition();
