@@ -32,6 +32,8 @@ from apps.browser.stats import (
     build_taxonomy_gutter_payload,
     build_typical_length_overview_payload,
     build_wasserstein_pairwise_matrix,
+    rebuild_canonical_codon_composition_summaries,
+    rebuild_canonical_codon_composition_length_summaries,
     summarize_ranked_codon_composition_groups,
     summarize_ranked_length_groups,
 )
@@ -370,6 +372,30 @@ class BrowserStatsTests(TestCase):
                 ),
             ]
         )
+        CanonicalCodonCompositionSummary.objects.bulk_create(
+            [
+                CanonicalCodonCompositionSummary(
+                    repeat_residue="Q",
+                    display_rank="class",
+                    display_taxon_id=self.alpha["taxa"]["mammalia"].pk,
+                    display_taxon_name="Mammalia",
+                    observation_count=2,
+                    species_count=2,
+                    codon="CAA",
+                    codon_share=0.625,
+                ),
+                CanonicalCodonCompositionSummary(
+                    repeat_residue="Q",
+                    display_rank="class",
+                    display_taxon_id=self.alpha["taxa"]["mammalia"].pk,
+                    display_taxon_name="Mammalia",
+                    observation_count=2,
+                    species_count=2,
+                    codon="CAG",
+                    codon_share=0.375,
+                ),
+            ]
+        )
         request = self.factory.get(
             "/browser/codon-composition-length/",
             {
@@ -420,6 +446,83 @@ class BrowserStatsTests(TestCase):
         self.assertEqual(bundle["matrix_rows"], [])
         self.assertEqual(bundle["visible_codons"], [])
         live_mock.assert_called_once()
+
+    def test_codon_length_composition_rollup_matches_live_bundle_for_default_scope(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 8, "codon_fraction": 1.0},
+            ],
+        )
+        beta_long_call = self._create_repeat_call(
+            self.beta,
+            suffix="beta-long-q-rollup-parity",
+            residue="Q",
+            codon_metric_name="codon_ratio",
+            codon_ratio_value=0.75,
+            length=17,
+        )
+        self._set_repeat_call_codon_usages(
+            self.beta,
+            repeat_call=beta_long_call,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 2, "codon_fraction": 0.25},
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 6, "codon_fraction": 0.75},
+            ],
+        )
+        request = self.factory.get(
+            "/browser/codon-composition-length/",
+            {
+                "rank": "class",
+                "min_count": "1",
+                "top_n": "10",
+                "residue": "q",
+            },
+        )
+        filter_state = build_stats_filter_state(request)
+
+        with patch(
+            "apps.browser.stats.queries._can_use_codon_composition_length_summary_rollup",
+            return_value=False,
+        ):
+            live_bundle = build_codon_length_composition_bundle(filter_state)
+
+        cache.clear()
+        rebuild_canonical_codon_composition_summaries()
+        rebuild_canonical_codon_composition_length_summaries()
+        cache.clear()
+        rollup_bundle = build_codon_length_composition_bundle(filter_state)
+
+        self.assertEqual(rollup_bundle["matching_repeat_calls_count"], live_bundle["matching_repeat_calls_count"])
+        self.assertEqual(rollup_bundle["total_taxa_count"], live_bundle["total_taxa_count"])
+        self.assertEqual(rollup_bundle["visible_taxa_count"], live_bundle["visible_taxa_count"])
+        self.assertEqual(rollup_bundle["visible_codons"], live_bundle["visible_codons"])
+        self.assertEqual(
+            [row["label"] for row in rollup_bundle["visible_bins"]],
+            [row["label"] for row in live_bundle["visible_bins"]],
+        )
+        self.assertEqual(
+            self._flatten_codon_length_bundle(rollup_bundle),
+            self._flatten_codon_length_bundle(live_bundle),
+        )
+
+    def _flatten_codon_length_bundle(self, bundle):
+        return [
+            (
+                matrix_row["taxon_name"],
+                bin_row["bin"]["label"],
+                bin_row["observation_count"],
+                bin_row["species_count"],
+                bin_row["dominant_codon"],
+                bin_row["dominance_margin"],
+                tuple(
+                    (share_row["codon"], share_row["share"])
+                    for share_row in bin_row["codon_shares"]
+                ),
+            )
+            for matrix_row in bundle["matrix_rows"]
+            for bin_row in matrix_row["bin_rows"]
+        ]
 
     def test_ranked_taxon_group_query_respects_branch_scope_default_rank(self):
         primates = self.alpha["taxa"]["primates"]

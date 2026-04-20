@@ -200,8 +200,6 @@ def _rebuild_canonical_codon_composition_length_summaries_python() -> int:
         )
 
     call_details_by_id: dict[int, tuple[str, int, int, list[tuple[int, str, str]]]] = {}
-    call_count_by_species_bin: dict[tuple[str, str, int, int, int], int] = defaultdict(int)
-    display_taxon_bin_counts: dict[tuple[str, str, int, str, int], dict[str, int]] = {}
     for repeat_call_id, repeat_residue, repeat_length, species_taxon_id in repeat_calls:
         ancestor_details = ancestor_details_by_species_taxon_id.get(species_taxon_id, [])
         length_bin_start = build_length_bin_definition(repeat_length).start
@@ -211,6 +209,45 @@ def _rebuild_canonical_codon_composition_length_summaries_python() -> int:
             species_taxon_id,
             ancestor_details,
         )
+
+    residue_codons: dict[str, set[str]] = defaultdict(set)
+    supported_repeat_call_ids: set[int] = set()
+    species_bin_codon_fraction_sums: dict[tuple[str, str, int, int, int, str], float] = defaultdict(float)
+    codon_usage_rows = CanonicalRepeatCallCodonUsage.objects.order_by().values_list(
+        "repeat_call_id",
+        "amino_acid",
+        "codon",
+        "codon_fraction",
+    )
+    for repeat_call_id, amino_acid, codon, codon_fraction in codon_usage_rows:
+        call_details = call_details_by_id.get(repeat_call_id)
+        if call_details is None:
+            continue
+
+        repeat_residue, length_bin_start, species_taxon_id, ancestor_details = call_details
+        if amino_acid != repeat_residue:
+            continue
+
+        supported_repeat_call_ids.add(repeat_call_id)
+        residue_codons[repeat_residue].add(codon)
+        for display_taxon_id, _, display_rank in ancestor_details:
+            species_bin_codon_fraction_sums[
+                (
+                    repeat_residue,
+                    display_rank,
+                    display_taxon_id,
+                    length_bin_start,
+                    species_taxon_id,
+                    codon,
+                )
+            ] += float(codon_fraction)
+
+    call_count_by_species_bin: dict[tuple[str, str, int, int, int], int] = defaultdict(int)
+    display_taxon_bin_counts: dict[tuple[str, str, int, str, int], dict[str, int]] = {}
+    for repeat_call_id in supported_repeat_call_ids:
+        repeat_residue, length_bin_start, species_taxon_id, ancestor_details = call_details_by_id[
+            repeat_call_id
+        ]
         for display_taxon_id, display_taxon_name, display_rank in ancestor_details:
             species_bin_key = (
                 repeat_residue,
@@ -260,36 +297,6 @@ def _rebuild_canonical_codon_composition_length_summaries_python() -> int:
 
     for counts_key, species_taxon_ids_for_group in species_keys_by_display_taxon_bin.items():
         display_taxon_bin_counts[counts_key]["species_count"] = len(species_taxon_ids_for_group)
-
-    residue_codons: dict[str, set[str]] = defaultdict(set)
-    species_bin_codon_fraction_sums: dict[tuple[str, str, int, int, int, str], float] = defaultdict(float)
-    codon_usage_rows = CanonicalRepeatCallCodonUsage.objects.order_by().values_list(
-        "repeat_call_id",
-        "amino_acid",
-        "codon",
-        "codon_fraction",
-    )
-    for repeat_call_id, amino_acid, codon, codon_fraction in codon_usage_rows:
-        call_details = call_details_by_id.get(repeat_call_id)
-        if call_details is None:
-            continue
-
-        repeat_residue, length_bin_start, species_taxon_id, ancestor_details = call_details
-        if amino_acid != repeat_residue:
-            continue
-
-        residue_codons[repeat_residue].add(codon)
-        for display_taxon_id, _, display_rank in ancestor_details:
-            species_bin_codon_fraction_sums[
-                (
-                    repeat_residue,
-                    display_rank,
-                    display_taxon_id,
-                    length_bin_start,
-                    species_taxon_id,
-                    codon,
-                )
-            ] += float(codon_fraction)
 
     now = timezone.now()
     summary_rows: list[CanonicalCodonCompositionLengthSummary] = []
