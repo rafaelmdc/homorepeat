@@ -9,6 +9,7 @@
   const MAX_MATRIX_COLUMN_LABELS = 18;
   const MAX_BOTTOM_TREE_LEAF_LABELS = 16;
   const MAX_BOTTOM_TREE_BRACE_LABELS = 48;
+  const MAX_OVERVIEW_BORDERS = 24;
   const PENDING_SCROLL_KEY = "repeat-codon-composition-explorer:pending-scroll";
   const PENDING_SCROLL_MAX_AGE_MS = 15000;
   const SIGNED_PREFERENCE_LEGEND_EXTENT = 1.25;
@@ -727,11 +728,15 @@
     function currentVisibleColumnBounds() {
       if (!currentZoomState) {
         return {
+          startValue: 0,
+          endValue: Math.max(0, rowCount - 1),
           min: 0,
           max: Math.max(0, rowCount - 1),
         };
       }
       return {
+        startValue: currentZoomState.startValue,
+        endValue: currentZoomState.endValue,
         min: currentZoomState.startValue,
         max: currentZoomState.endValue,
       };
@@ -758,11 +763,51 @@
       }
     }
 
+    function matrixValueAt(matrix, rowIndex, columnIndex, fallbackValue = 0) {
+      if (!Array.isArray(matrix)) {
+        return fallbackValue;
+      }
+      const row = matrix[rowIndex];
+      if (!Array.isArray(row)) {
+        return fallbackValue;
+      }
+      return numericValue(row[columnIndex], fallbackValue);
+    }
+
+    function overviewHeatmapStyles(visibleRowCount) {
+      if (visibleRowCount <= MAX_OVERVIEW_BORDERS) {
+        return {
+          itemStyle: {
+            borderColor: "rgba(255, 255, 255, 0.82)",
+            borderWidth: 1,
+          },
+          emphasis: {
+            itemStyle: {
+              borderColor: TEXT_COLOR,
+              borderWidth: 1.5,
+              shadowBlur: 10,
+              shadowColor: "rgba(0, 0, 0, 0.18)",
+            },
+          },
+        };
+      }
+      return {
+        itemStyle: {
+          borderWidth: 0,
+        },
+        emphasis: {
+          itemStyle: {
+            borderWidth: 0,
+          },
+        },
+      };
+    }
+
     if (
-      !Array.isArray(payload.cells)
-      || payload.cells.length === 0
-      || !Array.isArray(payload.taxa)
+      !Array.isArray(payload.taxa)
       || payload.taxa.length === 0
+      || !Array.isArray(payload.divergenceMatrix)
+      || payload.divergenceMatrix.length === 0
     ) {
       signedPreferenceLegend.hide();
       chart.setOption(
@@ -809,6 +854,125 @@
       }
     }
 
+    const visibleSimilarityWindowCache = new Map();
+    const visibleSignedWindowBaseCache = new Map();
+    const visibleSignedWindowCache = new Map();
+
+    function overviewWindowKey(bounds) {
+      return `${bounds.startValue}:${bounds.endValue}`;
+    }
+
+    function buildVisibleSimilarityData(bounds) {
+      const cacheKey = `${overviewWindowKey(bounds)}:${payload.displayMetric}`;
+      const cachedData = visibleSimilarityWindowCache.get(cacheKey);
+      if (cachedData) {
+        return cachedData;
+      }
+
+      const visibleData = [];
+      for (let rowIndex = bounds.startValue; rowIndex <= bounds.endValue; rowIndex += 1) {
+        const row = payload.taxa[rowIndex];
+        if (!row) {
+          continue;
+        }
+        for (let columnIndex = bounds.startValue; columnIndex <= bounds.endValue; columnIndex += 1) {
+          const column = payload.taxa[columnIndex];
+          if (!column) {
+            continue;
+          }
+          const divergence = matrixValueAt(payload.divergenceMatrix, rowIndex, columnIndex, 0);
+          const similarity = Math.max(0, 1 - divergence);
+          visibleData.push({
+            value: [
+              String(column.taxonId),
+              String(row.taxonId),
+              payload.displayMetric === "divergence" ? divergence : similarity,
+            ],
+            rowTaxonId: String(row.taxonId),
+            rowTaxonName: row.taxonName,
+            rowRank: row.rank,
+            rowObservationCount: row.observationCount,
+            rowSpeciesCount: row.speciesCount,
+            columnTaxonId: String(column.taxonId),
+            columnTaxonName: column.taxonName,
+            columnRank: column.rank,
+            columnObservationCount: column.observationCount,
+            columnSpeciesCount: column.speciesCount,
+            similarity,
+            divergence,
+            reliability: Math.min(row.speciesCount, column.speciesCount),
+          });
+        }
+      }
+
+      visibleSimilarityWindowCache.set(cacheKey, visibleData);
+      return visibleData;
+    }
+
+    function buildVisibleSignedWindowBase(bounds) {
+      const cacheKey = overviewWindowKey(bounds);
+      const cachedData = visibleSignedWindowBaseCache.get(cacheKey);
+      if (cachedData) {
+        return cachedData;
+      }
+
+      const visibleData = [];
+      for (let rowIndex = bounds.startValue; rowIndex <= bounds.endValue; rowIndex += 1) {
+        const row = payload.taxa[rowIndex];
+        if (!row) {
+          continue;
+        }
+        for (let columnIndex = bounds.startValue; columnIndex <= bounds.endValue; columnIndex += 1) {
+          const column = payload.taxa[columnIndex];
+          if (!column) {
+            continue;
+          }
+          visibleData.push({
+            rowTaxonId: String(row.taxonId),
+            rowTaxonName: row.taxonName,
+            rowObservationCount: row.observationCount,
+            rowSpeciesCount: row.speciesCount,
+            rowCodonOneShare: row.codonOneShare,
+            rowCodonTwoShare: row.codonTwoShare,
+            rowScore: row.score,
+            columnTaxonId: String(column.taxonId),
+            columnTaxonName: column.taxonName,
+            columnObservationCount: column.observationCount,
+            columnSpeciesCount: column.speciesCount,
+            columnCodonOneShare: column.codonOneShare,
+            columnCodonTwoShare: column.codonTwoShare,
+            columnScore: column.score,
+            signedDifference: row.score - column.score,
+            divergence: matrixValueAt(payload.divergenceMatrix, rowIndex, columnIndex, 0),
+            reliability: Math.min(row.speciesCount, column.speciesCount),
+          });
+        }
+      }
+
+      visibleSignedWindowBaseCache.set(cacheKey, visibleData);
+      return visibleData;
+    }
+
+    function buildVisibleSignedData(bounds, magnitude) {
+      const resolvedMagnitude = normalizedSignedPreferenceMagnitude(magnitude);
+      const cacheKey = `${overviewWindowKey(bounds)}:${resolvedMagnitude}`;
+      const cachedData = visibleSignedWindowCache.get(cacheKey);
+      if (cachedData) {
+        return cachedData;
+      }
+
+      const clippedVisibleData = buildVisibleSignedWindowBase(bounds).map((cell) => ({
+        ...cell,
+        value: [
+          cell.columnTaxonId,
+          cell.rowTaxonId,
+          clipSignedPreferenceValue(cell.signedDifference, resolvedMagnitude),
+        ],
+      }));
+      visibleSignedWindowCache.set(cacheKey, clippedVisibleData);
+      return clippedVisibleData;
+    }
+
     function renderChart() {
       const visibleRowCount = visibleRowCountForZoom(rowCount, currentZoomState);
       const showTaxonLabels = shouldShowTaxonLabels(visibleRowCount);
@@ -817,37 +981,11 @@
       const columnBounds = currentVisibleColumnBounds();
       const gutterWidth = overviewGutterWidth(visibleRowCount);
       const margins = currentOverviewMargins(gutterWidth);
+      const heatmapStyles = overviewHeatmapStyles(visibleRowCount);
       applySquareOverviewHeight(layout, margins);
       if (payload.mode === "signed_preference_map") {
         const signedPreferenceRange = currentSignedPreferenceRange(currentSignedPreferenceMagnitude);
-        const preferenceData = payload.cells.map((cell) => ({
-          value: [
-            String(cell.columnTaxonId),
-            String(cell.rowTaxonId),
-            clipSignedPreferenceValue(cell.signedDifference, signedPreferenceRange.magnitude),
-          ],
-          rowTaxonId: String(cell.rowTaxonId),
-          rowTaxonName: cell.rowTaxonName,
-          rowObservationCount: cell.rowObservationCount,
-          rowSpeciesCount: cell.rowSpeciesCount,
-          rowCodonOneShare: cell.rowCodonOneShare,
-          rowCodonTwoShare: cell.rowCodonTwoShare,
-          rowScore: cell.rowScore,
-          columnTaxonId: String(cell.columnTaxonId),
-          columnTaxonName: cell.columnTaxonName,
-          columnObservationCount: cell.columnObservationCount,
-          columnSpeciesCount: cell.columnSpeciesCount,
-          columnCodonOneShare: cell.columnCodonOneShare,
-          columnCodonTwoShare: cell.columnCodonTwoShare,
-          columnScore: cell.columnScore,
-          signedDifference: cell.signedDifference,
-          divergence: cell.divergence,
-          reliability: cell.reliability,
-          itemStyle: {
-            borderColor: "rgba(255, 255, 255, 0.82)",
-            borderWidth: 1,
-          },
-        }));
+        const preferenceData = buildVisibleSignedData(columnBounds, signedPreferenceRange.magnitude);
         chart.setOption({
           animation: false,
           grid: {
@@ -953,18 +1091,8 @@
                 color: TEXT_COLOR,
                 fontSize: 11,
               },
-              itemStyle: {
-                borderColor: "rgba(255, 255, 255, 0.82)",
-                borderWidth: 1,
-              },
-              emphasis: {
-                itemStyle: {
-                  borderColor: TEXT_COLOR,
-                  borderWidth: 1.5,
-                  shadowBlur: 10,
-                  shadowColor: "rgba(0, 0, 0, 0.18)",
-                },
-              },
+              itemStyle: heatmapStyles.itemStyle,
+              emphasis: heatmapStyles.emphasis,
             },
           ],
         }, { notMerge: true });
@@ -981,30 +1109,7 @@
       }
 
       signedPreferenceLegend.hide();
-      const heatmapData = payload.cells.map((cell) => ({
-        value: [
-          String(cell.columnTaxonId),
-          String(cell.rowTaxonId),
-          payload.displayMetric === "divergence" ? cell.divergence : cell.similarity,
-        ],
-        rowTaxonId: String(cell.rowTaxonId),
-        rowTaxonName: cell.rowTaxonName,
-        rowRank: cell.rowRank,
-        rowObservationCount: cell.rowObservationCount,
-        rowSpeciesCount: cell.rowSpeciesCount,
-        columnTaxonId: String(cell.columnTaxonId),
-        columnTaxonName: cell.columnTaxonName,
-        columnRank: cell.columnRank,
-        columnObservationCount: cell.columnObservationCount,
-        columnSpeciesCount: cell.columnSpeciesCount,
-        similarity: cell.similarity,
-        divergence: cell.divergence,
-        reliability: cell.reliability,
-        itemStyle: {
-          borderColor: "rgba(255, 255, 255, 0.82)",
-          borderWidth: 1,
-        },
-      }));
+      const heatmapData = buildVisibleSimilarityData(columnBounds);
       chart.setOption({
         animation: false,
         grid: {
@@ -1013,9 +1118,9 @@
           top: layout.top,
           bottom: layout.bottom,
         },
-          tooltip: {
-            trigger: "item",
-            formatter(params) {
+        tooltip: {
+          trigger: "item",
+          formatter(params) {
             const cell = params.data || {};
             const isSelfComparison = cell.rowTaxonId === cell.columnTaxonId;
             return [
@@ -1029,16 +1134,16 @@
             ].filter(Boolean).join("<br>");
           },
         },
-          xAxis: {
-            type: "category",
-            data: taxonAxisValues,
-            min: columnBounds.min,
-            max: columnBounds.max,
-            axisLabel: {
-              show: layout.showMatrixColumnLabels,
-              interval: 0,
-              color: TEXT_COLOR,
-              rotate: 42,
+        xAxis: {
+          type: "category",
+          data: taxonAxisValues,
+          min: columnBounds.min,
+          max: columnBounds.max,
+          axisLabel: {
+            show: layout.showMatrixColumnLabels,
+            interval: 0,
+            color: TEXT_COLOR,
+            rotate: 42,
             hideOverlap: true,
             width: 120,
             overflow: "truncate",
@@ -1118,18 +1223,8 @@
               color: TEXT_COLOR,
               fontSize: 11,
             },
-            itemStyle: {
-              borderColor: "rgba(255, 255, 255, 0.82)",
-              borderWidth: 1,
-            },
-            emphasis: {
-              itemStyle: {
-                borderColor: TEXT_COLOR,
-                borderWidth: 1.5,
-                shadowBlur: 10,
-                shadowColor: "rgba(0, 0, 0, 0.18)",
-              },
-            },
+            itemStyle: heatmapStyles.itemStyle,
+            emphasis: heatmapStyles.emphasis,
           },
         ],
       }, { notMerge: true });

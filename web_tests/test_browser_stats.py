@@ -25,6 +25,7 @@ from apps.browser.stats import (
     summarize_ranked_codon_composition_groups,
     summarize_ranked_length_groups,
 )
+from apps.browser.stats.ordering import order_taxon_rows_by_lineage
 from apps.browser.models import (
     CanonicalCodonCompositionSummary,
     CanonicalRepeatCall,
@@ -751,23 +752,38 @@ class BrowserStatsTests(TestCase):
             [("Taxon A", -0.4), ("Taxon B", 0.8)],
         )
         self.assertEqual(
+            payload["divergenceMatrix"],
             [
-                (
-                    cell["rowIndex"],
-                    cell["columnIndex"],
-                    cell["signedDifference"],
-                )
-                for cell in payload["cells"]
-            ],
-            [
-                (0, 0, 0.0),
-                (0, 1, -1.2),
-                (1, 0, 1.2),
-                (1, 1, 0.0),
+                [0.0, 0.295807],
+                [0.295807, 0.0],
             ],
         )
-        self.assertEqual(payload["pairwiseJsdMatrix"]["displayMetric"], "divergence")
-        self.assertEqual(payload["pairwiseJsdMatrix"]["visibleTaxaCount"], 2)
+
+    def test_order_taxon_rows_by_lineage_uses_curated_metazoa_order_for_root_linked_phyla(self):
+        ordered_rows = order_taxon_rows_by_lineage(
+            [
+                {
+                    "taxon_id": self.alpha["taxa"]["chordata"].pk,
+                    "taxon_name": "Chordata",
+                    "rank": "phylum",
+                },
+                {
+                    "taxon_id": self.alpha["taxa"]["cnidaria"].pk,
+                    "taxon_name": "Cnidaria",
+                    "rank": "phylum",
+                },
+                {
+                    "taxon_id": self.alpha["taxa"]["arthropoda"].pk,
+                    "taxon_name": "Arthropoda",
+                    "rank": "phylum",
+                },
+            ]
+        )
+
+        self.assertEqual(
+            [row["taxon_name"] for row in ordered_rows],
+            ["Cnidaria", "Arthropoda", "Chordata"],
+        )
 
     def test_taxonomy_gutter_payload_builds_rooted_visible_tree_and_scope_aware_braces(self):
         gamma = create_imported_run_fixture(

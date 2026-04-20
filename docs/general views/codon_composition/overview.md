@@ -2,112 +2,142 @@
 
 ## Purpose
 
-The codon-composition viewer replaces the scalar codon-ratio direction.
+The codon-composition viewer is now frozen at its MVP browser contract.
 
 Current implementation continuity:
 
-- the existing browser route is `/browser/codon-ratios/`
-- the product direction should now be treated as codon composition rather than
-  scalar codon ratio
+- the existing browser route remains `/browser/codon-ratios/`
+- route and file naming still use `codon_ratio` for continuity, but the page is
+  codon composition only
+- the old scalar codon-ratio browser direction is no longer part of the live
+  page contract
 
 Its job is to answer:
 
-- how codon composition varies across taxa
-- how codon mixtures differ by lineage
-- how the selected residue's codon composition changes under the current branch
-  and filter scope
+- how grouped codon composition varies across taxa for one selected residue
+- how visible taxa compare to one another through a lineage-aware overview
+- how the selected residue's codon composition changes inside the current
+  branch-scoped subset
 
 ## Product decisions
 
 ### Residue scope
 
-- the product should support all residues
+- the product supports all residues exposed by the imported catalog
 - codon composition remains residue-specific by default
-- do not mix residues into one grouped composition in v1
-- the viewer should require a residue scope for composition-first analysis
+- do not mix residues into one grouped composition summary in the MVP
+- the viewer requires a residue selection to activate composition-first
+  analysis
 
 ### Data contract
 
-- the browser should use normalized codon-usage rows as the hot-path data
-  contract
+- the browser uses normalized codon-usage rows as the hot-path data contract
 - the existing source artifacts are the finalized codon-usage TSVs already
   emitted under `publish/calls/finalized/...`
-- the web app should import raw and canonical codon-usage rows directly
+- the web app imports raw and canonical codon-usage rows directly
 - do not change `homorepeat_pipeline` for this viewer unless the user
   explicitly approves that boundary change
-- `codon_metric_name`, `codon_metric_value`, and `codon_ratio_value` should not
-  define the viewer contract
+- `codon_metric_name`, `codon_metric_value`, and `codon_ratio_value` do not
+  define the live browser contract
 
 ### Aggregation rule
 
-- grouped codon composition should use equal call weight by default
+- grouped codon composition uses equal call weight by default
 - each call contributes its codon fractions once, regardless of tract length
 - absent codons contribute `0` to grouped compositions
 
-### Delivery order
+### Ordering rule
 
-Even though the old codon-ratio page already exists technically, the new work
-should treat that route as a migration target rather than a stable product
-definition.
+- visible taxa stay lineage-aware by default
+- the shared ordering helper now includes a curated Metazoa sibling order so
+  root-linked phyla do not appear effectively arbitrary in the browser
+- outside the curated Metazoa backbone, ordering falls back to the stable
+  lineage helper behavior already used by the browser
 
-## Target 3-tier structure
+## Frozen MVP structure
 
 ### `Tier 1 - Overview`
 
-Target chart:
+Current shipped chart:
 
-- taxonomy-first `Taxon x Codon` hex overview for one selected residue
+- if the selected residue has exactly 2 visible codons:
+  signed `Taxon x Taxon` preference-difference heatmap
+- otherwise:
+  pairwise `Taxon x Taxon` codon-similarity heatmap
 
 Meaning:
 
-- y-axis: lineage-aware taxa or lineage groups
-- x-axis: synonymous codons visible in the current residue scope
-- cell value: equal-weight mean codon fraction for that taxon and codon
-- the overview should share one visual shell with the other first-wave viewers
+- both axes use the same lineage-ordered visible taxa
+- 2-codon residues show signed balance difference
+  (`codonTwo - codonOne`) between row and column taxa
+- residues with 3, 4, or 6 visible codons show pairwise similarity as
+  `1 - Jensen-Shannon divergence`
+- the overview reuses the shared taxonomy gutter and the same visible taxon set
+  as the browse layer
+
+Performance behavior:
+
+- the backend still computes a bounded pairwise matrix for the visible taxa
+- the frontend renders only the current visible zoom window of that matrix
+  instead of repainting the entire `n x n` grid on every interaction
+- large windows drop per-cell borders and heavy emphasis styling to keep the
+  chart usable in the browser
 
 ### `Tier 2 - Browse`
 
-Target chart:
+Current shipped chart:
 
-- stacked codon-composition by taxon
+- stacked codon-composition by visible taxon
 
 Meaning:
 
 - one row per displayed taxon
-- each row shows codon shares for the selected residue
+- each row shows residue-scoped codon shares for the visible synonymous codons
+- the chart, grouped HTML table, and taxonomy gutter all use the same visible
+  lineage-ordered taxa
 - branch drill-down and taxon detail handoff remain first-class
-
-This should be the first shipped composition page because it is structurally
-closest to the existing length browse layer while preserving full codon
-mixtures.
 
 ### `Tier 3 - Inspect`
 
-Target views:
+Current shipped view:
 
-- branch- or taxon-focused codon-composition detail
-- composition tables or charts for one lineage or filtered subset
-- optional per-call composition preview when needed
+- branch-scoped aggregated codon-composition detail
 
-## Reuse strategy
+Meaning:
 
-- reuse the shared stats page shape from length where it still matches the
-  product
-- reuse lineage-aware ordering, branch handoffs, and bounded filter semantics
-- reuse the shared taxonomy gutter contract from
-  `docs/general views/taxonomy_gutter_plan.md` for overview and browse charts
-  that need an explicit taxonomy axis
-- add composition-specific query and payload helpers rather than forcing codon
-  mixtures through scalar summary code
-- keep the page meaningful without JavaScript through a grouped composition
+- the inspect layer activates only when branch scope is active
+- it shows one aggregated residue-specific codon mixture for the current branch
+  subset
+- it is not a per-call inspector in the MVP
+
+## Page contract
+
+- the page stays useful without JavaScript through the grouped composition
   table
+- the summary table and the stacked chart describe the same visible taxon set
+- filters currently exposed in the page UI are:
+  target search, run, branch search, display rank, method, residue, length
+  range, minimum observations, and `top_n`
+- visible result sets stay bounded through residue scope, branch scope, rank,
+  `min_count`, and `top_n`
 
-## Constraints
+## Explicit MVP freeze
 
-- codon composition should be derived from normalized codon-usage rows, not
-  from one scalar field
-- the viewer must work for residues with 2, 3, 4, or 6 synonymous codons
-- visible result sets must stay bounded through residue scope, branch scope,
-  rank, `min_count`, and `top_n`
-- do not treat a scalar codon-ratio companion view as part of the first-wave
-  core product
+The codon-composition MVP stops here.
+
+Frozen MVP behavior:
+
+- composition-first route remains `/browser/codon-ratios/`
+- overview remains the current pairwise taxon heatmap, not a `Taxon x Codon`
+  hex map
+- browse remains the stacked taxon composition plus grouped HTML fallback table
+- inspect remains the branch-scoped aggregate composition chart
+- shared taxonomy gutter and lineage-aware ordering are part of the frozen
+  browser contract
+
+Deferred beyond the MVP:
+
+- `Taxon x Codon` overview redesign
+- route/template/file renaming away from `codon_ratio`
+- broader discoverability and handoff cleanup
+- richer inspect views such as per-call composition previews

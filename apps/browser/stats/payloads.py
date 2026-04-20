@@ -95,7 +95,7 @@ def build_codon_similarity_matrix_payload(summary_rows, *, visible_codons=None, 
             "displayMetric": display_metric,
             "visibleCodons": list(visible_codons or []),
             "taxa": [],
-            "cells": [],
+            "divergenceMatrix": [],
             "visibleTaxaCount": 0,
             "maxObservationCount": 0,
             "maxSpeciesCount": 0,
@@ -114,34 +114,22 @@ def build_codon_similarity_matrix_payload(summary_rows, *, visible_codons=None, 
         }
         for row in summary_rows
     ]
-    cells = []
-    for row_index, row in enumerate(taxon_rows):
-        row_vector = [share_row["share"] for share_row in row["codon_shares"]]
-        for column_index, other_row in enumerate(taxon_rows):
-            column_vector = [share_row["share"] for share_row in other_row["codon_shares"]]
-            divergence = _jensen_shannon_divergence(row_vector, column_vector)
-            similarity = max(0.0, 1.0 - divergence)
-            display_value = divergence if display_metric == "divergence" else similarity
-            cells.append(
-                {
-                    "rowTaxonId": row["taxon_id"],
-                    "rowTaxonName": row["taxon_name"],
-                    "rowRank": row["rank"],
-                    "rowIndex": row_index,
-                    "rowObservationCount": row["observation_count"],
-                    "rowSpeciesCount": row["species_count"],
-                    "columnTaxonId": other_row["taxon_id"],
-                    "columnTaxonName": other_row["taxon_name"],
-                    "columnRank": other_row["rank"],
-                    "columnIndex": column_index,
-                    "columnObservationCount": other_row["observation_count"],
-                    "columnSpeciesCount": other_row["species_count"],
-                    "similarity": round(similarity, 6),
-                    "divergence": round(divergence, 6),
-                    "displayValue": round(display_value, 6),
-                    "reliability": min(row["species_count"], other_row["species_count"]),
-                }
-            )
+    divergence_matrix = _build_pairwise_divergence_matrix(
+        [
+            [share_row["share"] for share_row in row["codon_shares"]]
+            for row in taxon_rows
+        ]
+    )
+    value_min, value_max = _matrix_value_range(
+        divergence_matrix,
+        transform=(
+            None
+            if display_metric == "divergence"
+            else lambda value: round(max(0.0, 1.0 - value), 6)
+        ),
+        default_min=0,
+        default_max=1,
+    )
 
     return {
         "mode": "pairwise_similarity_matrix",
@@ -159,12 +147,12 @@ def build_codon_similarity_matrix_payload(summary_rows, *, visible_codons=None, 
             }
             for index, row in enumerate(taxon_rows)
         ],
-        "cells": cells,
+        "divergenceMatrix": divergence_matrix,
         "visibleTaxaCount": len(taxon_rows),
         "maxObservationCount": max(row["observation_count"] for row in taxon_rows),
         "maxSpeciesCount": max(row["species_count"] for row in taxon_rows),
-        "valueMin": min(cell["displayValue"] for cell in cells),
-        "valueMax": max(cell["displayValue"] for cell in cells),
+        "valueMin": value_min,
+        "valueMax": value_max,
     }
 
 
@@ -178,17 +166,12 @@ def build_two_codon_preference_map_payload(summary_rows, *, visible_codons):
             "codonTwo": codon_two,
             "scoreLabel": f"{codon_two} - {codon_one}",
             "taxa": [],
-            "cells": [],
+            "divergenceMatrix": [],
             "visibleTaxaCount": 0,
             "maxObservationCount": 0,
             "maxSpeciesCount": 0,
             "valueMin": -1,
             "valueMax": 1,
-            "pairwiseJsdMatrix": build_codon_similarity_matrix_payload(
-                summary_rows,
-                visible_codons=visible_codons,
-                display_metric="divergence",
-            ),
         }
 
     taxon_rows = []
@@ -215,48 +198,14 @@ def build_two_codon_preference_map_payload(summary_rows, *, visible_codons):
             }
         )
 
-    pairwise_jsd_payload = build_codon_similarity_matrix_payload(
-        summary_rows,
-        visible_codons=visible_codons,
-        display_metric="divergence",
+    divergence_matrix = _build_pairwise_divergence_matrix(
+        [
+            [row["codonOneShare"], row["codonTwoShare"]]
+            for row in taxon_rows
+        ]
     )
-    pairwise_divergence_by_index = {
-        (cell["rowIndex"], cell["columnIndex"]): cell["divergence"]
-        for cell in pairwise_jsd_payload["cells"]
-    }
-    cells = []
-    max_abs_difference = 0
-    for row_index, row in enumerate(taxon_rows):
-        for column_index, column in enumerate(taxon_rows):
-            signed_difference = round(row["score"] - column["score"], 6)
-            max_abs_difference = max(max_abs_difference, abs(signed_difference))
-            cells.append(
-                {
-                    "rowTaxonId": row["taxonId"],
-                    "rowTaxonName": row["taxonName"],
-                    "rowRank": row["rank"],
-                    "rowIndex": row_index,
-                    "rowObservationCount": row["observationCount"],
-                    "rowSpeciesCount": row["speciesCount"],
-                    "rowCodonOneShare": row["codonOneShare"],
-                    "rowCodonTwoShare": row["codonTwoShare"],
-                    "rowScore": row["score"],
-                    "columnTaxonId": column["taxonId"],
-                    "columnTaxonName": column["taxonName"],
-                    "columnRank": column["rank"],
-                    "columnIndex": column_index,
-                    "columnObservationCount": column["observationCount"],
-                    "columnSpeciesCount": column["speciesCount"],
-                    "columnCodonOneShare": column["codonOneShare"],
-                    "columnCodonTwoShare": column["codonTwoShare"],
-                    "columnScore": column["score"],
-                    "signedDifference": signed_difference,
-                    "divergence": pairwise_divergence_by_index[(row_index, column_index)],
-                    "reliability": min(row["speciesCount"], column["speciesCount"]),
-                }
-            )
-
-    bounded_max_abs_score = max(max_abs_difference, 0.05)
+    scores = [row["score"] for row in taxon_rows]
+    bounded_max_abs_score = round(max(max(scores) - min(scores), 0.05), 6)
     return {
         "mode": "signed_preference_map",
         "visibleCodons": list(visible_codons),
@@ -278,13 +227,12 @@ def build_two_codon_preference_map_payload(summary_rows, *, visible_codons):
             }
             for index, row in enumerate(taxon_rows)
         ],
-        "cells": cells,
+        "divergenceMatrix": divergence_matrix,
         "visibleTaxaCount": len(taxon_rows),
         "maxObservationCount": max(row["observationCount"] for row in taxon_rows),
         "maxSpeciesCount": max(row["speciesCount"] for row in taxon_rows),
         "valueMin": -bounded_max_abs_score,
         "valueMax": bounded_max_abs_score,
-        "pairwiseJsdMatrix": pairwise_jsd_payload,
     }
 
 
@@ -320,6 +268,31 @@ def _jensen_shannon_divergence(left_vector, right_vector):
         ),
         6,
     )
+
+
+def _build_pairwise_divergence_matrix(vectors):
+    return [
+        [
+            _jensen_shannon_divergence(row_vector, column_vector)
+            for column_vector in vectors
+        ]
+        for row_vector in vectors
+    ]
+
+
+def _matrix_value_range(matrix, *, transform=None, default_min=0, default_max=1):
+    minimum_value = None
+    maximum_value = None
+    for row in matrix:
+        for value in row:
+            resolved_value = transform(value) if transform is not None else value
+            if minimum_value is None or resolved_value < minimum_value:
+                minimum_value = resolved_value
+            if maximum_value is None or resolved_value > maximum_value:
+                maximum_value = resolved_value
+    if minimum_value is None or maximum_value is None:
+        return default_min, default_max
+    return minimum_value, maximum_value
 
 
 def _kullback_leibler_divergence(left_vector, right_vector):

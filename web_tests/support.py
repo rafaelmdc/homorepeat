@@ -491,6 +491,13 @@ def ensure_test_taxonomy():
 
     definitions = {
         "root": {"taxon_id": 1, "taxon_name": "root", "rank": "no rank", "parent": None},
+        "cnidaria": {"taxon_id": 900200, "taxon_name": "Cnidaria", "rank": "phylum", "parent": "root"},
+        "sea_anemone": {
+            "taxon_id": 900201,
+            "taxon_name": "Nematostella vectensis",
+            "rank": "species",
+            "parent": "cnidaria",
+        },
         "arthropoda": {"taxon_id": 6656, "taxon_name": "Arthropoda", "rank": "phylum", "parent": "root"},
         "arachnida": {"taxon_id": 6854, "taxon_name": "Arachnida", "rank": "class", "parent": "arthropoda"},
         "araneae": {"taxon_id": 6893, "taxon_name": "Araneae", "rank": "order", "parent": "arachnida"},

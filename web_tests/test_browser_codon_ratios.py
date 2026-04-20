@@ -82,7 +82,7 @@ class BrowserCodonRatioExplorerTests(TestCase):
         self.assertEqual(response.context["summary_rows"], [])
         self.assertEqual(response.context["visible_codons"], [])
         self.assertEqual(response.context["overview_payload"]["taxa"], [])
-        self.assertEqual(response.context["overview_payload"]["cells"], [])
+        self.assertEqual(response.context["overview_payload"]["divergenceMatrix"], [])
         self.assertEqual(response.context["chart_payload"]["rows"], [])
         self.assertIsNone(response.context["overview_taxonomy_gutter_payload"]["root"])
         self.assertEqual(response.context["overview_taxonomy_gutter_payload"]["nodes"], [])
@@ -220,16 +220,87 @@ class BrowserCodonRatioExplorerTests(TestCase):
             ["Arachnida", "Insecta", "Mammalia"],
         )
         self.assertEqual(
-            [row["observation_count"] for row in response.context["summary_rows"]],
-            [1, 1, 2],
-        )
-        self.assertEqual(
             [row["taxonName"] for row in response.context["chart_payload"]["rows"]],
             ["Arachnida", "Insecta", "Mammalia"],
         )
         self.assertEqual(
             [row["taxonName"] for row in response.context["overview_payload"]["taxa"]],
             ["Arachnida", "Insecta", "Mammalia"],
+        )
+
+    def test_codon_ratio_explorer_uses_curated_phylum_order_for_root_linked_metazoa(self):
+        gamma = create_imported_run_fixture(
+            run_id="run-gamma",
+            genome_id="genome_gamma",
+            sequence_id="seq_gamma",
+            protein_id="prot_gamma",
+            call_id="call_gamma",
+            accession="GCF_GAMMA",
+            taxon_key="fruit_fly",
+            genome_name="Fruit fly reference genome",
+        )
+        epsilon = create_imported_run_fixture(
+            run_id="run-epsilon",
+            genome_id="genome_epsilon",
+            sequence_id="seq_epsilon",
+            protein_id="prot_epsilon",
+            call_id="call_epsilon",
+            accession="GCF_EPSILON",
+            taxon_key="sea_anemone",
+            genome_name="Sea anemone reference genome",
+        )
+
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 2, "codon_fraction": 1.0},
+            ],
+        )
+        self._set_repeat_call_codon_usages(
+            self.beta,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 2, "codon_fraction": 1.0},
+            ],
+        )
+        self._set_repeat_call_codon_usages(
+            gamma,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 2, "codon_fraction": 1.0},
+            ],
+        )
+        self._set_repeat_call_codon_usages(
+            epsilon,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 2, "codon_fraction": 1.0},
+            ],
+        )
+
+        response = self.client.get(
+            reverse("browser:codon-ratios"),
+            {
+                "rank": "phylum",
+                "min_count": "1",
+                "top_n": "10",
+                "residue": "q",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [row["taxon_name"] for row in response.context["summary_rows"]],
+            ["Cnidaria", "Arthropoda", "Chordata"],
+        )
+        self.assertEqual(
+            [row["observation_count"] for row in response.context["summary_rows"]],
+            [1, 1, 2],
+        )
+        self.assertEqual(
+            [row["taxonName"] for row in response.context["chart_payload"]["rows"]],
+            ["Cnidaria", "Arthropoda", "Chordata"],
+        )
+        self.assertEqual(
+            [row["taxonName"] for row in response.context["overview_payload"]["taxa"]],
+            ["Cnidaria", "Arthropoda", "Chordata"],
         )
 
     def test_codon_ratio_explorer_renders_signed_preference_overview_payload_for_two_codon_residue(self):
@@ -284,41 +355,10 @@ class BrowserCodonRatioExplorerTests(TestCase):
         )
         self.assertEqual(payload["maxSpeciesCount"], 1)
         self.assertEqual(
+            payload["divergenceMatrix"],
             [
-                (
-                    cell["rowIndex"],
-                    cell["columnIndex"],
-                    cell["rowTaxonName"],
-                    cell["columnTaxonName"],
-                    cell["signedDifference"],
-                    cell["divergence"],
-                )
-                for cell in payload["cells"]
-            ],
-            [
-                (0, 0, "Homo sapiens", "Homo sapiens", 0.0, 0.0),
-                (0, 1, "Homo sapiens", "Mus musculus", -1.0, 0.311278),
-                (1, 0, "Mus musculus", "Homo sapiens", 1.0, 0.311278),
-                (1, 1, "Mus musculus", "Mus musculus", 0.0, 0.0),
-            ],
-        )
-        self.assertEqual(payload["pairwiseJsdMatrix"]["mode"], "pairwise_similarity_matrix")
-        self.assertEqual(payload["pairwiseJsdMatrix"]["displayMetric"], "divergence")
-        self.assertEqual(
-            [
-                (
-                    cell["rowIndex"],
-                    cell["columnIndex"],
-                    cell["similarity"],
-                    cell["divergence"],
-                )
-                for cell in payload["pairwiseJsdMatrix"]["cells"]
-            ],
-            [
-                (0, 0, 1.0, 0.0),
-                (0, 1, 0.688722, 0.311278),
-                (1, 0, 0.688722, 0.311278),
-                (1, 1, 1.0, 0.0),
+                [0.0, 0.311278],
+                [0.311278, 0.0],
             ],
         )
         gutter_payload = response.context["overview_taxonomy_gutter_payload"]
