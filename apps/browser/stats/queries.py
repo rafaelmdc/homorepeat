@@ -14,6 +14,7 @@ from .aggregates import PercentileCont
 from .filters import StatsFilterState
 from .ordering import order_taxon_rows_by_lineage
 from .summaries import (
+    build_length_inspect_summary,
     normalize_length_summary_value,
     normalize_numeric_summary_value,
     summarize_length_profile_vectors,
@@ -100,6 +101,31 @@ def build_length_profile_vector_bundle(filter_state: StatsFilterState) -> dict[s
         "visible_taxa_count": len(vector_summary["profile_rows"]),
         "visible_bins": vector_summary["visible_bins"],
         "profile_rows": vector_summary["profile_rows"],
+    }
+    cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
+    return bundle
+
+
+def build_length_inspect_bundle(filter_state: StatsFilterState) -> dict[str, object]:
+    cache_key = f"browser:stats:length-inspect:{filter_state.cache_key()}"
+    cached_bundle = cache.get(cache_key)
+    if cached_bundle is not None:
+        return cached_bundle
+
+    lengths = sorted(
+        int(v)
+        for v in build_filtered_repeat_call_queryset(filter_state)
+        .values_list("length", flat=True)
+        if v is not None
+    )
+    summary = build_length_inspect_summary(lengths)
+    bundle = summary if summary is not None else {
+        "observation_count": 0,
+        "ccdf_points": [],
+        "median": None,
+        "q90": None,
+        "q95": None,
+        "max": None,
     }
     cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
     return bundle

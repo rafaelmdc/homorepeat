@@ -10,11 +10,14 @@ from django.test import RequestFactory, TestCase
 
 from apps.browser.stats import (
     apply_stats_filter_context,
+    build_ccdf_points,
     build_filtered_codon_usage_queryset,
     build_codon_overview_payload,
     build_group_codon_species_call_fraction_queryset,
     build_filtered_repeat_call_queryset,
     build_group_length_values_queryset,
+    build_length_inspect_bundle,
+    build_length_inspect_payload,
     build_length_overview_payload,
     build_length_profile_vector_bundle,
     build_matching_repeat_calls_with_codon_usage_count,
@@ -1350,3 +1353,105 @@ class BrowserStatsTests(TestCase):
             ],
         )
         self.assertEqual(bundle["summary_rows"], summary_rows)
+
+    def test_build_ccdf_points_builds_step_function_from_sorted_lengths(self):
+        points = build_ccdf_points([5, 10, 10, 20])
+
+        self.assertEqual(points, [
+            {"x": 5, "y": 1.0},
+            {"x": 10, "y": 0.75},
+            {"x": 20, "y": 0.25},
+        ])
+
+    def test_build_ccdf_points_returns_empty_for_empty_input(self):
+        self.assertEqual(build_ccdf_points([]), [])
+
+    def test_build_ccdf_points_always_includes_first_and_last_when_downsampling(self):
+        lengths = list(range(1, 1002))
+        points = build_ccdf_points(lengths, max_points=10)
+
+        self.assertLessEqual(len(points), 10)
+        self.assertEqual(points[0]["x"], 1)
+        self.assertEqual(points[0]["y"], 1.0)
+        self.assertEqual(points[-1]["x"], 1001)
+        self.assertAlmostEqual(points[-1]["y"], 1 / 1001, places=5)
+
+    def test_build_length_inspect_bundle_returns_empty_for_no_matching_calls(self):
+        filter_state = build_stats_filter_state(
+            self.factory.get("/browser/lengths/", {"q": "NOMATCH_XXXXXX"})
+        )
+
+        bundle = build_length_inspect_bundle(filter_state)
+
+        self.assertEqual(bundle["observation_count"], 0)
+        self.assertEqual(bundle["ccdf_points"], [])
+        self.assertIsNone(bundle["median"])
+        self.assertIsNone(bundle["max"])
+
+    def test_build_length_inspect_bundle_returns_ccdf_and_quantiles_for_branch_scope(self):
+        self._create_repeat_call(
+            self.alpha,
+            suffix="inspect-len-a",
+            residue="Q",
+            codon_metric_name="codon_ratio",
+            codon_ratio_value=0.5,
+            length=15,
+        )
+        self._create_repeat_call(
+            self.alpha,
+            suffix="inspect-len-b",
+            residue="Q",
+            codon_metric_name="codon_ratio",
+            codon_ratio_value=0.5,
+            length=20,
+        )
+        filter_state = build_stats_filter_state(
+            self.factory.get(
+                "/browser/lengths/",
+                {
+                    "branch": str(self.alpha["taxa"]["primates"].pk),
+                    "min_count": "1",
+                },
+            )
+        )
+
+        bundle = build_length_inspect_bundle(filter_state)
+
+        self.assertEqual(bundle["observation_count"], 3)
+        self.assertEqual(bundle["ccdf_points"], [
+            {"x": 11, "y": 1.0},
+            {"x": 15, "y": round(2 / 3, 6)},
+            {"x": 20, "y": round(1 / 3, 6)},
+        ])
+        self.assertEqual(bundle["median"], 15)
+        self.assertEqual(bundle["max"], 20)
+
+    def test_build_length_inspect_payload_shapes_bundle_for_frontend(self):
+        bundle = {
+            "observation_count": 5,
+            "ccdf_points": [{"x": 10, "y": 1.0}, {"x": 20, "y": 0.4}],
+            "median": 15,
+            "q90": 19,
+            "q95": 20,
+            "max": 20,
+        }
+
+        payload = build_length_inspect_payload(bundle, scope_label="Primates")
+
+        self.assertEqual(payload["scopeLabel"], "Primates")
+        self.assertEqual(payload["observationCount"], 5)
+        self.assertEqual(payload["ccdfPoints"], bundle["ccdf_points"])
+        self.assertEqual(payload["median"], 15)
+        self.assertEqual(payload["q90"], 19)
+        self.assertEqual(payload["q95"], 20)
+        self.assertEqual(payload["max"], 20)
+
+    def test_build_length_inspect_payload_returns_empty_shape_for_empty_bundle(self):
+        payload = build_length_inspect_payload(
+            {"observation_count": 0, "ccdf_points": [], "median": None, "q90": None, "q95": None, "max": None},
+            scope_label="Empty branch",
+        )
+
+        self.assertEqual(payload["observationCount"], 0)
+        self.assertEqual(payload["ccdfPoints"], [])
+        self.assertIsNone(payload["median"])

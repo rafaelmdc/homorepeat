@@ -175,6 +175,50 @@ def _linear_quantile(sorted_values, quantile: float) -> float:
     return lower_value + ((upper_value - lower_value) * fraction)
 
 
+def build_ccdf_points(sorted_lengths, *, max_points=300):
+    n = len(sorted_lengths)
+    if n == 0:
+        return []
+
+    unique_pairs = []
+    for v in sorted_lengths:
+        if unique_pairs and unique_pairs[-1][0] == v:
+            unique_pairs[-1][1] += 1
+        else:
+            unique_pairs.append([v, 1])
+
+    total_unique = len(unique_pairs)
+    if total_unique <= max_points:
+        selected_indices = set(range(total_unique))
+    else:
+        step = max(1, (total_unique - 1) // (max_points - 2))
+        selected_indices = set(range(0, total_unique, step))
+        selected_indices.add(total_unique - 1)
+
+    ccdf_points = []
+    cumulative_before = 0
+    for i, (v, c) in enumerate(unique_pairs):
+        if i in selected_indices:
+            ccdf_points.append({"x": v, "y": round((n - cumulative_before) / n, 6)})
+        cumulative_before += c
+
+    return ccdf_points
+
+
+def build_length_inspect_summary(sorted_lengths):
+    n = len(sorted_lengths)
+    if n == 0:
+        return None
+    return {
+        "observation_count": n,
+        "ccdf_points": build_ccdf_points(sorted_lengths),
+        "median": normalize_length_summary_value(_linear_quantile(sorted_lengths, 0.5)),
+        "q90": normalize_length_summary_value(_linear_quantile(sorted_lengths, 0.90)),
+        "q95": normalize_length_summary_value(_linear_quantile(sorted_lengths, 0.95)),
+        "max": sorted_lengths[-1],
+    }
+
+
 def normalize_numeric_summary_value(value: float):
     rounded = round(value, 3)
     if float(rounded).is_integer():

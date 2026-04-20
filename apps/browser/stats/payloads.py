@@ -256,6 +256,28 @@ def build_two_codon_preference_map_payload(summary_rows, *, visible_codons):
     )
 
 
+def build_length_inspect_payload(bundle, *, scope_label: str):
+    if not bundle or bundle.get("observation_count", 0) == 0:
+        return {
+            "scopeLabel": scope_label,
+            "observationCount": 0,
+            "ccdfPoints": [],
+            "median": None,
+            "q90": None,
+            "q95": None,
+            "max": None,
+        }
+    return {
+        "scopeLabel": scope_label,
+        "observationCount": bundle["observation_count"],
+        "ccdfPoints": bundle["ccdf_points"],
+        "median": bundle["median"],
+        "q90": bundle["q90"],
+        "q95": bundle["q95"],
+        "max": bundle["max"],
+    }
+
+
 def build_codon_composition_inspect_payload(bundle, *, scope_label: str):
     visible_codons = bundle.get("visible_codons", []) if bundle else []
     codon_shares = bundle.get("codon_shares", []) if bundle else []

@@ -3,6 +3,8 @@ from django.views.generic import TemplateView
 
 from apps.browser.stats import (
     apply_stats_filter_context,
+    build_length_inspect_bundle,
+    build_length_inspect_payload,
     build_length_overview_payload,
     build_length_profile_vector_bundle,
     build_ranked_length_chart_payload,
@@ -24,6 +26,25 @@ class RepeatLengthExplorerView(TemplateView):
         if not hasattr(self, "_filter_state"):
             self._filter_state = build_stats_filter_state(self.request)
         return self._filter_state
+
+    def _inspect_scope_active(self) -> bool:
+        return self._get_filter_state().branch_scope_active
+
+    def _get_inspect_bundle(self) -> dict[str, object] | None:
+        if not self._inspect_scope_active():
+            return None
+        if not hasattr(self, "_inspect_bundle"):
+            self._inspect_bundle = build_length_inspect_bundle(self._get_filter_state())
+        return self._inspect_bundle
+
+    def _inspect_scope_label(self) -> str:
+        filter_state = self._get_filter_state()
+        if filter_state.selected_branch_taxon is not None:
+            branch_rank = filter_state.selected_branch_taxon.rank or filter_state.branch_scope_noun
+            return f"{branch_rank.title()} {filter_state.selected_branch_taxon.taxon_name}"
+        if filter_state.branch_scope_active:
+            return f"{filter_state.branch_scope_noun.title()} {filter_state.branch_scope_label}"
+        return "Current filtered scope"
 
     def _get_overview_bundle(self) -> dict[str, object]:
         if not hasattr(self, "_overview_bundle"):
@@ -148,6 +169,25 @@ class RepeatLengthExplorerView(TemplateView):
         context["residue_choices"] = facet_choices["residues"]
         context["scope_items"] = self._scope_items()
         context["reset_url"] = reverse("browser:lengths")
+        context["inspect_scope_active"] = self._inspect_scope_active()
+        inspect_bundle = self._get_inspect_bundle()
+        if inspect_bundle is not None:
+            context["inspect_payload"] = build_length_inspect_payload(
+                inspect_bundle,
+                scope_label=self._inspect_scope_label(),
+            )
+            context["inspect_payload_id"] = "length-inspect-payload"
+            context["inspect_chart_container_id"] = "length-inspect-chart"
+            context["inspect_observation_count"] = inspect_bundle["observation_count"]
+            context["inspect_median"] = inspect_bundle["median"]
+            context["inspect_q90"] = inspect_bundle["q90"]
+            context["inspect_q95"] = inspect_bundle["q95"]
+            context["inspect_max"] = inspect_bundle["max"]
+            context["inspect_empty_reason"] = (
+                "No canonical repeat calls matched the current branch scope."
+                if inspect_bundle["observation_count"] == 0
+                else ""
+            )
         context["summary_empty_reason"] = (
             "No taxa reached the current display rank and minimum observation threshold."
             if context["matching_repeat_calls_count"] > 0 and not summary_rows
