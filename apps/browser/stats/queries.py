@@ -498,39 +498,18 @@ def _build_codon_length_composition_bundle_from_rollup(
     if not base_queryset.exists():
         return None
 
-    candidate_taxa_queryset = (
-        base_queryset.filter(observation_count__gte=filter_state.min_count)
-        .values(
-            "display_taxon_id",
-            "display_taxon_name",
-            "observation_count",
-            "species_count",
-        )
-        .distinct()
+    codon_summary_rollup_bundle = _build_ranked_codon_composition_summary_bundle_from_rollup(
+        filter_state,
+        matching_repeat_calls_count=matching_repeat_calls_count,
     )
-    total_taxa_count = candidate_taxa_queryset.count()
-    visible_taxa = list(
-        candidate_taxa_queryset.order_by(
-            "-observation_count",
-            "display_taxon_name",
-            "display_taxon_id",
-        )[: filter_state.top_n]
-    )
-    if not visible_taxa:
+    if codon_summary_rollup_bundle is None:
+        return None
+
+    total_taxa_count, visible_taxa, visible_codons = codon_summary_rollup_bundle
+    if not visible_taxa or not visible_codons:
         return total_taxa_count, [], [], []
 
-    visible_taxon_ids = [row["display_taxon_id"] for row in visible_taxa]
-    visible_codons = list(
-        base_queryset.filter(
-            display_taxon_id__in=visible_taxon_ids,
-            codon_share__gt=0,
-        )
-        .order_by("codon")
-        .values_list("codon", flat=True)
-        .distinct()
-    )
-    if not visible_codons:
-        return total_taxa_count, [], [], []
+    visible_taxon_ids = [row["taxon_id"] for row in visible_taxa]
 
     visible_bin_starts = list(
         base_queryset.filter(
@@ -543,9 +522,9 @@ def _build_codon_length_composition_bundle_from_rollup(
     visible_bins = [asdict(length_bin) for length_bin in build_visible_length_bins(visible_bin_starts)]
 
     matrix_rows_by_taxon_id = {
-        row["display_taxon_id"]: {
-            "taxon_id": row["display_taxon_id"],
-            "taxon_name": row["display_taxon_name"],
+        row["taxon_id"]: {
+            "taxon_id": row["taxon_id"],
+            "taxon_name": row["taxon_name"],
             "rank": filter_state.rank,
             "observation_count": int(row["observation_count"]),
             "species_count": int(row["species_count"]),
@@ -586,7 +565,7 @@ def _build_codon_length_composition_bundle_from_rollup(
 
     matrix_rows = []
     for visible_taxon in visible_taxa:
-        taxon_row = matrix_rows_by_taxon_id[visible_taxon["display_taxon_id"]]
+        taxon_row = matrix_rows_by_taxon_id[visible_taxon["taxon_id"]]
         bin_rows = []
         for visible_bin in visible_bins:
             bin_row = taxon_row["bin_rows_by_start"].get(visible_bin["start"])
