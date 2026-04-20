@@ -33,7 +33,6 @@ class StatsFilterState:
     q: str
     method: str
     residue: str
-    codon_metric_name: str
     length_min: int | None
     length_max: int | None
     purity_min: float | None
@@ -50,7 +49,6 @@ class StatsFilterState:
             "q": self.q,
             "method": self.method,
             "residue": self.residue,
-            "codon_metric_name": self.codon_metric_name,
             "length_min": self.length_min,
             "length_max": self.length_max,
             "purity_min": self.purity_min,
@@ -60,8 +58,12 @@ class StatsFilterState:
         }
 
     def cache_key(self) -> str:
-        payload = json.dumps(self.cache_key_data(), sort_keys=True, separators=(",", ":"))
-        return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+        return _hash_cache_key_payload(self.cache_key_data())
+
+
+def _hash_cache_key_payload(payload_data: dict[str, object]) -> str:
+    payload = json.dumps(payload_data, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
 
 def build_stats_filter_state(request) -> StatsFilterState:
@@ -90,7 +92,6 @@ def build_stats_filter_state(request) -> StatsFilterState:
         q=normalize_text(request.GET.get("q", "")),
         method=normalize_text(request.GET.get("method", "")),
         residue=normalize_residue(request.GET.get("residue", "")),
-        codon_metric_name=normalize_text(request.GET.get("codon_metric_name", "")),
         length_min=parse_non_negative_int(request.GET.get("length_min", "")),
         length_max=parse_non_negative_int(request.GET.get("length_max", "")),
         purity_min=parse_float(request.GET.get("purity_min", "")),
@@ -114,7 +115,6 @@ def apply_stats_filter_context(context: dict[str, object], filter_state: StatsFi
     context["current_q"] = filter_state.q
     context["current_method"] = filter_state.method
     context["current_residue"] = filter_state.residue
-    context["current_codon_metric_name"] = filter_state.codon_metric_name
     context["current_length_min"] = filter_state.length_min
     context["current_length_max"] = filter_state.length_max
     context["current_purity_min"] = filter_state.purity_min

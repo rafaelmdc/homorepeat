@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from math import ceil, floor, sqrt
-
-from .bins import build_length_bin_definition
+from math import ceil, floor
 
 
 def build_length_summary(lengths):
@@ -11,14 +9,6 @@ def build_length_summary(lengths):
         lengths,
         min_field_name="min_length",
         max_field_name="max_length",
-    )
-
-
-def build_codon_ratio_summary(codon_ratio_values):
-    return _build_numeric_summary(
-        codon_ratio_values,
-        min_field_name="min_codon_ratio",
-        max_field_name="max_codon_ratio",
     )
 
 
@@ -30,90 +20,40 @@ def summarize_ranked_length_groups(group_rows, grouped_lengths):
     )
 
 
-def summarize_ranked_codon_ratio_groups(group_rows, grouped_codon_ratio_values):
-    return _summarize_ranked_numeric_groups(
-        group_rows,
-        grouped_codon_ratio_values,
-        summary_builder=build_codon_ratio_summary,
-    )
-
-
-def summarize_codon_heatmap_groups(group_rows, grouped_length_codon_ratio_values):
-    values_by_taxon_bin = defaultdict(list)
-    bin_starts_by_taxon = defaultdict(set)
-    length_bins_by_start = {}
-
-    for display_taxon_id, length, codon_ratio_value in grouped_length_codon_ratio_values:
-        length_bin = build_length_bin_definition(length)
-        values_by_taxon_bin[(display_taxon_id, length_bin.start)].append(codon_ratio_value)
-        bin_starts_by_taxon[display_taxon_id].add(length_bin.start)
-        length_bins_by_start[length_bin.start] = length_bin
+def summarize_ranked_codon_composition_groups(group_rows, grouped_species_call_codon_fractions, *, visible_codons):
+    call_fractions_by_taxon = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
+    for display_taxon_id, species_taxon_id, repeat_call_id, codon, codon_fraction in grouped_species_call_codon_fractions:
+        call_fractions_by_taxon[display_taxon_id][species_taxon_id][repeat_call_id][codon] = float(codon_fraction)
 
     summary_rows = []
     for row in group_rows:
-        for bin_start in sorted(bin_starts_by_taxon[row["display_taxon_id"]]):
-            summary = build_codon_ratio_summary(values_by_taxon_bin[(row["display_taxon_id"], bin_start)])
-            if summary is None:
-                continue
-            length_bin = length_bins_by_start[bin_start]
-            summary_rows.append(
-                {
-                    "taxon_id": row["display_taxon_id"],
-                    "taxon_name": row["display_taxon_name"],
-                    "rank": row["display_taxon_rank"],
-                    "taxon_observation_count": row["observation_count"],
-                    "length_bin_start": length_bin.start,
-                    "length_bin_end": length_bin.end,
-                    "length_bin_key": length_bin.key,
-                    "length_bin_label": length_bin.label,
-                    "observation_count": len(values_by_taxon_bin[(row["display_taxon_id"], bin_start)]),
-                    **summary,
-                }
-            )
-    return summary_rows
-
-
-def build_numeric_histogram_bins(values):
-    if not values:
-        return []
-
-    sorted_values = sorted(values)
-    minimum = float(sorted_values[0])
-    maximum = float(sorted_values[-1])
-    if minimum == maximum:
-        normalized_value = normalize_numeric_summary_value(minimum)
-        return [
+        species_count = row.get("species_count", 0)
+        if species_count <= 0:
+            continue
+        species_call_rows = call_fractions_by_taxon[row["display_taxon_id"]]
+        summary_rows.append(
             {
-                "start": normalized_value,
-                "end": normalized_value,
-                "label": str(normalized_value),
-                "count": len(sorted_values),
-                "midpoint": normalized_value,
-            }
-        ]
-
-    bin_count = min(10, max(1, ceil(sqrt(len(sorted_values)))))
-    bin_width = (maximum - minimum) / bin_count
-    bin_rows = []
-    for index in range(bin_count):
-        start = minimum + (index * bin_width)
-        end = maximum if index == bin_count - 1 else minimum + ((index + 1) * bin_width)
-        if index == bin_count - 1:
-            count = sum(start <= value <= end for value in sorted_values)
-        else:
-            count = sum(start <= value < end for value in sorted_values)
-        normalized_start = normalize_numeric_summary_value(start)
-        normalized_end = normalize_numeric_summary_value(end)
-        bin_rows.append(
-            {
-                "start": normalized_start,
-                "end": normalized_end,
-                "label": f"{normalized_start}-{normalized_end}",
-                "count": count,
-                "midpoint": normalize_numeric_summary_value(start + ((end - start) / 2)),
+                "taxon_id": row["display_taxon_id"],
+                "taxon_name": row["display_taxon_name"],
+                "rank": row["display_taxon_rank"],
+                "observation_count": row["observation_count"],
+                "species_count": species_count,
+                "codon_shares": [
+                    {
+                        "codon": codon,
+                        "share": normalize_numeric_summary_value(
+                            sum(
+                                sum(call_rows[repeat_call_id].get(codon, 0.0) for repeat_call_id in call_rows)
+                                / len(call_rows)
+                                for call_rows in species_call_rows.values()
+                            ) / species_count
+                        ),
+                    }
+                    for codon in visible_codons
+                ],
             }
         )
-    return bin_rows
+    return summary_rows
 
 
 def _summarize_ranked_numeric_groups(group_rows, grouped_values, *, summary_builder):

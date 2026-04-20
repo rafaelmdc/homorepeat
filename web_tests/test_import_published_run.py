@@ -10,15 +10,21 @@ from django.test import SimpleTestCase
 from apps.imports.services.published_run import (
     ImportContractError,
     inspect_published_run,
+    iter_codon_usage_artifact_rows,
     iter_accession_call_count_rows,
     iter_accession_status_rows,
+    iter_download_manifest_rows,
     iter_genome_rows,
+    iter_normalization_warning_rows,
+    iter_protein_rows,
     iter_repeat_call_rows,
     iter_run_parameter_rows,
+    iter_sequence_rows,
+    iter_taxonomy_rows,
     load_published_run,
 )
 
-from .support import build_minimal_publish_root, build_multibatch_publish_root
+from .support import add_finalized_codon_usage_artifact, build_minimal_publish_root, build_multibatch_publish_root
 
 
 SIBLING_PIPELINE_RUNS_ROOT = Path(__file__).resolve().parents[2] / "homorepeat_pipeline" / "runs"
@@ -121,111 +127,255 @@ def _stream_tsv_stats(
     }
 
 
+def _iter_batch_rows(inspected, *, path_attr: str, iterator, include_batch_id: bool = False):
+    for batch_paths in inspected.artifact_paths.acquisition_batches:
+        kwargs = {"batch_id": batch_paths.batch_id} if include_batch_id else {}
+        yield from iterator(getattr(batch_paths, path_attr), **kwargs)
+
+
+def _merge_rows_by_key(rows, *, key_field: str):
+    merged = {}
+    ordered_keys = []
+    for row in rows:
+        key = row[key_field]
+        if key not in merged:
+            merged[key] = row
+            ordered_keys.append(key)
+            continue
+        if merged[key] != row:
+            raise AssertionError(f"conflicting duplicate rows for {key_field}={key!r}")
+    return [merged[key] for key in ordered_keys]
+
+
 class PublishedRunImportServiceTests(SimpleTestCase):
-    def test_load_published_run_parses_real_small_raw_run_from_sibling_pipeline(self):
+    def test_inspect_published_run_exposes_real_small_raw_run_with_streaming_iterators(self):
         publish_root = _sibling_publish_root(SMALL_REAL_RUN_ID)
         if not publish_root.exists():
             self.skipTest(f"requires sibling pipeline run at {publish_root}")
 
-        payload = load_published_run(publish_root)
+        inspected = inspect_published_run(publish_root)
         batch_paths = list(sorted((publish_root / "acquisition" / "batches").glob("*/")))
+        taxonomy_rows = _merge_rows_by_key(
+            list(_iter_batch_rows(inspected, path_attr="taxonomy_tsv", iterator=iter_taxonomy_rows)),
+            key_field="taxon_id",
+        )
+        genome_rows = _merge_rows_by_key(
+            list(
+                _iter_batch_rows(
+                    inspected,
+                    path_attr="genomes_tsv",
+                    iterator=iter_genome_rows,
+                    include_batch_id=True,
+                )
+            ),
+            key_field="genome_id",
+        )
+        sequence_rows = _merge_rows_by_key(
+            list(
+                _iter_batch_rows(
+                    inspected,
+                    path_attr="sequences_tsv",
+                    iterator=iter_sequence_rows,
+                    include_batch_id=True,
+                )
+            ),
+            key_field="sequence_id",
+        )
+        protein_rows = _merge_rows_by_key(
+            list(
+                _iter_batch_rows(
+                    inspected,
+                    path_attr="proteins_tsv",
+                    iterator=iter_protein_rows,
+                    include_batch_id=True,
+                )
+            ),
+            key_field="protein_id",
+        )
+        run_parameter_rows = list(iter_run_parameter_rows(inspected.artifact_paths.run_params_tsv))
+        repeat_call_rows = list(iter_repeat_call_rows(inspected.artifact_paths.repeat_calls_tsv))
+        accession_status_rows = list(iter_accession_status_rows(inspected.artifact_paths.accession_status_tsv))
+        accession_call_count_rows = list(
+            iter_accession_call_count_rows(inspected.artifact_paths.accession_call_counts_tsv)
+        )
+        download_manifest_rows = list(
+            _iter_batch_rows(
+                inspected,
+                path_attr="download_manifest_tsv",
+                iterator=iter_download_manifest_rows,
+                include_batch_id=True,
+            )
+        )
+        normalization_warning_rows = list(
+            _iter_batch_rows(
+                inspected,
+                path_attr="normalization_warnings_tsv",
+                iterator=iter_normalization_warning_rows,
+                include_batch_id=True,
+            )
+        )
+        repeat_linked_sequence_ids = {str(row["sequence_id"]) for row in repeat_call_rows}
+        repeat_linked_protein_ids = {str(row["protein_id"]) for row in repeat_call_rows}
 
-        self.assertEqual(payload.pipeline_run["run_id"], SMALL_REAL_RUN_ID)
-        self.assertEqual(payload.manifest["acquisition_publish_mode"], "raw")
-        self.assertEqual(len(payload.artifact_paths.acquisition_batches), 1)
-        self.assertEqual(len(payload.batch_summaries), 1)
-        self.assertEqual(payload.genome_rows[0]["batch_id"], payload.artifact_paths.acquisition_batches[0].batch_id)
-        self.assertEqual({row["method"] for row in payload.run_parameter_rows}, {"pure", "threshold"})
-        self.assertEqual({row["repeat_residue"] for row in payload.run_parameter_rows}, {"Q"})
+        self.assertEqual(inspected.pipeline_run["run_id"], SMALL_REAL_RUN_ID)
+        self.assertEqual(inspected.manifest["acquisition_publish_mode"], "raw")
+        self.assertEqual(len(inspected.artifact_paths.acquisition_batches), 1)
+        self.assertEqual(genome_rows[0]["batch_id"], inspected.artifact_paths.acquisition_batches[0].batch_id)
+        self.assertEqual({row["method"] for row in run_parameter_rows}, {"pure", "threshold"})
+        self.assertEqual({row["repeat_residue"] for row in run_parameter_rows}, {"Q"})
         self.assertEqual(
-            len(payload.taxonomy_rows),
+            len(taxonomy_rows),
             _unique_tsv_row_count(
                 [batch_path / "taxonomy.tsv" for batch_path in batch_paths],
                 ["taxon_id"],
             ),
         )
         self.assertEqual(
-            len(payload.genome_rows),
+            len(genome_rows),
             _unique_tsv_row_count(
                 [batch_path / "genomes.tsv" for batch_path in batch_paths],
                 ["genome_id"],
             ),
         )
         self.assertEqual(
-            len(payload.sequence_rows),
+            len(sequence_rows),
             _unique_tsv_row_count(
                 [batch_path / "sequences.tsv" for batch_path in batch_paths],
                 ["sequence_id"],
             ),
         )
         self.assertEqual(
-            len(payload.protein_rows),
+            len(protein_rows),
             _unique_tsv_row_count(
                 [batch_path / "proteins.tsv" for batch_path in batch_paths],
                 ["protein_id"],
             ),
         )
         self.assertEqual(
-            len(payload.run_parameter_rows),
+            len(run_parameter_rows),
             _unique_tsv_row_count(
                 [publish_root / "calls" / "run_params.tsv"],
                 ["method", "repeat_residue", "param_name"],
             ),
         )
         self.assertEqual(
-            len(payload.repeat_call_rows),
+            len(repeat_call_rows),
             _tsv_row_count(publish_root / "calls" / "repeat_calls.tsv"),
         )
         self.assertEqual(
-            len(payload.accession_status_rows),
+            len(accession_status_rows),
             _unique_tsv_row_count(
                 [publish_root / "status" / "accession_status.tsv"],
                 ["assembly_accession"],
             ),
         )
         self.assertEqual(
-            len(payload.accession_call_count_rows),
+            len(accession_call_count_rows),
             _unique_tsv_row_count(
                 [publish_root / "status" / "accession_call_counts.tsv"],
                 ["assembly_accession", "method", "repeat_residue"],
             ),
         )
         self.assertEqual(
-            len(payload.download_manifest_rows),
+            len(download_manifest_rows),
             _sum_tsv_row_counts([batch_path / "download_manifest.tsv" for batch_path in batch_paths]),
         )
         self.assertEqual(
-            len(payload.normalization_warning_rows),
+            len(normalization_warning_rows),
             _sum_tsv_row_counts([batch_path / "normalization_warnings.tsv" for batch_path in batch_paths]),
         )
-        self.assertEqual(payload.batch_summaries[0].acquisition_validation["scope"], "batch")
-        self.assertEqual(payload.batch_summaries[0].total_repeat_calls, len(payload.repeat_call_rows))
-        self.assertEqual(
-            payload.batch_summaries[0].total_repeat_linked_sequences,
-            len(payload.repeat_linked_ids.sequence_ids),
-        )
-        self.assertEqual(
-            payload.batch_summaries[0].total_repeat_linked_proteins,
-            len(payload.repeat_linked_ids.protein_ids),
-        )
+        self.assertTrue(repeat_linked_sequence_ids.issubset({str(row["sequence_id"]) for row in sequence_rows}))
+        self.assertTrue(repeat_linked_protein_ids.issubset({str(row["protein_id"]) for row in protein_rows}))
 
-    def test_load_published_run_rejects_missing_required_file(self):
+    def test_inspect_published_run_discovers_finalized_codon_usage_artifacts(self):
+        with TemporaryDirectory() as tempdir:
+            publish_root = build_multibatch_publish_root(Path(tempdir))
+            add_finalized_codon_usage_artifact(
+                publish_root,
+                method="pure",
+                repeat_residue="Q",
+                batch_id="batch_0001",
+                rows=[
+                    {
+                        "call_id": "call_1",
+                        "sequence_id": "seq_1",
+                        "protein_id": "prot_1",
+                        "amino_acid": "Q",
+                        "codon": "CAG",
+                        "codon_count": 11,
+                        "codon_fraction": "1.0",
+                    }
+                ],
+            )
+            add_finalized_codon_usage_artifact(
+                publish_root,
+                method="threshold",
+                repeat_residue="Q",
+                batch_id="batch_0002",
+                rows=[
+                    {
+                        "call_id": "call_2",
+                        "sequence_id": "seq_3",
+                        "protein_id": "prot_3",
+                        "amino_acid": "Q",
+                        "codon": "CAA",
+                        "codon_count": 4,
+                        "codon_fraction": "0.4",
+                    },
+                    {
+                        "call_id": "call_2",
+                        "sequence_id": "seq_3",
+                        "protein_id": "prot_3",
+                        "amino_acid": "Q",
+                        "codon": "CAG",
+                        "codon_count": 6,
+                        "codon_fraction": "0.6",
+                    },
+                ],
+            )
+
+            inspected = inspect_published_run(publish_root)
+
+            self.assertEqual(
+                [
+                    (artifact.method, artifact.repeat_residue, artifact.batch_id)
+                    for artifact in inspected.artifact_paths.codon_usage_artifacts
+                ],
+                [
+                    ("pure", "Q", "batch_0001"),
+                    ("threshold", "Q", "batch_0002"),
+                ],
+            )
+            self.assertEqual(
+                len(list(iter_codon_usage_artifact_rows(inspected.artifact_paths.codon_usage_artifacts))),
+                3,
+            )
+
+    def test_inspect_published_run_rejects_missing_finalized_codon_usage_file(self):
+        with TemporaryDirectory() as tempdir:
+            publish_root = build_minimal_publish_root(Path(tempdir))
+            (publish_root / "calls" / "finalized" / "pure" / "Q" / "batch_0001").mkdir(parents=True)
+
+            with self.assertRaises(ImportContractError):
+                inspect_published_run(publish_root)
+
+    def test_inspect_published_run_rejects_missing_required_file(self):
         with TemporaryDirectory() as tempdir:
             publish_root = build_minimal_publish_root(Path(tempdir))
             (publish_root / "acquisition" / "batches" / "batch_0001" / "genomes.tsv").unlink()
 
             with self.assertRaises(ImportContractError):
-                load_published_run(publish_root)
+                inspect_published_run(publish_root)
 
-    def test_load_published_run_rejects_malformed_manifest(self):
+    def test_inspect_published_run_rejects_malformed_manifest(self):
         with TemporaryDirectory() as tempdir:
             publish_root = build_minimal_publish_root(Path(tempdir))
             (publish_root / "metadata" / "run_manifest.json").write_text("{", encoding="utf-8")
 
             with self.assertRaises(ImportContractError):
-                load_published_run(publish_root)
+                inspect_published_run(publish_root)
 
-    def test_load_published_run_rejects_missing_required_columns(self):
+    def test_inspect_published_run_rejects_missing_required_columns(self):
         with TemporaryDirectory() as tempdir:
             publish_root = build_minimal_publish_root(Path(tempdir))
             (publish_root / "acquisition" / "batches" / "batch_0001" / "genomes.tsv").write_text(
@@ -235,9 +385,17 @@ class PublishedRunImportServiceTests(SimpleTestCase):
             )
 
             with self.assertRaises(ImportContractError):
-                load_published_run(publish_root)
+                inspected = inspect_published_run(publish_root)
+                list(
+                    _iter_batch_rows(
+                        inspected,
+                        path_attr="genomes_tsv",
+                        iterator=iter_genome_rows,
+                        include_batch_id=True,
+                    )
+                )
 
-    def test_load_published_run_rejects_manifest_missing_required_keys(self):
+    def test_inspect_published_run_rejects_manifest_missing_required_keys(self):
         with TemporaryDirectory() as tempdir:
             publish_root = build_minimal_publish_root(Path(tempdir))
             (publish_root / "metadata" / "run_manifest.json").write_text(
@@ -246,9 +404,9 @@ class PublishedRunImportServiceTests(SimpleTestCase):
             )
 
             with self.assertRaises(ImportContractError):
-                load_published_run(publish_root)
+                inspect_published_run(publish_root)
 
-    def test_load_published_run_preserves_full_raw_taxonomy(self):
+    def test_inspect_published_run_preserves_full_raw_taxonomy(self):
         with TemporaryDirectory() as tempdir:
             publish_root = build_minimal_publish_root(Path(tempdir))
             (publish_root / "acquisition" / "batches" / "batch_0001" / "taxonomy.tsv").write_text(
@@ -268,9 +426,13 @@ class PublishedRunImportServiceTests(SimpleTestCase):
                 encoding="utf-8",
             )
 
-            payload = load_published_run(publish_root)
+            inspected = inspect_published_run(publish_root)
+            taxonomy_rows = _merge_rows_by_key(
+                list(_iter_batch_rows(inspected, path_attr="taxonomy_tsv", iterator=iter_taxonomy_rows)),
+                key_field="taxon_id",
+            )
 
-            taxonomy_by_id = {row["taxon_id"]: row for row in payload.taxonomy_rows}
+            taxonomy_by_id = {row["taxon_id"]: row for row in taxonomy_rows}
             self.assertEqual(len(taxonomy_by_id), 12)
             self.assertIn(131567, taxonomy_by_id)
             self.assertIn(7742, taxonomy_by_id)
@@ -281,7 +443,7 @@ class PublishedRunImportServiceTests(SimpleTestCase):
             self.assertEqual(taxonomy_by_id[9443]["parent_taxon_id"], 314146)
             self.assertEqual(taxonomy_by_id[9606]["parent_taxon_id"], 9605)
 
-    def test_load_published_run_rejects_non_raw_publish_mode(self):
+    def test_inspect_published_run_rejects_non_raw_publish_mode(self):
         with TemporaryDirectory() as tempdir:
             publish_root = build_minimal_publish_root(Path(tempdir))
             manifest_path = publish_root / "metadata" / "run_manifest.json"
@@ -290,9 +452,9 @@ class PublishedRunImportServiceTests(SimpleTestCase):
             manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
             with self.assertRaises(ImportContractError):
-                load_published_run(publish_root)
+                inspect_published_run(publish_root)
 
-    def test_load_published_run_accepts_seed_extend_and_repeat_residue_scoped_params(self):
+    def test_inspect_published_run_accepts_seed_extend_and_repeat_residue_scoped_params(self):
         with TemporaryDirectory() as tempdir:
             publish_root = build_minimal_publish_root(Path(tempdir))
             (publish_root / "calls" / "run_params.tsv").write_text(
@@ -306,65 +468,118 @@ class PublishedRunImportServiceTests(SimpleTestCase):
                 encoding="utf-8",
             )
 
-            payload = load_published_run(publish_root)
+            inspected = inspect_published_run(publish_root)
+            run_parameter_rows = list(iter_run_parameter_rows(inspected.artifact_paths.run_params_tsv))
+            repeat_call_rows = list(iter_repeat_call_rows(inspected.artifact_paths.repeat_calls_tsv))
 
-            self.assertEqual(payload.run_parameter_rows[0]["method"], "seed_extend")
-            self.assertEqual(payload.run_parameter_rows[0]["repeat_residue"], "Q")
-            self.assertEqual(payload.repeat_call_rows[0]["method"], "seed_extend")
+            self.assertEqual(run_parameter_rows[0]["method"], "seed_extend")
+            self.assertEqual(run_parameter_rows[0]["repeat_residue"], "Q")
+            self.assertEqual(repeat_call_rows[0]["method"], "seed_extend")
 
-    def test_load_published_run_supports_multi_batch_raw_layout(self):
+    def test_inspect_published_run_supports_multi_batch_raw_layout(self):
         with TemporaryDirectory() as tempdir:
             publish_root = build_multibatch_publish_root(Path(tempdir))
 
-            payload = load_published_run(publish_root)
+            inspected = inspect_published_run(publish_root)
+            taxonomy_rows = _merge_rows_by_key(
+                list(_iter_batch_rows(inspected, path_attr="taxonomy_tsv", iterator=iter_taxonomy_rows)),
+                key_field="taxon_id",
+            )
+            genome_rows = _merge_rows_by_key(
+                list(
+                    _iter_batch_rows(
+                        inspected,
+                        path_attr="genomes_tsv",
+                        iterator=iter_genome_rows,
+                        include_batch_id=True,
+                    )
+                ),
+                key_field="genome_id",
+            )
+            sequence_rows = _merge_rows_by_key(
+                list(
+                    _iter_batch_rows(
+                        inspected,
+                        path_attr="sequences_tsv",
+                        iterator=iter_sequence_rows,
+                        include_batch_id=True,
+                    )
+                ),
+                key_field="sequence_id",
+            )
+            protein_rows = _merge_rows_by_key(
+                list(
+                    _iter_batch_rows(
+                        inspected,
+                        path_attr="proteins_tsv",
+                        iterator=iter_protein_rows,
+                        include_batch_id=True,
+                    )
+                ),
+                key_field="protein_id",
+            )
+            repeat_call_rows = list(iter_repeat_call_rows(inspected.artifact_paths.repeat_calls_tsv))
+            download_manifest_rows = list(
+                _iter_batch_rows(
+                    inspected,
+                    path_attr="download_manifest_tsv",
+                    iterator=iter_download_manifest_rows,
+                    include_batch_id=True,
+                )
+            )
+            normalization_warning_rows = list(
+                _iter_batch_rows(
+                    inspected,
+                    path_attr="normalization_warnings_tsv",
+                    iterator=iter_normalization_warning_rows,
+                    include_batch_id=True,
+                )
+            )
+            accession_status_rows = list(iter_accession_status_rows(inspected.artifact_paths.accession_status_tsv))
+            accession_call_count_rows = list(
+                iter_accession_call_count_rows(inspected.artifact_paths.accession_call_counts_tsv)
+            )
+            repeat_linked_genome_ids = tuple(sorted({str(row["genome_id"]) for row in repeat_call_rows}))
+            repeat_linked_sequence_ids = tuple(sorted({str(row["sequence_id"]) for row in repeat_call_rows}))
+            repeat_linked_protein_ids = tuple(sorted({str(row["protein_id"]) for row in repeat_call_rows}))
 
             self.assertEqual(
-                [batch.batch_id for batch in payload.artifact_paths.acquisition_batches],
+                [batch.batch_id for batch in inspected.artifact_paths.acquisition_batches],
                 ["batch_0001", "batch_0002"],
             )
-            self.assertEqual(len(payload.taxonomy_rows), 3)
-            self.assertEqual(len(payload.genome_rows), 2)
-            self.assertEqual(len(payload.sequence_rows), 3)
-            self.assertEqual(len(payload.protein_rows), 3)
-            self.assertEqual(len(payload.repeat_call_rows), 2)
-            self.assertEqual(len(payload.download_manifest_rows), 2)
-            self.assertEqual(len(payload.normalization_warning_rows), 1)
-            self.assertEqual(len(payload.accession_status_rows), 2)
-            self.assertEqual(len(payload.accession_call_count_rows), 2)
-            self.assertEqual(payload.repeat_linked_ids.genome_ids, ("genome_1", "genome_2"))
-            self.assertEqual(payload.repeat_linked_ids.sequence_ids, ("seq_1", "seq_3"))
-            self.assertEqual(payload.repeat_linked_ids.protein_ids, ("prot_1", "prot_3"))
+            self.assertEqual(len(taxonomy_rows), 3)
+            self.assertEqual(len(genome_rows), 2)
+            self.assertEqual(len(sequence_rows), 3)
+            self.assertEqual(len(protein_rows), 3)
+            self.assertEqual(len(repeat_call_rows), 2)
+            self.assertEqual(len(download_manifest_rows), 2)
+            self.assertEqual(len(normalization_warning_rows), 1)
+            self.assertEqual(len(accession_status_rows), 2)
+            self.assertEqual(len(accession_call_count_rows), 2)
+            self.assertEqual(repeat_linked_genome_ids, ("genome_1", "genome_2"))
+            self.assertEqual(repeat_linked_sequence_ids, ("seq_1", "seq_3"))
+            self.assertEqual(repeat_linked_protein_ids, ("prot_1", "prot_3"))
             self.assertEqual(
-                Counter(row["batch_id"] for row in payload.genome_rows),
+                Counter(row["batch_id"] for row in genome_rows),
                 Counter({"batch_0001": 1, "batch_0002": 1}),
             )
             self.assertEqual(
-                Counter(row["batch_id"] for row in payload.sequence_rows),
+                Counter(row["batch_id"] for row in sequence_rows),
                 Counter({"batch_0001": 2, "batch_0002": 1}),
             )
             self.assertEqual(
-                Counter(row["batch_id"] for row in payload.protein_rows),
+                Counter(row["batch_id"] for row in protein_rows),
                 Counter({"batch_0001": 2, "batch_0002": 1}),
             )
-            batch_summaries = {summary.artifact_paths.batch_id: summary for summary in payload.batch_summaries}
-            self.assertEqual(batch_summaries["batch_0001"].total_genomes, 1)
-            self.assertEqual(batch_summaries["batch_0001"].total_sequences, 2)
-            self.assertEqual(batch_summaries["batch_0001"].total_proteins, 2)
-            self.assertEqual(batch_summaries["batch_0001"].total_download_manifest_rows, 1)
-            self.assertEqual(batch_summaries["batch_0001"].total_normalization_warning_rows, 0)
-            self.assertEqual(batch_summaries["batch_0001"].total_repeat_calls, 1)
-            self.assertEqual(batch_summaries["batch_0001"].total_repeat_linked_sequences, 1)
-            self.assertEqual(batch_summaries["batch_0001"].total_repeat_linked_proteins, 1)
-            self.assertEqual(batch_summaries["batch_0001"].acquisition_validation["status"], "pass")
-            self.assertEqual(batch_summaries["batch_0002"].total_genomes, 1)
-            self.assertEqual(batch_summaries["batch_0002"].total_sequences, 1)
-            self.assertEqual(batch_summaries["batch_0002"].total_proteins, 1)
-            self.assertEqual(batch_summaries["batch_0002"].total_download_manifest_rows, 1)
-            self.assertEqual(batch_summaries["batch_0002"].total_normalization_warning_rows, 1)
-            self.assertEqual(batch_summaries["batch_0002"].total_repeat_calls, 1)
-            self.assertEqual(batch_summaries["batch_0002"].total_repeat_linked_sequences, 1)
-            self.assertEqual(batch_summaries["batch_0002"].total_repeat_linked_proteins, 1)
-            self.assertEqual(batch_summaries["batch_0002"].acquisition_validation["status"], "warn")
+            self.assertEqual(inspected.artifact_paths.acquisition_batches[0].batch_id, "batch_0001")
+            self.assertEqual(inspected.artifact_paths.acquisition_batches[1].batch_id, "batch_0002")
+
+    def test_load_published_run_is_retired_to_avoid_materializing_large_runs(self):
+        with TemporaryDirectory() as tempdir:
+            publish_root = build_minimal_publish_root(Path(tempdir))
+
+            with self.assertRaisesRegex(ImportContractError, "retired"):
+                load_published_run(publish_root)
 
     def test_inspect_published_run_exposes_large_real_raw_run_without_db_import(self):
         publish_root = _require_large_real_run_validation(self)

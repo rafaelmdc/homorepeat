@@ -1,6 +1,0 @@
-added cursor search over pagination
-truncate some presented information
-added scroll search to all browsers
-sorting via headders and not dropdown
-
-to be implemented: recheck every browser, because some columns/headers are not clickable.

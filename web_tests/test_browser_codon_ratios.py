@@ -6,10 +6,10 @@ from django.urls import resolve, reverse
 from django.utils import timezone
 
 from apps.browser.catalog import sync_canonical_catalog_for_run
-from apps.browser.models import RepeatCall
+from apps.browser.models import RepeatCallCodonUsage
 from apps.browser.views import CodonRatioExplorerView
 
-from .support import build_test_repeat_call_values, create_imported_run_fixture
+from .support import create_imported_run_fixture
 
 
 class BrowserCodonRatioExplorerTests(TestCase):
@@ -36,49 +36,7 @@ class BrowserCodonRatioExplorerTests(TestCase):
             genome_name="Mouse reference genome",
         )
 
-    def _create_repeat_call(
-        self,
-        run_data,
-        *,
-        suffix,
-        residue,
-        codon_metric_name,
-        codon_ratio_value,
-        method=RepeatCall.Method.PURE,
-        length=11,
-    ):
-        repeat_call_values = build_test_repeat_call_values(
-            residue=residue,
-            length=length,
-            purity=1.0,
-            codon_metric_name=codon_metric_name,
-            codon_ratio_value=codon_ratio_value,
-        )
-        repeat_call = RepeatCall.objects.create(
-            pipeline_run=run_data["pipeline_run"],
-            genome=run_data["genome"],
-            sequence=run_data["sequence"],
-            protein=run_data["protein"],
-            taxon=run_data["taxon"],
-            call_id=f"call_{suffix}",
-            method=method,
-            accession=run_data["genome"].accession,
-            gene_symbol=run_data["protein"].gene_symbol or run_data["sequence"].gene_symbol,
-            protein_name=run_data["protein"].protein_name,
-            protein_length=run_data["protein"].protein_length,
-            start=30 + (len(suffix) * 20),
-            end=(30 + (len(suffix) * 20)) + length - 1,
-            length=length,
-            repeat_residue=residue,
-            repeat_count=repeat_call_values["repeat_count"],
-            non_repeat_count=repeat_call_values["non_repeat_count"],
-            purity=1.0,
-            aa_sequence=repeat_call_values["aa_sequence"],
-            codon_sequence=repeat_call_values["codon_sequence"],
-            codon_metric_name=repeat_call_values["codon_metric_name"],
-            codon_metric_value=repeat_call_values["codon_metric_value"],
-            codon_ratio_value=repeat_call_values["codon_ratio_value"],
-        )
+    def _sync_run(self, run_data):
         sync_canonical_catalog_for_run(
             run_data["pipeline_run"],
             import_batch=run_data["import_batch"],
@@ -86,21 +44,22 @@ class BrowserCodonRatioExplorerTests(TestCase):
             replace_all_repeat_call_methods=True,
         )
         cache.clear()
-        return repeat_call
 
-    def _clear_run_codon_ratio_values(self, run_data):
-        RepeatCall.objects.filter(pipeline_run=run_data["pipeline_run"]).update(
-            codon_metric_name="codon_ratio",
-            codon_metric_value="not-a-number",
-            codon_ratio_value=None,
+    def _set_repeat_call_codon_usages(self, run_data, *, rows):
+        RepeatCallCodonUsage.objects.filter(repeat_call=run_data["repeat_call"]).delete()
+        RepeatCallCodonUsage.objects.bulk_create(
+            [
+                RepeatCallCodonUsage(
+                    repeat_call=run_data["repeat_call"],
+                    amino_acid=row["amino_acid"],
+                    codon=row["codon"],
+                    codon_count=row["codon_count"],
+                    codon_fraction=row["codon_fraction"],
+                )
+                for row in rows
+            ]
         )
-        sync_canonical_catalog_for_run(
-            run_data["pipeline_run"],
-            import_batch=run_data["import_batch"],
-            last_seen_at=timezone.now(),
-            replace_all_repeat_call_methods=True,
-        )
-        cache.clear()
+        self._sync_run(run_data)
 
     def test_codon_ratio_route_uses_stable_view_export(self):
         match = resolve(reverse("browser:codon-ratios"))
@@ -112,46 +71,57 @@ class BrowserCodonRatioExplorerTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "browser/codon_ratio_explorer.html")
-        self.assertContains(response, "Residue-aware codon-ratio browsing over the current catalog.")
+        self.assertContains(response, "Residue-scoped codon composition across the current catalog.")
         self.assertEqual(response.context["current_rank"], "class")
         self.assertEqual(response.context["current_top_n"], 1000)
         self.assertEqual(response.context["current_min_count"], 3)
         self.assertEqual(response.context["matching_repeat_calls_count"], 2)
-        self.assertEqual(response.context["matching_repeat_calls_without_codon_count"], 2)
+        self.assertEqual(response.context["matching_repeat_calls_with_codon_usage_count"], 0)
         self.assertEqual(response.context["total_taxa_count"], 0)
         self.assertEqual(response.context["visible_taxa_count"], 0)
         self.assertEqual(response.context["summary_rows"], [])
-        self.assertEqual(response.context["heatmap_payload"]["taxa"], [])
-        self.assertEqual(response.context["heatmap_payload"]["bins"], [])
-        self.assertEqual(response.context["heatmap_payload"]["cells"], [])
-        self.assertEqual(response.context["heatmap_payload"]["visibleTaxaCount"], 0)
-        self.assertEqual(response.context["heatmap_payload"]["visibleBinCount"], 0)
+        self.assertEqual(response.context["visible_codons"], [])
+        self.assertEqual(response.context["overview_payload"]["taxa"], [])
+        self.assertEqual(response.context["overview_payload"]["divergenceMatrix"], [])
         self.assertEqual(response.context["chart_payload"]["rows"], [])
-        self.assertEqual(response.context["chart_payload"]["visibleTaxaCount"], 0)
-        self.assertEqual(response.context["available_codon_metric_names"], ["codon_ratio"])
-        self.assertFalse(response.context["show_codon_metric_selector"])
+        self.assertIsNone(response.context["overview_taxonomy_gutter_payload"]["root"])
+        self.assertEqual(response.context["overview_taxonomy_gutter_payload"]["nodes"], [])
+        self.assertEqual(response.context["overview_taxonomy_gutter_payload"]["leaves"], [])
+        self.assertIsNone(response.context["chart_taxonomy_gutter_payload"]["root"])
+        self.assertEqual(response.context["chart_taxonomy_gutter_payload"]["nodes"], [])
+        self.assertEqual(response.context["chart_taxonomy_gutter_payload"]["leaves"], [])
         self.assertFalse(response.context["inspect_scope_active"])
         self.assertNotContains(response, 'id="id_codon_metric_name"')
-        self.assertNotContains(response, "Inspect layer")
-        self.assertNotContains(response, 'id="codon-ratio-inspect-payload"')
-        self.assertContains(response, 'id="codon-ratio-heatmap-payload"')
-        self.assertContains(response, 'id="codon-ratio-heatmap"')
-        self.assertContains(response, 'id="codon-ratio-chart-payload"')
-        self.assertContains(response, 'id="codon-ratio-chart"')
+        self.assertNotContains(response, "All numeric metrics")
+        self.assertContains(response, 'id="codon-composition-overview-payload"')
+        self.assertContains(response, 'id="codon-composition-overview-taxonomy-gutter-payload"')
+        self.assertContains(response, 'id="codon-composition-overview"')
+        self.assertContains(response, 'id="codon-composition-chart-payload"')
+        self.assertContains(response, 'id="codon-composition-chart-taxonomy-gutter-payload"')
+        self.assertContains(response, 'id="codon-composition-chart"')
+        self.assertContains(response, "Pairwise codon similarity map")
+        self.assertContains(response, "Stacked codon composition for the visible taxa")
+        self.assertContains(response, "Select a residue to browse codon composition.")
+        self.assertContains(response, "taxonomy-gutter.js")
         self.assertContains(response, "repeat-codon-ratio-explorer.js")
         self.assertContains(response, "echarts.min.js")
-        self.assertContains(response, "Taxon x length-bin codon overview")
-        self.assertContains(response, "Ranked codon-ratio distributions for the visible taxa")
-        self.assertContains(response, 'data-chart-mode-switch')
-        self.assertContains(response, 'data-chart-mode-button')
-        self.assertContains(response, 'data-chart-mode="focused"')
-        self.assertContains(response, 'data-chart-mode="full-range"')
-        self.assertContains(
-            response,
-            "No taxa reached the current display rank and minimum observation threshold.",
-        )
 
     def test_codon_ratio_explorer_renders_grouped_taxon_summary_rows(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "D", "codon": "GAC", "codon_count": 1, "codon_fraction": 1.0},
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 8, "codon_fraction": 1.0},
+            ],
+        )
+        self._set_repeat_call_codon_usages(
+            self.beta,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 1, "codon_fraction": 0.25},
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 3, "codon_fraction": 0.75},
+            ],
+        )
+
         response = self.client.get(
             reverse("browser:codon-ratios"),
             {
@@ -159,48 +129,193 @@ class BrowserCodonRatioExplorerTests(TestCase):
                 "min_count": "1",
                 "top_n": "10",
                 "residue": "q",
-                "codon_metric_name": "codon_ratio",
             },
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["total_taxa_count"], 1)
         self.assertEqual(response.context["visible_taxa_count"], 1)
+        self.assertEqual(response.context["matching_repeat_calls_with_codon_usage_count"], 2)
+        self.assertEqual(response.context["visible_codons"], ["CAA", "CAG"])
         self.assertContains(response, "Grouped taxa")
         self.assertContains(response, "Mammalia")
         self.assertContains(response, "Open branch")
-        self.assertContains(response, "Showing 1 of 1 taxa at rank class.")
+        self.assertContains(response, "0.625")
+        self.assertContains(response, "0.375")
 
         summary_rows = response.context["summary_rows"]
         self.assertEqual(len(summary_rows), 1)
         self.assertEqual(summary_rows[0]["taxon_name"], "Mammalia")
         self.assertEqual(summary_rows[0]["rank"], "class")
         self.assertEqual(summary_rows[0]["observation_count"], 2)
-        self.assertEqual(summary_rows[0]["min_codon_ratio"], 1.25)
-        self.assertEqual(summary_rows[0]["median"], 1.25)
-        self.assertEqual(summary_rows[0]["max_codon_ratio"], 1.25)
-        heatmap_payload = response.context["heatmap_payload"]
-        self.assertEqual(heatmap_payload["visibleTaxaCount"], 1)
-        self.assertEqual(heatmap_payload["visibleBinCount"], 1)
-        self.assertEqual(heatmap_payload["taxa"][0]["taxonName"], "Mammalia")
-        self.assertEqual(heatmap_payload["bins"][0]["label"], "10-14")
-        self.assertEqual(heatmap_payload["cells"][0]["value"], 1.25)
-        chart_payload = response.context["chart_payload"]
-        self.assertEqual(chart_payload["visibleTaxaCount"], 1)
-        self.assertEqual(chart_payload["x_min"], 1.25)
-        self.assertEqual(chart_payload["x_max"], 1.25)
-        self.assertEqual(chart_payload["rows"][0]["taxonName"], "Mammalia")
-        self.assertIn("branchExplorerUrl", chart_payload["rows"][0])
-        self.assertIn("taxonDetailUrl", chart_payload["rows"][0])
+        self.assertEqual(summary_rows[0]["species_count"], 2)
+        self.assertEqual(
+            summary_rows[0]["codon_shares"],
+            [
+                {"codon": "CAA", "share": 0.625},
+                {"codon": "CAG", "share": 0.375},
+            ],
+        )
 
-    def test_codon_ratio_explorer_renders_overview_heatmap_payload(self):
-        self._create_repeat_call(
+    def test_codon_ratio_explorer_browse_payload_uses_lineage_order_for_visible_taxa(self):
+        gamma = create_imported_run_fixture(
+            run_id="run-gamma",
+            genome_id="genome_gamma",
+            sequence_id="seq_gamma",
+            protein_id="prot_gamma",
+            call_id="call_gamma",
+            accession="GCF_GAMMA",
+            taxon_key="fruit_fly",
+            genome_name="Fruit fly reference genome",
+        )
+        delta = create_imported_run_fixture(
+            run_id="run-delta",
+            genome_id="genome_delta",
+            sequence_id="seq_delta",
+            protein_id="prot_delta",
+            call_id="call_delta",
+            accession="GCF_DELTA",
+            taxon_key="house_spider",
+            genome_name="Spider reference genome",
+        )
+
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 2, "codon_fraction": 1.0},
+            ],
+        )
+        self._set_repeat_call_codon_usages(
             self.beta,
-            suffix="beta_long_ratio",
-            residue="Q",
-            codon_metric_name="codon_ratio",
-            codon_ratio_value=0.8,
-            length=22,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 2, "codon_fraction": 1.0},
+            ],
+        )
+        self._set_repeat_call_codon_usages(
+            gamma,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 2, "codon_fraction": 1.0},
+            ],
+        )
+        self._set_repeat_call_codon_usages(
+            delta,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 2, "codon_fraction": 1.0},
+            ],
+        )
+
+        response = self.client.get(
+            reverse("browser:codon-ratios"),
+            {
+                "rank": "class",
+                "min_count": "1",
+                "top_n": "10",
+                "residue": "q",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [row["taxon_name"] for row in response.context["summary_rows"]],
+            ["Arachnida", "Insecta", "Mammalia"],
+        )
+        self.assertEqual(
+            [row["taxonName"] for row in response.context["chart_payload"]["rows"]],
+            ["Arachnida", "Insecta", "Mammalia"],
+        )
+        self.assertEqual(
+            [row["taxonName"] for row in response.context["overview_payload"]["taxa"]],
+            ["Arachnida", "Insecta", "Mammalia"],
+        )
+
+    def test_codon_ratio_explorer_uses_curated_phylum_order_for_root_linked_metazoa(self):
+        gamma = create_imported_run_fixture(
+            run_id="run-gamma",
+            genome_id="genome_gamma",
+            sequence_id="seq_gamma",
+            protein_id="prot_gamma",
+            call_id="call_gamma",
+            accession="GCF_GAMMA",
+            taxon_key="fruit_fly",
+            genome_name="Fruit fly reference genome",
+        )
+        epsilon = create_imported_run_fixture(
+            run_id="run-epsilon",
+            genome_id="genome_epsilon",
+            sequence_id="seq_epsilon",
+            protein_id="prot_epsilon",
+            call_id="call_epsilon",
+            accession="GCF_EPSILON",
+            taxon_key="sea_anemone",
+            genome_name="Sea anemone reference genome",
+        )
+
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 2, "codon_fraction": 1.0},
+            ],
+        )
+        self._set_repeat_call_codon_usages(
+            self.beta,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 2, "codon_fraction": 1.0},
+            ],
+        )
+        self._set_repeat_call_codon_usages(
+            gamma,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 2, "codon_fraction": 1.0},
+            ],
+        )
+        self._set_repeat_call_codon_usages(
+            epsilon,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 2, "codon_fraction": 1.0},
+            ],
+        )
+
+        response = self.client.get(
+            reverse("browser:codon-ratios"),
+            {
+                "rank": "phylum",
+                "min_count": "1",
+                "top_n": "10",
+                "residue": "q",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [row["taxon_name"] for row in response.context["summary_rows"]],
+            ["Cnidaria", "Arthropoda", "Chordata"],
+        )
+        self.assertEqual(
+            [row["observation_count"] for row in response.context["summary_rows"]],
+            [1, 1, 2],
+        )
+        self.assertEqual(
+            [row["taxonName"] for row in response.context["chart_payload"]["rows"]],
+            ["Cnidaria", "Arthropoda", "Chordata"],
+        )
+        self.assertEqual(
+            [row["taxonName"] for row in response.context["overview_payload"]["taxa"]],
+            ["Cnidaria", "Arthropoda", "Chordata"],
+        )
+
+    def test_codon_ratio_explorer_renders_signed_preference_overview_payload_for_two_codon_residue(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 2, "codon_fraction": 0.5},
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 2, "codon_fraction": 0.5},
+            ],
+        )
+        self._set_repeat_call_codon_usages(
+            self.beta,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 4, "codon_fraction": 1.0},
+            ],
         )
 
         response = self.client.get(
@@ -210,39 +325,95 @@ class BrowserCodonRatioExplorerTests(TestCase):
                 "min_count": "1",
                 "top_n": "10",
                 "residue": "q",
-                "codon_metric_name": "codon_ratio",
             },
         )
 
         self.assertEqual(response.status_code, 200)
-        heatmap_payload = response.context["heatmap_payload"]
-        self.assertEqual(heatmap_payload["visibleTaxaCount"], 2)
-        self.assertEqual(heatmap_payload["visibleBinCount"], 3)
+        self.assertContains(response, "Signed codon preference difference map for Q")
+        payload = response.context["overview_payload"]
+        self.assertEqual(payload["mode"], "signed_preference_map")
+        self.assertEqual(payload["visibleTaxaCount"], 2)
+        self.assertEqual(payload["visibleCodons"], ["CAA", "CAG"])
+        self.assertEqual(payload["codonOne"], "CAA")
+        self.assertEqual(payload["codonTwo"], "CAG")
+        self.assertEqual(payload["scoreLabel"], "CAG - CAA")
+        self.assertEqual(payload["valueMin"], -1.0)
+        self.assertEqual(payload["valueMax"], 1.0)
         self.assertEqual(
-            [taxon["taxonName"] for taxon in heatmap_payload["taxa"]],
+            [
+                (taxon["taxonName"], taxon["codonOneShare"], taxon["codonTwoShare"], taxon["score"])
+                for taxon in payload["taxa"]
+            ],
+            [
+                ("Homo sapiens", 0.5, 0.5, 0.0),
+                ("Mus musculus", 0, 1, 1.0),
+            ],
+        )
+        self.assertEqual(
+            [(taxon["taxonName"], taxon["speciesCount"]) for taxon in payload["taxa"]],
+            [("Homo sapiens", 1), ("Mus musculus", 1)],
+        )
+        self.assertEqual(payload["maxSpeciesCount"], 1)
+        self.assertEqual(
+            payload["divergenceMatrix"],
+            [
+                [0.0, 0.311278],
+                [0.311278, 0.0],
+            ],
+        )
+        gutter_payload = response.context["overview_taxonomy_gutter_payload"]
+        self.assertEqual(
+            gutter_payload["root"],
+            {
+                "nodeId": f"taxon-{self.alpha['taxa']['mammalia'].pk}",
+                "taxonId": self.alpha["taxa"]["mammalia"].pk,
+                "taxonName": "Mammalia",
+                "rank": "class",
+                "depth": 0,
+            },
+        )
+        self.assertEqual(gutter_payload["maxDepth"], 2)
+        self.assertEqual(
+            [node["taxonName"] for node in gutter_payload["nodes"]],
+            ["Mammalia", "Primates", "Homo sapiens", "Mus musculus"],
+        )
+        self.assertEqual(
+            gutter_payload["edges"],
+            [
+                {
+                    "parentNodeId": f"taxon-{self.alpha['taxa']['mammalia'].pk}",
+                    "childNodeId": f"taxon-{self.alpha['taxa']['primates'].pk}",
+                },
+                {
+                    "parentNodeId": f"taxon-{self.alpha['taxa']['primates'].pk}",
+                    "childNodeId": f"taxon-{self.alpha['taxa']['human'].pk}",
+                },
+                {
+                    "parentNodeId": f"taxon-{self.alpha['taxa']['mammalia'].pk}",
+                    "childNodeId": f"taxon-{self.beta['taxa']['mouse'].pk}",
+                },
+            ],
+        )
+        self.assertEqual(
+            [leaf["taxonName"] for leaf in gutter_payload["leaves"]],
             ["Homo sapiens", "Mus musculus"],
         )
         self.assertEqual(
-            [length_bin["label"] for length_bin in heatmap_payload["bins"]],
-            ["10-14", "15-19", "20-24"],
+            [leaf["braceLabel"] for leaf in gutter_payload["leaves"]],
+            ["", ""],
         )
-        self.assertEqual(
-            heatmap_payload["seriesData"],
-            [
-                [0, 0, 1.25],
-                [0, 1, 1.25],
-                [2, 1, 0.8],
-            ],
-        )
+        self.assertNotIn("columns", gutter_payload)
+        self.assertNotIn("segments", gutter_payload)
+        self.assertNotIn("rows", gutter_payload)
+        self.assertNotIn("terminals", gutter_payload)
 
     def test_codon_ratio_explorer_renders_branch_scoped_inspect_section(self):
-        self._create_repeat_call(
+        self._set_repeat_call_codon_usages(
             self.alpha,
-            suffix="alpha_mid_ratio",
-            residue="Q",
-            codon_metric_name="codon_ratio",
-            codon_ratio_value=0.9,
-            length=16,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 3, "codon_fraction": 0.3},
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 7, "codon_fraction": 0.7},
+            ],
         )
 
         response = self.client.get(
@@ -252,7 +423,6 @@ class BrowserCodonRatioExplorerTests(TestCase):
                 "branch": str(self.alpha["taxa"]["primates"].pk),
                 "rank": "species",
                 "residue": "q",
-                "codon_metric_name": "codon_ratio",
                 "min_count": "1",
             },
         )
@@ -260,45 +430,31 @@ class BrowserCodonRatioExplorerTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context["inspect_scope_active"])
         self.assertContains(response, "Inspect layer")
-        self.assertContains(response, "Codon-ratio inspection for Primates")
-        self.assertContains(response, 'id="codon-ratio-inspect-payload"')
-        self.assertContains(response, 'id="codon-ratio-inspect-histogram"')
-        self.assertContains(response, 'id="codon-ratio-inspect-boxplot"')
+        self.assertContains(response, "Codon composition for Primates")
+        self.assertContains(response, 'id="codon-composition-inspect-payload"')
+        self.assertContains(response, 'id="codon-composition-inspect-chart"')
         self.assertEqual(
             response.context["inspect_payload"],
             {
                 "scopeLabel": "Order Primates",
-                "observationCount": 2,
-                "summary": {
-                    "min": 0.9,
-                    "q1": 0.988,
-                    "median": 1.075,
-                    "q3": 1.163,
-                    "max": 1.25,
-                },
-                "histogramBins": [
-                    {
-                        "label": "0.9-1.075",
-                        "start": 0.9,
-                        "end": 1.075,
-                        "count": 1,
-                        "midpoint": 0.988,
-                    },
-                    {
-                        "label": "1.075-1.25",
-                        "start": 1.075,
-                        "end": 1.25,
-                        "count": 1,
-                        "midpoint": 1.163,
-                    },
+                "observationCount": 1,
+                "visibleCodons": ["CAA", "CAG"],
+                "codonShares": [
+                    {"codon": "CAA", "share": 0.3},
+                    {"codon": "CAG", "share": 0.7},
                 ],
-                "xMin": 0.9,
-                "xMax": 1.25,
-                "maxBinCount": 1,
+                "maxShare": 0.7,
             },
         )
 
     def test_codon_ratio_explorer_branch_link_preserves_relevant_filter_state(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 11, "codon_fraction": 1.0},
+            ],
+        )
+
         response = self.client.get(
             reverse("browser:codon-ratios"),
             {
@@ -307,7 +463,6 @@ class BrowserCodonRatioExplorerTests(TestCase):
                 "q": "GENE",
                 "method": "pure",
                 "residue": "q",
-                "codon_metric_name": "codon_ratio",
                 "length_min": "10",
                 "length_max": "12",
                 "purity_min": "0.9",
@@ -327,7 +482,6 @@ class BrowserCodonRatioExplorerTests(TestCase):
         self.assertEqual(branch_query["q"], ["GENE"])
         self.assertEqual(branch_query["method"], ["pure"])
         self.assertEqual(branch_query["residue"], ["Q"])
-        self.assertEqual(branch_query["codon_metric_name"], ["codon_ratio"])
         self.assertEqual(branch_query["length_min"], ["10"])
         self.assertEqual(branch_query["length_max"], ["12"])
         self.assertEqual(branch_query["purity_min"], ["0.9"])
@@ -335,66 +489,35 @@ class BrowserCodonRatioExplorerTests(TestCase):
         self.assertEqual(branch_query["min_count"], ["1"])
         self.assertEqual(branch_query["top_n"], ["10"])
         self.assertEqual(branch_query["rank"], ["order"])
+        self.assertNotIn("codon_metric_name", branch_query)
         self.assertEqual(
             response.context["chart_payload"]["rows"][0]["branchExplorerUrl"],
             row["branch_explorer_url"],
         )
 
-    def test_codon_ratio_explorer_shows_metric_selector_only_when_scope_has_multiple_metrics(self):
-        self._create_repeat_call(
+    def test_codon_ratio_explorer_explains_when_scope_has_calls_but_no_residue_codon_usage(self):
+        self._set_repeat_call_codon_usages(
             self.alpha,
-            suffix="alpha_alt_ratio",
-            residue="Q",
-            codon_metric_name="alt_ratio",
-            codon_ratio_value=0.9,
+            rows=[
+                {"amino_acid": "D", "codon": "GAC", "codon_count": 1, "codon_fraction": 1.0},
+            ],
         )
 
         response = self.client.get(
             reverse("browser:codon-ratios"),
             {
                 "run": "run-alpha",
-                "branch": str(self.alpha["taxa"]["primates"].pk),
                 "residue": "q",
                 "min_count": "1",
             },
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.context["show_codon_metric_selector"])
-        self.assertEqual(response.context["available_codon_metric_names"], ["alt_ratio", "codon_ratio"])
-        self.assertContains(response, 'id="id_codon_metric_name"')
-        self.assertContains(response, '<option value="">All numeric metrics</option>', html=True)
-        self.assertContains(response, '<option value="alt_ratio">alt_ratio</option>', html=True)
-        self.assertContains(response, '<option value="codon_ratio">codon_ratio</option>', html=True)
-
-    def test_codon_ratio_explorer_explains_when_scope_has_calls_but_no_numeric_codon_data(self):
-        gamma = create_imported_run_fixture(
-            run_id="run-gamma",
-            genome_id="genome_gamma",
-            sequence_id="seq_gamma",
-            protein_id="prot_gamma",
-            call_id="call_gamma",
-            accession="GCF_GAMMA",
-            taxon_key="human",
-            genome_name="Gamma genome",
-        )
-        self._clear_run_codon_ratio_values(gamma)
-
-        response = self.client.get(
-            reverse("browser:codon-ratios"),
-            {
-                "run": "run-gamma",
-                "min_count": "1",
-            },
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context["matching_repeat_calls_without_codon_count"], 1)
-        self.assertEqual(response.context["matching_repeat_calls_count"], 0)
+        self.assertEqual(response.context["matching_repeat_calls_with_codon_usage_count"], 0)
         self.assertEqual(response.context["visible_taxa_count"], 0)
         self.assertContains(
             response,
-            "Canonical repeat calls matched these filters, but none carried numeric codon ratios.",
+            "Canonical repeat calls matched these filters, but no codon-usage rows were available for the selected residue.",
         )
 
     def test_codon_ratio_chart_assets_are_page_local(self):

@@ -236,7 +236,6 @@ class RepeatCallDetailView(TemplateView):
             ),
             method=repeat_call.method,
             residue=repeat_call.repeat_residue,
-            codon_metric_name=repeat_call.codon_metric_name,
         )
         context["repeatcall_list_url"] = _url_with_query(
             reverse("browser:repeatcall-list"),

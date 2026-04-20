@@ -1562,5 +1562,4 @@ class BrowserViewTests(TestCase):
         self.assertEqual(repeatcall_codon_query["q"], ["DETAILGENE"])
         self.assertEqual(repeatcall_codon_query["method"], [RepeatCall.Method.THRESHOLD])
         self.assertEqual(repeatcall_codon_query["residue"], ["A"])
-        self.assertEqual(repeatcall_codon_query["codon_metric_name"], ["codon_ratio"])
         self.assertNotContains(response, "Open run")

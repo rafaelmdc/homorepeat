@@ -36,9 +36,9 @@ Relevant existing docs:
 
 Target state:
 
-- `Taxon x Length-bin Heatmap`
-- lineage-aware taxon order
-- count, normalized count, or log count by length bin
+- taxonomy-first `Taxon x Length-bin` hex overview
+- lineage-aware taxon order on the shared overview axis
+- count, normalized count, or log count by length bin as the cell value
 
 This is still missing from the current browser and should be added on top of
 the existing stats foundation.
@@ -67,11 +67,17 @@ rules as the current page.
 
 - keep the existing length explorer as the source of truth for stats-page
   structure
-- only extract shared abstractions once the codon-ratio viewer needs them too
+- only extract shared abstractions once the codon-composition viewer needs them
+  too
 - reuse the current filters, table behavior, branch handoff semantics, and
   chart payload patterns
+- reuse the shared taxonomy gutter contract from
+  `docs/general views/taxonomy_gutter_plan.md` when length charts need an
+  explicit lineage axis
 - add overview and inspect layers around the implemented browse layer rather
   than replacing it
+- adopt the shared taxonomy-first overview shell instead of inventing a
+  length-specific Tier 1 layout
 
 ## Design constraints
 
@@ -79,4 +85,5 @@ rules as the current page.
 - keep the page meaningful without JavaScript
 - keep visible result sets bounded through rank, `top_n`, `min_count`, and
   branch scope
-- move lineage-aware ordering into reusable helpers before building the heatmap
+- move lineage-aware ordering into reusable helpers before building the
+  taxonomy-first hex overview

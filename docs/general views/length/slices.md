@@ -57,7 +57,7 @@ Goal:
 Scope:
 
 - move repeated stats-page context assembly into a small shared helper or mixin
-- extract any duplicated template partials only if the codon-ratio viewer
+- extract any duplicated template partials only if the codon-composition viewer
   immediately reuses them
 
 Exit criteria:
@@ -106,7 +106,7 @@ Exit criteria:
 
 Goal:
 
-- prove the overview semantics before wiring the heatmap
+- prove the overview semantics before wiring the taxonomy-first chart layer
 
 Scope:
 
@@ -117,7 +117,7 @@ Exit criteria:
 
 - the overview tier is understandable even before chart wiring
 
-### `L6` Add the Tier 1 heatmap
+### `L6` Add the Tier 1 taxonomy-first hex overview
 
 Goal:
 
@@ -125,9 +125,10 @@ Goal:
 
 Scope:
 
-- ECharts heatmap using the shared bin payload
-- lineage-aware row order
+- ECharts taxonomy-first hex overview using the shared bin payload
+- lineage-aware row order on the taxonomy axis
 - tooltip with taxon, bin, and count information
+- shared overview shell conventions aligned with the codon viewers
 
 Tests:
 

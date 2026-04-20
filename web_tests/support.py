@@ -48,6 +48,32 @@ def build_test_repeat_call_values(
     }
 
 
+def add_finalized_codon_usage_artifact(
+    publish_root: Path,
+    *,
+    method: str,
+    repeat_residue: str,
+    batch_id: str,
+    rows: list[dict[str, object]],
+) -> Path:
+    artifact_dir = publish_root / "calls" / "finalized" / method / repeat_residue / batch_id
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    artifact_path = artifact_dir / f"final_{method}_{repeat_residue}_{batch_id}_codon_usage.tsv"
+    header = (
+        "call_id\tmethod\trepeat_residue\tsequence_id\tprotein_id\tamino_acid\tcodon\tcodon_count\tcodon_fraction\n"
+    )
+    body = "".join(
+        (
+            f"{row['call_id']}\t{row.get('method', method)}\t{row.get('repeat_residue', repeat_residue)}\t"
+            f"{row['sequence_id']}\t{row['protein_id']}\t{row['amino_acid']}\t{row['codon']}\t"
+            f"{row['codon_count']}\t{row['codon_fraction']}\n"
+        )
+        for row in rows
+    )
+    artifact_path.write_text(header + body, encoding="utf-8")
+    return artifact_path
+
+
 def build_minimal_publish_root(base_dir: Path, *, run_id: str = "run-alpha") -> Path:
     publish_root = base_dir / "publish"
     batch_root = publish_root / "acquisition" / "batches" / "batch_0001"
@@ -465,6 +491,30 @@ def ensure_test_taxonomy():
 
     definitions = {
         "root": {"taxon_id": 1, "taxon_name": "root", "rank": "no rank", "parent": None},
+        "cnidaria": {"taxon_id": 900200, "taxon_name": "Cnidaria", "rank": "phylum", "parent": "root"},
+        "sea_anemone": {
+            "taxon_id": 900201,
+            "taxon_name": "Nematostella vectensis",
+            "rank": "species",
+            "parent": "cnidaria",
+        },
+        "arthropoda": {"taxon_id": 6656, "taxon_name": "Arthropoda", "rank": "phylum", "parent": "root"},
+        "arachnida": {"taxon_id": 6854, "taxon_name": "Arachnida", "rank": "class", "parent": "arthropoda"},
+        "araneae": {"taxon_id": 6893, "taxon_name": "Araneae", "rank": "order", "parent": "arachnida"},
+        "house_spider": {
+            "taxon_id": 114398,
+            "taxon_name": "Parasteatoda tepidariorum",
+            "rank": "species",
+            "parent": "araneae",
+        },
+        "insecta": {"taxon_id": 50557, "taxon_name": "Insecta", "rank": "class", "parent": "arthropoda"},
+        "diptera": {"taxon_id": 7147, "taxon_name": "Diptera", "rank": "order", "parent": "insecta"},
+        "fruit_fly": {
+            "taxon_id": 7227,
+            "taxon_name": "Drosophila melanogaster",
+            "rank": "species",
+            "parent": "diptera",
+        },
         "chordata": {"taxon_id": 7711, "taxon_name": "Chordata", "rank": "phylum", "parent": "root"},
         "mammalia": {"taxon_id": 40674, "taxon_name": "Mammalia", "rank": "class", "parent": "chordata"},
         "primates": {"taxon_id": 9443, "taxon_name": "Primates", "rank": "order", "parent": "mammalia"},

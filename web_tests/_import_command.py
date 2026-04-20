@@ -14,6 +14,7 @@ from apps.browser.models import (
     CanonicalGenome,
     CanonicalProtein,
     CanonicalRepeatCall,
+    CanonicalRepeatCallCodonUsage,
     CanonicalSequence,
     DownloadManifestEntry,
     Genome,
@@ -21,6 +22,7 @@ from apps.browser.models import (
     PipelineRun,
     Protein,
     RepeatCall,
+    RepeatCallCodonUsage,
     RunParameter,
     Sequence,
     Taxon,
@@ -28,7 +30,7 @@ from apps.browser.models import (
 )
 from apps.imports.models import ImportBatch
 
-from .support import build_minimal_publish_root, build_multibatch_publish_root
+from .support import add_finalized_codon_usage_artifact, build_minimal_publish_root, build_multibatch_publish_root
 
 
 class ImportRunCommandTests(TestCase):
@@ -182,6 +184,123 @@ class ImportRunCommandTests(TestCase):
                     ("call_invalid", "not-a-number", None),
                 ],
             )
+
+    def test_import_run_imports_repeat_call_codon_usage_rows_into_raw_and_canonical_tables(self):
+        with TemporaryDirectory() as tempdir:
+            publish_root = build_minimal_publish_root(Path(tempdir), run_id="run-codon-usage")
+            stdout = StringIO()
+            add_finalized_codon_usage_artifact(
+                publish_root,
+                method="pure",
+                repeat_residue="Q",
+                batch_id="batch_0001",
+                rows=[
+                    {
+                        "call_id": "call_1",
+                        "sequence_id": "seq_1",
+                        "protein_id": "prot_1",
+                        "amino_acid": "Q",
+                        "codon": "CAA",
+                        "codon_count": 1,
+                        "codon_fraction": "0.0909090909",
+                    },
+                    {
+                        "call_id": "call_1",
+                        "sequence_id": "seq_1",
+                        "protein_id": "prot_1",
+                        "amino_acid": "Q",
+                        "codon": "CAG",
+                        "codon_count": 10,
+                        "codon_fraction": "0.9090909091",
+                    },
+                ],
+            )
+
+            call_command("import_run", publish_root=str(publish_root), stdout=stdout)
+
+            self.assertEqual(RepeatCallCodonUsage.objects.count(), 2)
+            self.assertEqual(CanonicalRepeatCallCodonUsage.objects.count(), 2)
+            self.assertEqual(ImportBatch.objects.get().row_counts["repeat_call_codon_usages"], 2)
+            self.assertEqual(
+                list(
+                    RepeatCallCodonUsage.objects.order_by("codon").values_list(
+                        "repeat_call__call_id",
+                        "amino_acid",
+                        "codon",
+                        "codon_count",
+                    )
+                ),
+                [
+                    ("call_1", "Q", "CAA", 1),
+                    ("call_1", "Q", "CAG", 10),
+                ],
+            )
+            self.assertEqual(
+                list(
+                    CanonicalRepeatCallCodonUsage.objects.order_by("codon").values_list(
+                        "repeat_call__source_call_id",
+                        "amino_acid",
+                        "codon",
+                        "codon_fraction",
+                    )
+                ),
+                [
+                    ("call_1", "Q", "CAA", 0.0909090909),
+                    ("call_1", "Q", "CAG", 0.9090909091),
+                ],
+            )
+
+    def test_repeat_call_codon_usage_copy_resolves_refs_before_opening_copy(self):
+        from apps.imports.services.import_run.entities import _create_repeat_call_codon_usages_streamed
+
+        batch = ImportBatch.objects.create(
+            source_path="/tmp/publish",
+            status=ImportBatch.Status.RUNNING,
+            phase="importing_rows",
+        )
+        event_order: list[str] = []
+
+        def fake_load_repeat_call_refs(_pipeline_run, batch_rows):
+            event_order.append("load")
+            self.assertEqual(len(batch_rows), 1)
+            return {
+                "call_1": (1, "pure", "Q", "seq_1", "prot_1"),
+            }
+
+        def fake_copy_rows_to_model(_model, _field_names, rows, **_kwargs):
+            event_order.append("copy_start")
+            materialized_rows = list(rows)
+            event_order.append("copy_end")
+            self.assertEqual(len(materialized_rows), 1)
+            return len(materialized_rows)
+
+        with patch(
+            "apps.imports.services.import_run.entities._load_repeat_call_refs_for_codon_usage_rows",
+            side_effect=fake_load_repeat_call_refs,
+        ), patch(
+            "apps.imports.services.import_run.entities._copy_rows_to_model",
+            side_effect=fake_copy_rows_to_model,
+        ):
+            count = _create_repeat_call_codon_usages_streamed(
+                batch,
+                object(),
+                [
+                    {
+                        "call_id": "call_1",
+                        "method": "pure",
+                        "repeat_residue": "Q",
+                        "sequence_id": "seq_1",
+                        "protein_id": "prot_1",
+                        "amino_acid": "Q",
+                        "codon": "CAG",
+                        "codon_count": 10,
+                        "codon_fraction": "1.0",
+                    },
+                ],
+            )
+
+        self.assertEqual(count, 1)
+        self.assertEqual(event_order, ["load", "copy_start", "copy_end"])
 
     def test_import_run_keeps_matched_sequences_and_proteins_but_counts_all_batch_proteins(self):
         with TemporaryDirectory() as tempdir:
@@ -693,6 +812,23 @@ class ImportRunCommandTests(TestCase):
         with TemporaryDirectory() as tempdir:
             publish_root = build_minimal_publish_root(Path(tempdir), run_id="run-progress")
             stdout = StringIO()
+            add_finalized_codon_usage_artifact(
+                publish_root,
+                method="pure",
+                repeat_residue="Q",
+                batch_id="batch_0001",
+                rows=[
+                    {
+                        "call_id": "call_1",
+                        "sequence_id": "seq_1",
+                        "protein_id": "prot_1",
+                        "amino_acid": "Q",
+                        "codon": "CAG",
+                        "codon_count": 11,
+                        "codon_fraction": "1.0",
+                    },
+                ],
+            )
 
             with patch("apps.imports.services.import_run.api._ImportBatchStateReporter", FakeReporter):
                 call_command("import_run", publish_root=str(publish_root), stdout=stdout)
@@ -709,6 +845,15 @@ class ImportRunCommandTests(TestCase):
         )
         self.assertTrue(
             any(payload.get("message") == "Syncing canonical catalog rows." for payload in recorded_payloads)
+        )
+        self.assertTrue(
+            any(payload.get("message") == "Syncing canonical repeat-call rows." for payload in recorded_payloads)
+        )
+        self.assertTrue(
+            any(
+                payload.get("message") == "Syncing canonical repeat-call codon-usage rows."
+                for payload in recorded_payloads
+            )
         )
 
     def test_import_run_triggers_post_load_analyze_hook(self):

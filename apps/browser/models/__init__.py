@@ -1,14 +1,16 @@
 from .base import TimestampedModel
 from .canonical import (
+    CanonicalCodonCompositionSummary,
     CanonicalGenome,
     CanonicalProtein,
     CanonicalRepeatCall,
+    CanonicalRepeatCallCodonUsage,
     CanonicalSequence,
 )
 from .runs import AcquisitionBatch, PipelineRun
 from .taxonomy import Taxon, TaxonClosure
 from .genomes import Genome, Protein, Sequence
-from .repeat_calls import RepeatCall, RunParameter
+from .repeat_calls import RepeatCall, RepeatCallCodonUsage, RunParameter
 from .operations import (
     AccessionCallCount,
     AccessionStatus,
@@ -20,9 +22,11 @@ __all__ = [
     "AccessionCallCount",
     "AccessionStatus",
     "AcquisitionBatch",
+    "CanonicalCodonCompositionSummary",
     "CanonicalGenome",
     "CanonicalProtein",
     "CanonicalRepeatCall",
+    "CanonicalRepeatCallCodonUsage",
     "CanonicalSequence",
     "DownloadManifestEntry",
     "Genome",
@@ -30,6 +34,7 @@ __all__ = [
     "PipelineRun",
     "Protein",
     "RepeatCall",
+    "RepeatCallCodonUsage",
     "RunParameter",
     "Sequence",
     "Taxon",

@@ -1,20 +1,32 @@
 (() => {
-  const BOX_FILL = "#dcebef";
-  const BOX_BORDER = "#0f5964";
-  const MEDIAN_COLOR = "#d06e37";
-  const CHART_MODE_FOCUSED = "focused";
-  const CHART_MODE_FULL_RANGE = "full-range";
   const GRID_COLOR = "rgba(23, 36, 44, 0.1)";
-  const MAX_VISIBLE_ROWS_WITH_TAXON_LABELS = 24;
-  const PENDING_SCROLL_KEY = "repeat-codon-ratio-explorer:pending-scroll";
-  const PENDING_SCROLL_MAX_AGE_MS = 15000;
   const TEXT_COLOR = "#17242c";
   const MUTED_TEXT_COLOR = "#63727a";
   const DEFAULT_VISIBLE_ROWS = 12;
-  const MAX_CHART_HEIGHT = 980;
-  const MIN_CHART_HEIGHT = 380;
+  const MAX_CHART_HEIGHT = 1300;
+  const MAX_VISIBLE_ROWS_WITH_TAXON_LABELS = 24;
+  const MAX_MATRIX_CELL_LABELS = 16;
+  const MAX_MATRIX_COLUMN_LABELS = 18;
+  const MAX_BOTTOM_TREE_LEAF_LABELS = 16;
+  const MAX_BOTTOM_TREE_BRACE_LABELS = 48;
+  const MAX_OVERVIEW_BORDERS = 24;
+  const PENDING_SCROLL_KEY = "repeat-codon-composition-explorer:pending-scroll";
+  const PENDING_SCROLL_MAX_AGE_MS = 15000;
+  const SIGNED_PREFERENCE_LEGEND_EXTENT = 1.25;
+  const DEFAULT_SIGNED_PREFERENCE_MAGNITUDE = SIGNED_PREFERENCE_LEGEND_EXTENT;
+  const MIN_SIGNED_PREFERENCE_MAGNITUDE = 0.05;
+  const SIGNED_PREFERENCE_MAGNITUDE_STEP = 0.05;
+  const SIGNED_PREFERENCE_SCALE_STORAGE_KEY = "repeat-codon-composition-explorer:signed-scale";
   const ROW_HEIGHT = 38;
   const CHART_PADDING = 120;
+  const PALETTE = [
+    "#0f5964",
+    "#d06e37",
+    "#9db7a5",
+    "#6a8caf",
+    "#d9a441",
+    "#6e7f80",
+  ];
 
   function parsePayload(scriptId) {
     const payloadNode = document.getElementById(scriptId);
@@ -29,6 +41,56 @@
     }
   }
 
+  function taxonomyGutterApi() {
+    return typeof window.HomorepeatTaxonomyGutter !== "undefined"
+      ? window.HomorepeatTaxonomyGutter
+      : null;
+  }
+
+  function hasTaxonomyGutterPayload(payload) {
+    const api = taxonomyGutterApi();
+    return Boolean(api && api.hasPayload(payload));
+  }
+
+  function taxonomyGutterReservedWidth(payload, options = {}) {
+    const api = taxonomyGutterApi();
+    if (!api || !api.hasPayload(payload)) {
+      return 0;
+    }
+    return api.reservedWidth(payload, options);
+  }
+
+  function taxonomyGutterReservedHeight(payload, options = {}) {
+    const api = taxonomyGutterApi();
+    if (!api || !api.hasPayload(payload) || typeof api.reservedHeight !== "function") {
+      return 0;
+    }
+    return api.reservedHeight(payload, options);
+  }
+
+  function taxonomyGutterPanel(payload, options = {}) {
+    const api = taxonomyGutterApi();
+    if (!api || !api.hasPayload(payload) || typeof api.buildPanel !== "function") {
+      return null;
+    }
+    return api.buildPanel(payload, options);
+  }
+
+  function attachTaxonomyGutter(chart, payload, options = {}) {
+    const api = taxonomyGutterApi();
+    if (!api || !api.hasPayload(payload) || typeof api.attach !== "function") {
+      return null;
+    }
+    return api.attach(chart, { payload, ...options });
+  }
+
+  function formatShare(value) {
+    if (typeof value !== "number" || Number.isNaN(value)) {
+      return "-";
+    }
+    return value.toFixed(3).replace(/\.?0+$/, "");
+  }
+
   function clamp(number, minimum, maximum) {
     return Math.min(Math.max(number, minimum), maximum);
   }
@@ -40,34 +102,11 @@
     return typeof value === "number" && Number.isFinite(value) ? value : fallbackValue;
   }
 
-  function formatCodonRatioValue(value) {
-    if (typeof value !== "number" || Number.isNaN(value)) {
-      return "-";
-    }
-
-    return value.toFixed(2).replace(/\.?0+$/, "");
-  }
-
-  function truncateTaxonName(taxonName) {
-    if (taxonName.length <= 28) {
-      return taxonName;
-    }
-    return `${taxonName.slice(0, 25)}...`;
-  }
-
-  function rowCategoryValue(row) {
-    return String(row.taxonId);
-  }
-
-  function rowForAxisValue(rows, axisValue) {
-    return rows.find((row) => rowCategoryValue(row) === String(axisValue)) || null;
-  }
-
-  function chartHeightForRowCount(rowCount) {
+  function chartHeightForRowCount(rowCount, minimumHeight) {
     if (rowCount <= 0) {
-      return MIN_CHART_HEIGHT;
+      return minimumHeight;
     }
-    return clamp((rowCount * ROW_HEIGHT) + CHART_PADDING, MIN_CHART_HEIGHT, MAX_CHART_HEIGHT);
+    return clamp((rowCount * ROW_HEIGHT) + CHART_PADDING, minimumHeight, MAX_CHART_HEIGHT);
   }
 
   function defaultZoomState(rowCount) {
@@ -109,12 +148,406 @@
     return (zoomState.endValue - zoomState.startValue) + 1;
   }
 
-  function shouldShowObservationCounts(visibleRowCount) {
-    return visibleRowCount <= DEFAULT_VISIBLE_ROWS;
-  }
-
   function shouldShowTaxonLabels(visibleRowCount) {
     return visibleRowCount <= MAX_VISIBLE_ROWS_WITH_TAXON_LABELS;
+  }
+
+  function shouldShowMatrixCellLabels(taxonCount) {
+    return taxonCount > 0 && taxonCount <= MAX_MATRIX_CELL_LABELS;
+  }
+
+  function shouldShowMatrixColumnLabels(taxonCount) {
+    return taxonCount > 0 && taxonCount <= MAX_MATRIX_COLUMN_LABELS;
+  }
+
+  function shouldShowBottomTreeLeafLabels(taxonCount) {
+    return taxonCount > 0 && taxonCount <= MAX_BOTTOM_TREE_LEAF_LABELS;
+  }
+
+  function shouldShowBottomTreeBraceLabels(taxonCount) {
+    return taxonCount > 0 && taxonCount <= MAX_BOTTOM_TREE_BRACE_LABELS;
+  }
+
+  function resolvedMatrixVisualRange(minimumValue, maximumValue) {
+    const safeMinimum = clamp(numericValue(minimumValue, 0), 0, 1);
+    const safeMaximum = clamp(numericValue(maximumValue, 1), 0, 1);
+    if (safeMaximum <= safeMinimum) {
+      const midpoint = safeMaximum;
+      return {
+        min: clamp(midpoint - 0.02, 0, 1),
+        max: clamp(midpoint + 0.02, 0, 1),
+      };
+    }
+    return {
+      min: safeMinimum,
+      max: safeMaximum,
+    };
+  }
+
+  function normalizedSignedPreferenceMagnitude(value) {
+    const safeMagnitude = clamp(
+      numericValue(value, DEFAULT_SIGNED_PREFERENCE_MAGNITUDE),
+      MIN_SIGNED_PREFERENCE_MAGNITUDE,
+      SIGNED_PREFERENCE_LEGEND_EXTENT,
+    );
+    const roundedMagnitude = Math.round(safeMagnitude / SIGNED_PREFERENCE_MAGNITUDE_STEP)
+      * SIGNED_PREFERENCE_MAGNITUDE_STEP;
+    return Number(
+      clamp(
+        roundedMagnitude,
+        MIN_SIGNED_PREFERENCE_MAGNITUDE,
+        SIGNED_PREFERENCE_LEGEND_EXTENT,
+      ).toFixed(2),
+    );
+  }
+
+  function currentSignedPreferenceRange(magnitude) {
+    const resolvedMagnitude = normalizedSignedPreferenceMagnitude(magnitude);
+    return {
+      magnitude: resolvedMagnitude,
+      min: -resolvedMagnitude,
+      max: resolvedMagnitude,
+    };
+  }
+
+  function loadSignedPreferenceMagnitude() {
+    try {
+      const rawValue = window.sessionStorage.getItem(SIGNED_PREFERENCE_SCALE_STORAGE_KEY);
+      return normalizedSignedPreferenceMagnitude(
+        rawValue == null ? DEFAULT_SIGNED_PREFERENCE_MAGNITUDE : Number.parseFloat(rawValue),
+      );
+    } catch (error) {
+      return DEFAULT_SIGNED_PREFERENCE_MAGNITUDE;
+    }
+  }
+
+  function persistSignedPreferenceMagnitude(magnitude) {
+    try {
+      window.sessionStorage.setItem(
+        SIGNED_PREFERENCE_SCALE_STORAGE_KEY,
+        String(normalizedSignedPreferenceMagnitude(magnitude)),
+      );
+    } catch (error) {
+    }
+  }
+
+  function clipSignedPreferenceValue(value, magnitude) {
+    const safeValue = numericValue(value, 0);
+    const safeMagnitude = normalizedSignedPreferenceMagnitude(magnitude);
+    return clamp(safeValue, -safeMagnitude, safeMagnitude);
+  }
+
+  function signedPreferenceOffsetForValue(value, trackHeight) {
+    if (!(trackHeight > 0)) {
+      return 0;
+    }
+    const safeValue = clamp(
+      numericValue(value, 0),
+      -SIGNED_PREFERENCE_LEGEND_EXTENT,
+      SIGNED_PREFERENCE_LEGEND_EXTENT,
+    );
+    const normalizedOffset = 0.5 - (safeValue / (SIGNED_PREFERENCE_LEGEND_EXTENT * 2));
+    return clamp(normalizedOffset * trackHeight, 0, trackHeight);
+  }
+
+  function signedPreferenceMagnitudeFromPointerOffset(offsetY, trackHeight) {
+    if (!(trackHeight > 0)) {
+      return DEFAULT_SIGNED_PREFERENCE_MAGNITUDE;
+    }
+    const normalizedOffset = clamp(offsetY / trackHeight, 0, 1);
+    const signedValue = (0.5 - normalizedOffset) * 2 * SIGNED_PREFERENCE_LEGEND_EXTENT;
+    return normalizedSignedPreferenceMagnitude(Math.abs(signedValue));
+  }
+
+  function createSignedPreferenceLegend(container, {
+    onMagnitudeChange,
+    onResetMagnitude,
+  }) {
+    container.style.position = "relative";
+    const root = document.createElement("div");
+    root.className = "codon-preference-scale";
+    root.hidden = true;
+    root.innerHTML = `
+      <div class="codon-preference-scale__panel">
+        <div class="codon-preference-scale__header">
+          <div>
+            <div class="codon-preference-scale__title">Current scale</div>
+            <div class="codon-preference-scale__value" data-role="value"></div>
+          </div>
+          <button type="button" class="codon-preference-scale__reset" data-role="reset">Reset</button>
+        </div>
+        <div class="codon-preference-scale__copy" data-role="copy"></div>
+        <div class="codon-preference-scale__body">
+          <div class="codon-preference-scale__label codon-preference-scale__label--positive" data-role="positive-label"></div>
+          <div class="codon-preference-scale__track-shell">
+            <div class="codon-preference-scale__tick-column">
+              <span class="codon-preference-scale__tick codon-preference-scale__tick--top" data-role="tick-top"></span>
+              <span class="codon-preference-scale__tick codon-preference-scale__tick--middle">0</span>
+              <span class="codon-preference-scale__tick codon-preference-scale__tick--bottom" data-role="tick-bottom"></span>
+            </div>
+            <button
+              type="button"
+              class="codon-preference-scale__track"
+              data-role="track"
+              aria-label="Click to set the symmetric heatmap color scale"
+            >
+              <span class="codon-preference-scale__clip codon-preference-scale__clip--top" data-role="top-clip"></span>
+              <span class="codon-preference-scale__clip codon-preference-scale__clip--bottom" data-role="bottom-clip"></span>
+              <span class="codon-preference-scale__active-band" data-role="active-band"></span>
+              <span class="codon-preference-scale__marker codon-preference-scale__marker--positive" data-role="positive-marker"></span>
+              <span class="codon-preference-scale__marker codon-preference-scale__marker--negative" data-role="negative-marker"></span>
+              <span class="codon-preference-scale__zero" data-role="zero-marker"></span>
+            </button>
+          </div>
+          <div class="codon-preference-scale__label codon-preference-scale__label--negative" data-role="negative-label"></div>
+        </div>
+        <div class="codon-preference-scale__hint">Click to choose the symmetric clipping range. Double-click or reset to restore the default.</div>
+      </div>
+    `;
+    container.append(root);
+
+    const valueNode = root.querySelector('[data-role="value"]');
+    const copyNode = root.querySelector('[data-role="copy"]');
+    const positiveLabelNode = root.querySelector('[data-role="positive-label"]');
+    const negativeLabelNode = root.querySelector('[data-role="negative-label"]');
+    const tickTopNode = root.querySelector('[data-role="tick-top"]');
+    const tickBottomNode = root.querySelector('[data-role="tick-bottom"]');
+    const resetButton = root.querySelector('[data-role="reset"]');
+    const track = root.querySelector('[data-role="track"]');
+    const topClip = root.querySelector('[data-role="top-clip"]');
+    const bottomClip = root.querySelector('[data-role="bottom-clip"]');
+    const activeBand = root.querySelector('[data-role="active-band"]');
+    const positiveMarker = root.querySelector('[data-role="positive-marker"]');
+    const negativeMarker = root.querySelector('[data-role="negative-marker"]');
+
+    function trackMagnitudeForEvent(event) {
+      const trackBounds = track.getBoundingClientRect();
+      return signedPreferenceMagnitudeFromPointerOffset(
+        event.clientY - trackBounds.top,
+        trackBounds.height,
+      );
+    }
+
+    function updateTrackMarkers(magnitude) {
+      const trackHeight = track.clientHeight;
+      const positiveMarkerOffset = signedPreferenceOffsetForValue(magnitude, trackHeight);
+      const negativeMarkerOffset = signedPreferenceOffsetForValue(-magnitude, trackHeight);
+      const activeBandHeight = Math.max(0, negativeMarkerOffset - positiveMarkerOffset);
+      activeBand.style.top = `${positiveMarkerOffset}px`;
+      activeBand.style.height = `${activeBandHeight}px`;
+      positiveMarker.style.top = `${positiveMarkerOffset}px`;
+      negativeMarker.style.top = `${negativeMarkerOffset}px`;
+      topClip.style.height = `${Math.max(0, positiveMarkerOffset)}px`;
+      bottomClip.style.top = `${negativeMarkerOffset}px`;
+      bottomClip.style.height = `${Math.max(0, trackHeight - negativeMarkerOffset)}px`;
+    }
+
+    track.addEventListener("click", (event) => {
+      onMagnitudeChange(trackMagnitudeForEvent(event));
+    });
+    track.addEventListener("dblclick", (event) => {
+      event.preventDefault();
+      onResetMagnitude();
+    });
+    resetButton.addEventListener("click", () => {
+      onResetMagnitude();
+    });
+
+    return {
+      render({
+        magnitude,
+        codonOne,
+        codonTwo,
+        rightOffset,
+        top,
+        bottom,
+      }) {
+        const formattedMagnitude = formatShare(magnitude);
+        root.hidden = false;
+        root.style.right = `${rightOffset}px`;
+        root.style.top = `${Math.max(16, top - 4)}px`;
+        root.style.bottom = `${Math.max(16, bottom - 4)}px`;
+        valueNode.textContent = `±${formattedMagnitude}`;
+        copyNode.textContent = `Current scale: ±${formattedMagnitude}`;
+        positiveLabelNode.textContent = `${codonTwo}-preferring`;
+        negativeLabelNode.textContent = `${codonOne}-preferring`;
+        tickTopNode.textContent = `+${formatShare(SIGNED_PREFERENCE_LEGEND_EXTENT)}`;
+        tickBottomNode.textContent = `-${formatShare(SIGNED_PREFERENCE_LEGEND_EXTENT)}`;
+        updateTrackMarkers(magnitude);
+        window.requestAnimationFrame(() => {
+          updateTrackMarkers(magnitude);
+        });
+      },
+      hide() {
+        root.hidden = true;
+      },
+    };
+  }
+
+  function buildYAxisZoom(rowCount, zoomState, {
+    yAxisIndex = 0,
+    right = 8,
+    top = 24,
+    bottom = 64,
+    width = 14,
+  } = {}) {
+    if (!zoomState) {
+      return [];
+    }
+
+    return [
+      {
+        type: "inside",
+        yAxisIndex,
+        filterMode: "none",
+        zoomOnMouseWheel: false,
+        moveOnMouseMove: true,
+        moveOnMouseWheel: false,
+        startValue: zoomState.startValue,
+        endValue: zoomState.endValue,
+      },
+      {
+        type: "slider",
+        yAxisIndex,
+        filterMode: "none",
+        right,
+        width,
+        top,
+        bottom,
+        brushSelect: false,
+        zoomOnMouseWheel: "shift",
+        startValue: zoomState.startValue,
+        endValue: zoomState.endValue,
+        fillerColor: "rgba(15, 89, 100, 0.16)",
+        borderColor: "rgba(23, 36, 44, 0.08)",
+        handleStyle: {
+          color: "#0f5964",
+          borderColor: "#0f5964",
+        },
+        moveHandleStyle: {
+          color: "#0f5964",
+        },
+        textStyle: {
+          color: MUTED_TEXT_COLOR,
+        },
+      },
+    ];
+  }
+
+  function zoomPercentageToIndex(rowCount, percentage, fallbackIndex, roundingMethod) {
+    if (rowCount <= 1) {
+      return 0;
+    }
+    const normalizedPercentage = clamp(
+      numericValue(percentage, Number.NaN),
+      0,
+      100,
+    );
+    if (!Number.isFinite(normalizedPercentage)) {
+      return fallbackIndex;
+    }
+    return clamp(
+      Math[roundingMethod]((normalizedPercentage / 100) * (rowCount - 1)),
+      0,
+      rowCount - 1,
+    );
+  }
+
+  function zoomStateFromEventParams(params, rowCount) {
+    if (!params) {
+      return null;
+    }
+
+    const payload = Array.isArray(params.batch) && params.batch.length > 0
+      ? params.batch[0]
+      : params;
+    if (!payload) {
+      return null;
+    }
+
+    if (payload.startValue != null || payload.endValue != null) {
+      return normalizeZoomState(rowCount, {
+        startValue: payload.startValue,
+        endValue: payload.endValue,
+      });
+    }
+
+    if (payload.start != null || payload.end != null) {
+      return normalizeZoomState(rowCount, {
+        startValue: zoomPercentageToIndex(rowCount, payload.start, 0, "floor"),
+        endValue: zoomPercentageToIndex(rowCount, payload.end, Math.max(0, rowCount - 1), "ceil"),
+      });
+    }
+
+    return null;
+  }
+
+  function zoomStateFromChart(chart, rowCount) {
+    const dataZoom = chart.getOption().dataZoom;
+    if (!Array.isArray(dataZoom) || dataZoom.length === 0) {
+      return null;
+    }
+
+    const zoomComponent = dataZoom.find((entry) => entry && (
+      entry.startValue != null
+      || entry.endValue != null
+      || entry.start != null
+      || entry.end != null
+    ));
+    if (!zoomComponent) {
+      return null;
+    }
+
+    if (zoomComponent.startValue != null || zoomComponent.endValue != null) {
+      return normalizeZoomState(rowCount, {
+        startValue: numericValue(zoomComponent.startValue, 0),
+        endValue: numericValue(zoomComponent.endValue, Math.max(0, rowCount - 1)),
+      });
+    }
+
+    if (zoomComponent.start != null || zoomComponent.end != null) {
+      return normalizeZoomState(rowCount, {
+        startValue: zoomPercentageToIndex(rowCount, zoomComponent.start, 0, "floor"),
+        endValue: zoomPercentageToIndex(rowCount, zoomComponent.end, Math.max(0, rowCount - 1), "ceil"),
+      });
+    }
+
+    return null;
+  }
+
+  function resolveZoomState(chart, rowCount, params) {
+    return zoomStateFromEventParams(params, rowCount) || zoomStateFromChart(chart, rowCount);
+  }
+
+  function installWheelHandler(chart, rowCount, getCurrentZoomState) {
+    if (rowCount <= 1) return;
+    chart.getDom().addEventListener("wheel", (event) => {
+      event.preventDefault();
+      const zoomState = getCurrentZoomState();
+      if (!zoomState) return;
+      const direction = event.deltaY > 0 ? 1 : -1;
+      const { startValue, endValue } = zoomState;
+      const windowSize = endValue - startValue;
+      let newStart;
+      let newEnd;
+      if (event.shiftKey) {
+        const step = Math.max(1, Math.round(windowSize * 0.15));
+        const newWindowSize = clamp(windowSize + direction * 2 * step, 1, rowCount);
+        const rawPivot = chart.convertFromPixel({ yAxisIndex: 0 }, [event.offsetX, event.offsetY]);
+        const pivot = (typeof rawPivot === "number" && Number.isFinite(rawPivot))
+          ? clamp(rawPivot, startValue, endValue)
+          : (startValue + endValue) / 2;
+        const fraction = windowSize > 0 ? (pivot - startValue) / windowSize : 0.5;
+        newStart = clamp(Math.round(pivot - fraction * newWindowSize), 0, Math.max(0, rowCount - newWindowSize));
+        newEnd = Math.min(newStart + newWindowSize, rowCount - 1);
+        if (newEnd <= newStart) return;
+      } else {
+        const step = Math.max(1, Math.round(windowSize * 0.2));
+        newStart = clamp(Math.round(startValue + direction * step), 0, Math.max(0, rowCount - 1 - windowSize));
+        newEnd = newStart + windowSize;
+      }
+      chart.dispatchAction({ type: "dataZoom", dataZoomIndex: 0, startValue: newStart, endValue: newEnd });
+    }, { passive: false, capture: true });
   }
 
   function savePendingScrollPosition() {
@@ -167,726 +600,893 @@
     }
   }
 
-  function focusedDisplayMin(row) {
-    const iqr = Math.max(0, row.q3 - row.q1);
-    return Math.max(row.min, row.q1 - (1.5 * iqr));
+  function buildEmptyOption(message, detail) {
+    return {
+      animation: false,
+      grid: {
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: 16,
+      },
+      xAxis: {
+        show: false,
+      },
+      yAxis: {
+        show: false,
+      },
+      series: [],
+      tooltip: {
+        show: false,
+      },
+      graphic: [
+        {
+          type: "text",
+          left: "center",
+          top: "42%",
+          style: {
+            text: message,
+            fontSize: 20,
+            fontWeight: 700,
+            fill: TEXT_COLOR,
+            textAlign: "center",
+          },
+        },
+        {
+          type: "text",
+          left: "center",
+          top: "54%",
+          style: {
+            text: detail,
+            fontSize: 14,
+            fontWeight: 500,
+            fill: MUTED_TEXT_COLOR,
+            textAlign: "center",
+          },
+        },
+      ],
+    };
   }
 
-  function focusedDisplayMax(row) {
-    const iqr = Math.max(0, row.q3 - row.q1);
-    return Math.min(row.max, row.q3 + (1.5 * iqr));
-  }
+  function renderOverview() {
+    const payload = parsePayload("codon-composition-overview-payload");
+    const taxonomyGutterPayload = parsePayload("codon-composition-overview-taxonomy-gutter-payload");
+    const container = document.getElementById("codon-composition-overview");
+    if (!payload || !container || typeof window.echarts === "undefined") {
+      return;
+    }
 
-  function deriveChartRows(rows, mode) {
-    return rows.map((row) => {
-      if (mode !== CHART_MODE_FOCUSED) {
+    const rowCount = payload.visibleTaxaCount || 0;
+    container.style.height = `${chartHeightForRowCount(rowCount, 320)}px`;
+    const chart = window.echarts.init(container);
+    const hasTaxonomyGutter = hasTaxonomyGutterPayload(taxonomyGutterPayload);
+    const leftGutterOverlay = hasTaxonomyGutter ? attachTaxonomyGutter(chart, taxonomyGutterPayload) : null;
+    const bottomGutterOverlay = hasTaxonomyGutter
+      ? attachTaxonomyGutter(chart, taxonomyGutterPayload, { position: "bottom" })
+      : null;
+    let currentZoomState = normalizeZoomState(rowCount, null);
+    installWheelHandler(chart, rowCount, () => currentZoomState);
+    const taxonAxisValues = payload.taxa.map((row) => String(row.taxonId));
+    const visualRange = resolvedMatrixVisualRange(payload.valueMin, payload.valueMax);
+    const taxonLabelByAxisValue = new Map(
+      (payload.taxa || []).map((row) => [String(row.taxonId), row.taxonName]),
+    );
+    let currentSignedPreferenceMagnitude = loadSignedPreferenceMagnitude();
+    const signedPreferenceLegend = createSignedPreferenceLegend(container, {
+      onMagnitudeChange(nextMagnitude) {
+        const resolvedMagnitude = normalizedSignedPreferenceMagnitude(nextMagnitude);
+        if (resolvedMagnitude === currentSignedPreferenceMagnitude) {
+          return;
+        }
+        currentSignedPreferenceMagnitude = resolvedMagnitude;
+        persistSignedPreferenceMagnitude(resolvedMagnitude);
+        renderChart();
+      },
+      onResetMagnitude() {
+        currentSignedPreferenceMagnitude = DEFAULT_SIGNED_PREFERENCE_MAGNITUDE;
+        persistSignedPreferenceMagnitude(currentSignedPreferenceMagnitude);
+        renderChart();
+      },
+    });
+
+    function overviewGutterWidth(visibleRowCount) {
+      if (!hasTaxonomyGutter) {
+        return 0;
+      }
+      return taxonomyGutterReservedWidth(taxonomyGutterPayload, {
+        showLabels: shouldShowTaxonLabels(visibleRowCount),
+        visibleLeafCount: visibleRowCount,
+      });
+    }
+
+    function overviewBottomTreeHeight(visibleRowCount) {
+      if (!hasTaxonomyGutter) {
+        return 0;
+      }
+      return taxonomyGutterReservedHeight(taxonomyGutterPayload, {
+        showLabels: shouldShowBottomTreeLeafLabels(visibleRowCount),
+        showBraceLabels: shouldShowBottomTreeBraceLabels(visibleRowCount),
+        visibleLeafCount: visibleRowCount,
+      });
+    }
+
+    function currentOverviewLayout(visibleRowCount) {
+      const showBottomTreeLeafLabels = shouldShowBottomTreeLeafLabels(visibleRowCount);
+      const showBottomTreeBraceLabels = shouldShowBottomTreeBraceLabels(visibleRowCount);
+      const showMatrixColumnLabels = !showBottomTreeLeafLabels
+        && !showBottomTreeBraceLabels
+        && shouldShowMatrixColumnLabels(visibleRowCount);
+      return {
+        top: 32,
+        bottom: overviewBottomTreeHeight(visibleRowCount) + (showMatrixColumnLabels ? 92 : 28),
+        showMatrixColumnLabels,
+        showBottomTreeLeafLabels,
+        showBottomTreeBraceLabels,
+      };
+    }
+
+    function currentVisibleColumnBounds() {
+      if (!currentZoomState) {
         return {
-          ...row,
-          displayMin: row.min,
-          displayMax: row.max,
-          maxOverflow: false,
+          startValue: 0,
+          endValue: Math.max(0, rowCount - 1),
+          min: 0,
+          max: Math.max(0, rowCount - 1),
         };
       }
-
-      const displayMin = focusedDisplayMin(row);
-      const displayMax = focusedDisplayMax(row);
       return {
-        ...row,
-        displayMin,
-        displayMax,
-        maxOverflow: row.max > displayMax,
+        startValue: currentZoomState.startValue,
+        endValue: currentZoomState.endValue,
+        min: currentZoomState.startValue,
+        max: currentZoomState.endValue,
       };
-    });
-  }
-
-  function codonRatioBounds(rows) {
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return [0, 1];
     }
 
-    const visibleMin = Math.min(...rows.map((row) => row.displayMin));
-    const visibleMax = Math.max(...rows.map((row) => row.displayMax));
-    const span = visibleMax - visibleMin;
-    const padding = span > 0 ? Math.max(0.05, span * 0.08) : 0.1;
-    return [Math.max(0, visibleMin - padding), visibleMax + padding];
-  }
-
-  function buildEmptyOption(payload) {
-    const hasRows = Array.isArray(payload.rows) && payload.rows.length > 0;
-    const rangeLabel = hasRows
-      ? `${formatCodonRatioValue(payload.x_min)} to ${formatCodonRatioValue(payload.x_max)}`
-      : "No visible taxa";
-    const summaryLabel = hasRows
-      ? `${payload.visibleTaxaCount} taxa ready for chart rendering`
-      : "Adjust the filters to populate the chart";
-
-    return {
-      animation: false,
-      grid: {
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: 16,
-      },
-      xAxis: {
-        type: "value",
-        min: 0,
-        max: 1,
-        show: false,
-      },
-      yAxis: {
-        type: "category",
-        data: [],
-        show: false,
-      },
-      series: [],
-      tooltip: {
-        show: false,
-      },
-      graphic: [
-        {
-          type: "text",
-          left: "center",
-          top: "42%",
-          style: {
-            text: summaryLabel,
-            fontSize: 20,
-            fontWeight: 700,
-            fill: TEXT_COLOR,
-            textAlign: "center",
-          },
-        },
-        {
-          type: "text",
-          left: "center",
-          top: "54%",
-          style: {
-            text: `Codon ratio span: ${rangeLabel}`,
-            fontSize: 14,
-            fontWeight: 500,
-            fill: MUTED_TEXT_COLOR,
-            textAlign: "center",
-          },
-        },
-      ],
-    };
-  }
-
-  function heatmapValueBounds(payload) {
-    const minimum = numericValue(payload ? payload.valueMin : undefined, 0);
-    const maximum = numericValue(payload ? payload.valueMax : undefined, 1);
-    if (minimum === maximum) {
-      const padding = minimum === 0 ? 0.1 : Math.abs(minimum) * 0.1;
-      return [Math.max(0, minimum - padding), maximum + padding];
+    function currentOverviewMargins(gutterWidth) {
+      const rightMargin = payload.mode === "signed_preference_map"
+        ? (currentZoomState ? 176 : 132)
+        : (currentZoomState ? 148 : 96);
+      return {
+        left: hasTaxonomyGutter ? gutterWidth + 20 : 160,
+        right: rightMargin,
+      };
     }
-    return [minimum, maximum];
-  }
 
-  function buildHeatmapEmptyOption(payload) {
-    const taxonCount = numericValue(payload ? payload.visibleTaxaCount : undefined, 0);
-    const binCount = numericValue(payload ? payload.visibleBinCount : undefined, 0);
-    const summaryLabel = taxonCount > 0 || binCount > 0
-      ? `${taxonCount} taxa across ${binCount} bins ready for overview rendering`
-      : "Adjust the filters to populate the overview";
-
-    return {
-      animation: false,
-      grid: {
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: 16,
-      },
-      xAxis: {
-        type: "value",
-        min: 0,
-        max: 1,
-        show: false,
-      },
-      yAxis: {
-        type: "value",
-        min: 0,
-        max: 1,
-        show: false,
-      },
-      series: [],
-      tooltip: {
-        show: false,
-      },
-      graphic: [
-        {
-          type: "text",
-          left: "center",
-          top: "42%",
-          style: {
-            text: summaryLabel,
-            fontSize: 20,
-            fontWeight: 700,
-            fill: TEXT_COLOR,
-            textAlign: "center",
-          },
-        },
-        {
-          type: "text",
-          left: "center",
-          top: "54%",
-          style: {
-            text: "Median codon ratio per taxon and repeat-length bin",
-            fontSize: 14,
-            fontWeight: 500,
-            fill: MUTED_TEXT_COLOR,
-            textAlign: "center",
-          },
-        },
-      ],
-    };
-  }
-
-  function buildTooltip(row, { focusedMode = false } = {}) {
-    const lines = [
-      `<strong>${row.taxonName}</strong>`,
-      `Observations: ${row.observationCount}`,
-      `Min-Max: ${formatCodonRatioValue(row.min)}-${formatCodonRatioValue(row.max)}`,
-      `Median: ${formatCodonRatioValue(row.median)}`,
-      `IQR: ${formatCodonRatioValue(row.q1)}-${formatCodonRatioValue(row.q3)}`,
-    ];
-    if (focusedMode && row.maxOverflow) {
-      lines.push(`Focused view clips max whisker at ${formatCodonRatioValue(row.displayMax)}`);
-    }
-    return lines.join("<br>");
-  }
-
-  function heatmapTaxonForRowIndex(taxa, rowIndex) {
-    return taxa.find((taxon) => String(taxon.rowIndex) === String(rowIndex)) || null;
-  }
-
-  function buildHeatmapTooltip(cell) {
-    return [
-      `<strong>${cell.taxonName}</strong>`,
-      `Length bin: ${cell.binLabel}`,
-      `Observations: ${cell.observationCount}`,
-      `Median: ${formatCodonRatioValue(cell.median)}`,
-      `IQR: ${formatCodonRatioValue(cell.q1)}-${formatCodonRatioValue(cell.q3)}`,
-      `Min-Max: ${formatCodonRatioValue(cell.min)}-${formatCodonRatioValue(cell.max)}`,
-    ].join("<br>");
-  }
-
-  function markerPoint(row, rowIndex, xValue) {
-    return {
-      value: [xValue, rowIndex],
-      rowIndex,
-    };
-  }
-
-  function overflowMarkerData(rows) {
-    const markers = [];
-    rows.forEach((row, rowIndex) => {
-      if (row.maxOverflow) {
-        markers.push(markerPoint(row, rowIndex, row.displayMax));
+    function applySquareOverviewHeight(layout, margins) {
+      const availableWidth = Math.max(220, container.clientWidth - margins.left - margins.right);
+      const maximumGridSide = Math.max(220, MAX_CHART_HEIGHT - layout.top - layout.bottom);
+      const gridSide = clamp(availableWidth, 220, maximumGridSide);
+      const targetHeight = Math.round(layout.top + layout.bottom + gridSide);
+      if (Math.abs(container.clientHeight - targetHeight) > 1) {
+        container.style.height = `${targetHeight}px`;
+        chart.resize();
       }
-    });
-    return markers;
-  }
-
-  function averageMedian(rows) {
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return null;
     }
 
-    const sum = rows.reduce((total, row) => total + row.median, 0);
-    return sum / rows.length;
-  }
-
-  function buildChartOption(payload, mode, zoomState) {
-    if (!Array.isArray(payload.rows) || payload.rows.length === 0) {
-      return buildEmptyOption(payload);
+    function matrixValueAt(matrix, rowIndex, columnIndex, fallbackValue = 0) {
+      if (!Array.isArray(matrix)) {
+        return fallbackValue;
+      }
+      const row = matrix[rowIndex];
+      if (!Array.isArray(row)) {
+        return fallbackValue;
+      }
+      return numericValue(row[columnIndex], fallbackValue);
     }
 
-    const rows = deriveChartRows(payload.rows, mode);
-    const categories = rows.map((row) => rowCategoryValue(row));
-    const boxplotData = rows.map((row) => [row.displayMin, row.q1, row.median, row.q3, row.displayMax]);
-    const [xMin, xMax] = codonRatioBounds(rows);
-    const visibleRowWindow = Math.min(rows.length, DEFAULT_VISIBLE_ROWS);
-    const needsZoom = rows.length > visibleRowWindow;
-    const normalizedZoomState = normalizeZoomState(rows.length, zoomState);
-    const visibleRowCount = visibleRowCountForZoom(rows.length, normalizedZoomState);
-    const showTaxonLabels = shouldShowTaxonLabels(visibleRowCount);
-    const showObservationCounts = shouldShowObservationCounts(visibleRowCount);
-    const overflowMarkers = mode === CHART_MODE_FOCUSED ? overflowMarkerData(rows) : [];
-    const avgMedian = averageMedian(rows);
-
-    return {
-      animationDuration: 250,
-      animationDurationUpdate: 150,
-      grid: {
-        left: 188,
-        right: needsZoom ? 56 : 20,
-        top: 16,
-        bottom: 56,
-        containLabel: false,
-      },
-      tooltip: {
-        trigger: "item",
-        confine: true,
-        backgroundColor: "rgba(255, 253, 249, 0.98)",
-        borderColor: "rgba(23, 36, 44, 0.12)",
-        borderWidth: 1,
-        textStyle: {
-          color: TEXT_COLOR,
-          fontSize: 13,
-        },
-        formatter(params) {
-          return buildTooltip(rows[params.dataIndex], {
-            focusedMode: mode === CHART_MODE_FOCUSED,
-          });
-        },
-      },
-      xAxis: {
-        type: "value",
-        min: xMin,
-        max: xMax,
-        name: "Codon ratio",
-        nameGap: 22,
-        nameLocation: "middle",
-        nameTextStyle: {
-          color: MUTED_TEXT_COLOR,
-          fontWeight: 700,
-          fontSize: 12,
-        },
-        axisLabel: {
-          color: MUTED_TEXT_COLOR,
-          formatter(value) {
-            return formatCodonRatioValue(value);
-          },
-        },
-        splitLine: {
-          lineStyle: {
-            color: GRID_COLOR,
-          },
-        },
-      },
-      yAxis: {
-        type: "category",
-        data: categories,
-        triggerEvent: true,
-        axisTick: {
-          show: false,
-        },
-        axisLine: {
-          show: false,
-        },
-        axisLabel: {
-          show: showTaxonLabels,
-          interval: showTaxonLabels ? 0 : "auto",
-          color: TEXT_COLOR,
-          fontWeight: 700,
-          lineHeight: 17,
-          margin: 16,
-          rich: {
-            taxon: {
-              color: TEXT_COLOR,
-              fontWeight: 700,
-            },
-            count: {
-              color: MUTED_TEXT_COLOR,
-              fontSize: 12,
-              fontWeight: 600,
-            },
-          },
-          formatter(value) {
-            const row = rowForAxisValue(rows, value);
-            if (!row) {
-              return "";
-            }
-            if (!showObservationCounts) {
-              return `{taxon|${truncateTaxonName(row.taxonName)}}`;
-            }
-            return `{taxon|${truncateTaxonName(row.taxonName)}}\n{count|n=${row.observationCount}}`;
-          },
-        },
-      },
-      dataZoom: needsZoom
-        ? [
-            {
-              type: "inside",
-              yAxisIndex: 0,
-              zoomOnMouseWheel: false,
-              moveOnMouseMove: true,
-              moveOnMouseWheel: true,
-              startValue: normalizedZoomState.startValue,
-              endValue: normalizedZoomState.endValue,
-            },
-            {
-              type: "slider",
-              yAxisIndex: 0,
-              filterMode: "empty",
-              right: 8,
-              width: 14,
-              top: 24,
-              bottom: 64,
-              brushSelect: false,
-              startValue: normalizedZoomState.startValue,
-              endValue: normalizedZoomState.endValue,
-              fillerColor: "rgba(15, 89, 100, 0.16)",
-              borderColor: "rgba(23, 36, 44, 0.08)",
-              handleStyle: {
-                color: BOX_BORDER,
-                borderColor: BOX_BORDER,
-              },
-              moveHandleStyle: {
-                color: BOX_BORDER,
-              },
-              textStyle: {
-                color: MUTED_TEXT_COLOR,
-              },
-            },
-          ]
-        : [],
-      series: [
-        {
-          name: "Codon ratio distribution",
-          type: "boxplot",
-          cursor: "pointer",
-          data: boxplotData,
+    function overviewHeatmapStyles(visibleRowCount) {
+      if (visibleRowCount <= MAX_OVERVIEW_BORDERS) {
+        return {
           itemStyle: {
-            color: BOX_FILL,
-            borderColor: BOX_BORDER,
-            borderWidth: 2,
-          },
-          emphasis: {
-            itemStyle: {
-              color: "#eef6f7",
-              borderColor: BOX_BORDER,
-              borderWidth: 2,
-            },
-          },
-          tooltip: {
-            show: true,
-          },
-        },
-        {
-          name: "Median marker",
-          type: "scatter",
-          cursor: "pointer",
-          data: rows.map((row, index) => markerPoint(row, index, row.median)),
-          symbol: "circle",
-          symbolSize: 7,
-          itemStyle: {
-            color: MEDIAN_COLOR,
-          },
-          z: 4,
-          tooltip: {
-            show: false,
-          },
-          markLine: avgMedian === null
-            ? undefined
-            : {
-                silent: true,
-                symbol: "none",
-                lineStyle: {
-                  color: MEDIAN_COLOR,
-                  type: "dashed",
-                  width: 2,
-                  opacity: 0.7,
-                },
-                label: {
-                  show: true,
-                  formatter: `Avg median ${formatCodonRatioValue(avgMedian)}`,
-                  color: MEDIAN_COLOR,
-                  fontWeight: 700,
-                  padding: [0, 0, 8, 0],
-                },
-                data: [
-                  {
-                    xAxis: avgMedian,
-                  },
-                ],
-              },
-        },
-        ...(
-          overflowMarkers.length > 0
-            ? [
-                {
-                  name: "Clipped max marker",
-                  type: "scatter",
-                  cursor: "pointer",
-                  data: overflowMarkers,
-                  symbol: "triangle",
-                  symbolRotate: 90,
-                  symbolSize: 12,
-                  itemStyle: {
-                    color: MEDIAN_COLOR,
-                  },
-                  z: 6,
-                  tooltip: {
-                    show: true,
-                    formatter(params) {
-                      const row = rows[params.data.rowIndex];
-                      return buildTooltip(row, { focusedMode: true });
-                    },
-                  },
-                },
-              ]
-            : []
-        ),
-      ],
-    };
-  }
-
-  function buildHeatmapOption(payload) {
-    const taxa = Array.isArray(payload && payload.taxa) ? payload.taxa : [];
-    const bins = Array.isArray(payload && payload.bins) ? payload.bins : [];
-    const cells = Array.isArray(payload && payload.cells) ? payload.cells : [];
-
-    if (cells.length === 0) {
-      return buildHeatmapEmptyOption(payload);
-    }
-
-    const showTaxonLabels = shouldShowTaxonLabels(taxa.length);
-    const showObservationCounts = shouldShowObservationCounts(taxa.length);
-    const [valueMin, valueMax] = heatmapValueBounds(payload);
-
-    return {
-      animationDuration: 250,
-      animationDurationUpdate: 150,
-      grid: {
-        left: 188,
-        right: 20,
-        top: 20,
-        bottom: 104,
-        containLabel: false,
-      },
-      tooltip: {
-        trigger: "item",
-        confine: true,
-        backgroundColor: "rgba(255, 253, 249, 0.98)",
-        borderColor: "rgba(23, 36, 44, 0.12)",
-        borderWidth: 1,
-        textStyle: {
-          color: TEXT_COLOR,
-          fontSize: 13,
-        },
-        formatter(params) {
-          if (!params.data || !params.data.cell) {
-            return "";
-          }
-          return buildHeatmapTooltip(params.data.cell);
-        },
-      },
-      xAxis: {
-        type: "category",
-        data: bins.map((lengthBin) => String(lengthBin.columnIndex)),
-        position: "top",
-        axisTick: {
-          show: false,
-        },
-        axisLine: {
-          show: false,
-        },
-        axisLabel: {
-          color: MUTED_TEXT_COLOR,
-          interval: 0,
-          rotate: bins.length > 8 ? 30 : 0,
-          formatter(value) {
-            const lengthBin = bins[Number(value)];
-            return lengthBin ? lengthBin.label : "";
-          },
-        },
-        splitArea: {
-          show: false,
-        },
-      },
-      yAxis: {
-        type: "category",
-        data: taxa.map((taxon) => String(taxon.rowIndex)),
-        axisTick: {
-          show: false,
-        },
-        axisLine: {
-          show: false,
-        },
-        axisLabel: {
-          show: showTaxonLabels,
-          interval: showTaxonLabels ? 0 : "auto",
-          color: TEXT_COLOR,
-          fontWeight: 700,
-          lineHeight: 17,
-          margin: 16,
-          rich: {
-            taxon: {
-              color: TEXT_COLOR,
-              fontWeight: 700,
-            },
-            count: {
-              color: MUTED_TEXT_COLOR,
-              fontSize: 12,
-              fontWeight: 600,
-            },
-          },
-          formatter(value) {
-            const taxon = heatmapTaxonForRowIndex(taxa, value);
-            if (!taxon) {
-              return "";
-            }
-            if (!showObservationCounts) {
-              return `{taxon|${truncateTaxonName(taxon.taxonName)}}`;
-            }
-            return `{taxon|${truncateTaxonName(taxon.taxonName)}}\n{count|n=${taxon.observationCount}}`;
-          },
-        },
-      },
-      visualMap: {
-        min: valueMin,
-        max: valueMax,
-        calculable: true,
-        orient: "horizontal",
-        left: "center",
-        bottom: 24,
-        text: ["Higher median", "Lower median"],
-        textStyle: {
-          color: MUTED_TEXT_COLOR,
-        },
-        inRange: {
-          color: ["#fcf7ed", "#dcebef", "#7cb4b7", "#0f5964"],
-        },
-      },
-      series: [
-        {
-          name: "Median codon ratio",
-          type: "heatmap",
-          data: cells.map((cell) => ({
-            value: [cell.binIndex, cell.taxonIndex, cell.value],
-            cell,
-          })),
-          progressive: 0,
-          itemStyle: {
-            borderColor: "rgba(255, 255, 255, 0.8)",
+            borderColor: "rgba(255, 255, 255, 0.82)",
             borderWidth: 1,
           },
           emphasis: {
             itemStyle: {
               borderColor: TEXT_COLOR,
               borderWidth: 1.5,
+              shadowBlur: 10,
+              shadowColor: "rgba(0, 0, 0, 0.18)",
+            },
+          },
+        };
+      }
+      return {
+        itemStyle: {
+          borderWidth: 0,
+        },
+        emphasis: {
+          itemStyle: {
+            borderWidth: 0,
+          },
+        },
+      };
+    }
+
+    if (
+      !Array.isArray(payload.taxa)
+      || payload.taxa.length === 0
+      || !Array.isArray(payload.divergenceMatrix)
+      || payload.divergenceMatrix.length === 0
+    ) {
+      signedPreferenceLegend.hide();
+      chart.setOption(
+        buildEmptyOption(
+          payload.mode === "signed_preference_map"
+            ? "No visible codon preference cells"
+            : "No visible taxon similarity cells",
+          "Adjust the filters or choose a residue to populate the overview.",
+        ),
+      );
+      return;
+    }
+
+    function refreshOverviewGutter() {
+      const visibleRowCount = visibleRowCountForZoom(rowCount, currentZoomState);
+      const layout = currentOverviewLayout(visibleRowCount);
+      const gutterWidth = overviewGutterWidth(visibleRowCount);
+      const margins = currentOverviewMargins(gutterWidth);
+
+      if (leftGutterOverlay) {
+        leftGutterOverlay.render({
+          showLabels: shouldShowTaxonLabels(visibleRowCount),
+          zoomState: currentZoomState,
+          gutterWidth,
+          top: layout.top,
+          bottom: layout.bottom,
+          left: margins.left,
+          right: margins.right,
+        });
+      }
+
+      if (bottomGutterOverlay) {
+        bottomGutterOverlay.render({
+          zoomState: currentZoomState,
+          gutterWidth,
+          top: layout.top,
+          bottom: layout.bottom,
+          left: margins.left,
+          right: margins.right,
+          showLabels: layout.showBottomTreeLeafLabels,
+          showBraceLabels: layout.showBottomTreeBraceLabels,
+          bottomGutterHeight: overviewBottomTreeHeight(visibleRowCount),
+        });
+      }
+    }
+
+    const visibleSimilarityWindowCache = new Map();
+    const visibleSignedWindowBaseCache = new Map();
+    const visibleSignedWindowCache = new Map();
+
+    function overviewWindowKey(bounds) {
+      return `${bounds.startValue}:${bounds.endValue}`;
+    }
+
+    function buildVisibleSimilarityData(bounds) {
+      const cacheKey = `${overviewWindowKey(bounds)}:${payload.displayMetric}`;
+      const cachedData = visibleSimilarityWindowCache.get(cacheKey);
+      if (cachedData) {
+        return cachedData;
+      }
+
+      const visibleData = [];
+      for (let rowIndex = bounds.startValue; rowIndex <= bounds.endValue; rowIndex += 1) {
+        const row = payload.taxa[rowIndex];
+        if (!row) {
+          continue;
+        }
+        for (let columnIndex = bounds.startValue; columnIndex <= bounds.endValue; columnIndex += 1) {
+          const column = payload.taxa[columnIndex];
+          if (!column) {
+            continue;
+          }
+          const divergence = matrixValueAt(payload.divergenceMatrix, rowIndex, columnIndex, 0);
+          const similarity = Math.max(0, 1 - divergence);
+          visibleData.push({
+            value: [
+              String(column.taxonId),
+              String(row.taxonId),
+              payload.displayMetric === "divergence" ? divergence : similarity,
+            ],
+            rowTaxonId: String(row.taxonId),
+            rowTaxonName: row.taxonName,
+            rowRank: row.rank,
+            rowObservationCount: row.observationCount,
+            rowSpeciesCount: row.speciesCount,
+            columnTaxonId: String(column.taxonId),
+            columnTaxonName: column.taxonName,
+            columnRank: column.rank,
+            columnObservationCount: column.observationCount,
+            columnSpeciesCount: column.speciesCount,
+            similarity,
+            divergence,
+            reliability: Math.min(row.speciesCount, column.speciesCount),
+          });
+        }
+      }
+
+      visibleSimilarityWindowCache.set(cacheKey, visibleData);
+      return visibleData;
+    }
+
+    function buildVisibleSignedWindowBase(bounds) {
+      const cacheKey = overviewWindowKey(bounds);
+      const cachedData = visibleSignedWindowBaseCache.get(cacheKey);
+      if (cachedData) {
+        return cachedData;
+      }
+
+      const visibleData = [];
+      for (let rowIndex = bounds.startValue; rowIndex <= bounds.endValue; rowIndex += 1) {
+        const row = payload.taxa[rowIndex];
+        if (!row) {
+          continue;
+        }
+        for (let columnIndex = bounds.startValue; columnIndex <= bounds.endValue; columnIndex += 1) {
+          const column = payload.taxa[columnIndex];
+          if (!column) {
+            continue;
+          }
+          visibleData.push({
+            rowTaxonId: String(row.taxonId),
+            rowTaxonName: row.taxonName,
+            rowObservationCount: row.observationCount,
+            rowSpeciesCount: row.speciesCount,
+            rowCodonOneShare: row.codonOneShare,
+            rowCodonTwoShare: row.codonTwoShare,
+            rowScore: row.score,
+            columnTaxonId: String(column.taxonId),
+            columnTaxonName: column.taxonName,
+            columnObservationCount: column.observationCount,
+            columnSpeciesCount: column.speciesCount,
+            columnCodonOneShare: column.codonOneShare,
+            columnCodonTwoShare: column.codonTwoShare,
+            columnScore: column.score,
+            signedDifference: row.score - column.score,
+            divergence: matrixValueAt(payload.divergenceMatrix, rowIndex, columnIndex, 0),
+            reliability: Math.min(row.speciesCount, column.speciesCount),
+          });
+        }
+      }
+
+      visibleSignedWindowBaseCache.set(cacheKey, visibleData);
+      return visibleData;
+    }
+
+    function buildVisibleSignedData(bounds, magnitude) {
+      const resolvedMagnitude = normalizedSignedPreferenceMagnitude(magnitude);
+      const cacheKey = `${overviewWindowKey(bounds)}:${resolvedMagnitude}`;
+      const cachedData = visibleSignedWindowCache.get(cacheKey);
+      if (cachedData) {
+        return cachedData;
+      }
+
+      const clippedVisibleData = buildVisibleSignedWindowBase(bounds).map((cell) => ({
+        ...cell,
+        value: [
+          cell.columnTaxonId,
+          cell.rowTaxonId,
+          clipSignedPreferenceValue(cell.signedDifference, resolvedMagnitude),
+        ],
+      }));
+      visibleSignedWindowCache.set(cacheKey, clippedVisibleData);
+      return clippedVisibleData;
+    }
+
+    function renderChart() {
+      const visibleRowCount = visibleRowCountForZoom(rowCount, currentZoomState);
+      const showTaxonLabels = shouldShowTaxonLabels(visibleRowCount);
+      const showMatrixCellLabels = shouldShowMatrixCellLabels(visibleRowCount);
+      const layout = currentOverviewLayout(visibleRowCount);
+      const columnBounds = currentVisibleColumnBounds();
+      const gutterWidth = overviewGutterWidth(visibleRowCount);
+      const margins = currentOverviewMargins(gutterWidth);
+      const heatmapStyles = overviewHeatmapStyles(visibleRowCount);
+      applySquareOverviewHeight(layout, margins);
+      if (payload.mode === "signed_preference_map") {
+        const signedPreferenceRange = currentSignedPreferenceRange(currentSignedPreferenceMagnitude);
+        const preferenceData = buildVisibleSignedData(columnBounds, signedPreferenceRange.magnitude);
+        chart.setOption({
+          animation: false,
+          grid: {
+            left: margins.left,
+            right: margins.right,
+            top: layout.top,
+            bottom: layout.bottom,
+          },
+          tooltip: {
+            trigger: "item",
+            formatter(params) {
+              const cell = params.data || {};
+              const preferredCodon = cell.signedDifference > 0
+                ? payload.codonTwo
+                : (cell.signedDifference < 0 ? payload.codonOne : "Balanced");
+              return [
+                `<strong>${cell.rowTaxonName}</strong> x <strong>${cell.columnTaxonName}</strong>`,
+                `${payload.codonTwo} - ${payload.codonOne}: ${formatShare(cell.signedDifference)}`,
+                `Row balance: ${formatShare(cell.rowScore)}`,
+                `${cell.rowTaxonName} shares: ${payload.codonTwo} ${formatShare(cell.rowCodonTwoShare)}, ${payload.codonOne} ${formatShare(cell.rowCodonOneShare)}`,
+                `Column balance: ${formatShare(cell.columnScore)}`,
+                `${cell.columnTaxonName} shares: ${payload.codonTwo} ${formatShare(cell.columnCodonTwoShare)}, ${payload.codonOne} ${formatShare(cell.columnCodonOneShare)}`,
+                `JSD: ${formatShare(cell.divergence)}`,
+                `Species support: ${cell.rowSpeciesCount} vs ${cell.columnSpeciesCount}`,
+                `Calls: ${cell.rowObservationCount} vs ${cell.columnObservationCount}`,
+                `Interpretation: ${preferredCodon === "Balanced"
+                  ? "matched balance"
+                  : `${cell.rowTaxonName} is more ${preferredCodon}-preferring than ${cell.columnTaxonName}`}`,
+              ].join("<br>");
+            },
+          },
+          xAxis: {
+            type: "category",
+            data: taxonAxisValues,
+            min: columnBounds.min,
+            max: columnBounds.max,
+            axisLabel: {
+              show: layout.showMatrixColumnLabels,
+              interval: 0,
+              color: TEXT_COLOR,
+              rotate: 42,
+              hideOverlap: true,
+              width: 120,
+              overflow: "truncate",
+              formatter: (value) => taxonLabelByAxisValue.get(String(value)) || String(value),
+            },
+            axisLine: {
+              lineStyle: {
+                color: GRID_COLOR,
+              },
+            },
+          },
+          yAxis: {
+            type: "category",
+            inverse: true,
+            data: taxonAxisValues,
+            axisLabel: {
+              show: !hasTaxonomyGutter && showTaxonLabels,
+              interval: 0,
+              color: TEXT_COLOR,
+              formatter: (value) => taxonLabelByAxisValue.get(String(value)) || String(value),
+            },
+            axisLine: {
+              lineStyle: {
+                color: GRID_COLOR,
+              },
+            },
+          },
+          visualMap: {
+            show: false,
+            min: signedPreferenceRange.min,
+            max: signedPreferenceRange.max,
+            calculable: false,
+            inRange: {
+              color: ["#0f5964", "#f2efe6", "#d06e37"],
+            },
+          },
+          dataZoom: buildYAxisZoom(rowCount, currentZoomState, {
+            yAxisIndex: 0,
+            right: 8,
+            top: 28,
+            bottom: 56,
+            width: 12,
+          }),
+          series: [
+            {
+              type: "heatmap",
+              data: preferenceData,
+              encode: {
+                x: 0,
+                y: 1,
+                value: 2,
+              },
+              label: {
+                show: showMatrixCellLabels,
+                formatter(params) {
+                  return formatShare(
+                    params.data && typeof params.data.signedDifference === "number"
+                      ? params.data.signedDifference
+                      : undefined,
+                  );
+                },
+                color: TEXT_COLOR,
+                fontSize: 11,
+              },
+              itemStyle: heatmapStyles.itemStyle,
+              emphasis: heatmapStyles.emphasis,
+            },
+          ],
+        }, { notMerge: true });
+        signedPreferenceLegend.render({
+          magnitude: signedPreferenceRange.magnitude,
+          codonOne: payload.codonOne,
+          codonTwo: payload.codonTwo,
+          rightOffset: currentZoomState ? 28 : 14,
+          top: layout.top,
+          bottom: layout.bottom,
+        });
+        refreshOverviewGutter();
+        return;
+      }
+
+      signedPreferenceLegend.hide();
+      const heatmapData = buildVisibleSimilarityData(columnBounds);
+      chart.setOption({
+        animation: false,
+        grid: {
+          left: margins.left,
+          right: margins.right,
+          top: layout.top,
+          bottom: layout.bottom,
+        },
+        tooltip: {
+          trigger: "item",
+          formatter(params) {
+            const cell = params.data || {};
+            const isSelfComparison = cell.rowTaxonId === cell.columnTaxonId;
+            return [
+              `<strong>${cell.rowTaxonName}</strong> x <strong>${cell.columnTaxonName}</strong>`,
+              `Similarity: ${formatShare(cell.similarity)}`,
+              `JSD: ${formatShare(cell.divergence)}`,
+              `Species support: ${cell.rowSpeciesCount} vs ${cell.columnSpeciesCount}`,
+              `Calls: ${cell.rowObservationCount} vs ${cell.columnObservationCount}`,
+              `Reliability proxy: ${cell.reliability}`,
+              isSelfComparison ? "Self-comparison: identical by definition." : "",
+            ].filter(Boolean).join("<br>");
+          },
+        },
+        xAxis: {
+          type: "category",
+          data: taxonAxisValues,
+          min: columnBounds.min,
+          max: columnBounds.max,
+          axisLabel: {
+            show: layout.showMatrixColumnLabels,
+            interval: 0,
+            color: TEXT_COLOR,
+            rotate: 42,
+            hideOverlap: true,
+            width: 120,
+            overflow: "truncate",
+            formatter: (value) => taxonLabelByAxisValue.get(String(value)) || String(value),
+          },
+          axisLine: {
+            lineStyle: {
+              color: GRID_COLOR,
             },
           },
         },
-      ],
-    };
-  }
-
-  function buildInspectEmptyOption(title) {
-    return {
-      animation: false,
-      grid: {
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: 16,
-      },
-      xAxis: {
-        type: "value",
-        min: 0,
-        max: 1,
-        show: false,
-      },
-      yAxis: {
-        type: "value",
-        min: 0,
-        max: 1,
-        show: false,
-      },
-      series: [],
-      tooltip: {
-        show: false,
-      },
-      graphic: [
-        {
-          type: "text",
-          left: "center",
-          top: "46%",
-          style: {
-            text: title,
-            fontSize: 18,
-            fontWeight: 700,
-            fill: TEXT_COLOR,
-            textAlign: "center",
+        yAxis: {
+          type: "category",
+          inverse: true,
+          data: taxonAxisValues,
+          axisLabel: {
+            show: !hasTaxonomyGutter && showTaxonLabels,
+            interval: 0,
+            color: TEXT_COLOR,
+            formatter: (value) => taxonLabelByAxisValue.get(String(value)) || String(value),
+          },
+          axisLine: {
+            lineStyle: {
+              color: GRID_COLOR,
+            },
           },
         },
-      ],
-    };
-  }
-
-  function buildInspectHistogramOption(payload) {
-    const histogramBins = Array.isArray(payload && payload.histogramBins) ? payload.histogramBins : [];
-    if (histogramBins.length === 0) {
-      return buildInspectEmptyOption("No inspect histogram available");
+        visualMap: {
+          min: visualRange.min,
+          max: visualRange.max,
+          calculable: false,
+          orient: "vertical",
+          right: currentZoomState ? 32 : 16,
+          top: "center",
+          itemWidth: 16,
+          itemHeight: 160,
+          text: payload.displayMetric === "divergence"
+            ? ["More divergent", "Less divergent"]
+            : ["More similar", "More divergent"],
+          textGap: 8,
+          textStyle: {
+            color: MUTED_TEXT_COLOR,
+            fontSize: 11,
+          },
+          inRange: {
+            color: ["#d06e37", "#0f5964"],
+          },
+        },
+        dataZoom: buildYAxisZoom(rowCount, currentZoomState, {
+          yAxisIndex: 0,
+          right: 8,
+          top: 28,
+          bottom: 56,
+          width: 12,
+        }),
+        series: [
+          {
+            type: "heatmap",
+            data: heatmapData,
+            encode: {
+              x: 0,
+              y: 1,
+              value: 2,
+            },
+            label: {
+              show: showMatrixCellLabels,
+              formatter(params) {
+                const pointValue = params.data && Array.isArray(params.data.value)
+                  ? params.data.value[2]
+                  : undefined;
+                return formatShare(
+                  typeof pointValue === "number"
+                    ? pointValue
+                    : undefined,
+                );
+              },
+              color: TEXT_COLOR,
+              fontSize: 11,
+            },
+            itemStyle: heatmapStyles.itemStyle,
+            emphasis: heatmapStyles.emphasis,
+          },
+        ],
+      }, { notMerge: true });
+      refreshOverviewGutter();
     }
 
-    return {
-      animationDuration: 250,
-      animationDurationUpdate: 150,
+    chart.off("datazoom");
+    chart.on("datazoom", (params) => {
+      const nextZoomState = resolveZoomState(chart, rowCount, params);
+      currentZoomState = nextZoomState;
+      renderChart();
+    });
+
+    renderChart();
+
+    window.addEventListener("resize", () => {
+      chart.resize();
+      renderChart();
+    });
+  }
+
+  function renderBrowseChart() {
+    const payload = parsePayload("codon-composition-chart-payload");
+    const taxonomyGutterPayload = parsePayload("codon-composition-chart-taxonomy-gutter-payload");
+    const container = document.getElementById("codon-composition-chart");
+    if (!payload || !container || typeof window.echarts === "undefined") {
+      return;
+    }
+
+    const rowCount = payload.visibleTaxaCount || 0;
+    container.style.height = `${chartHeightForRowCount(rowCount, 380)}px`;
+    const chart = window.echarts.init(container);
+    const hasTaxonomyGutter = hasTaxonomyGutterPayload(taxonomyGutterPayload);
+    const gutterOverlay = hasTaxonomyGutter ? attachTaxonomyGutter(chart, taxonomyGutterPayload) : null;
+    let currentZoomState = normalizeZoomState(rowCount, null);
+    installWheelHandler(chart, rowCount, () => currentZoomState);
+    const taxonLabelByAxisValue = new Map(
+      (payload.rows || []).map((row) => [String(row.taxonId), row.taxonName]),
+    );
+
+    if (!Array.isArray(payload.rows) || payload.rows.length === 0 || !Array.isArray(payload.visibleCodons) || payload.visibleCodons.length === 0) {
+      chart.setOption(
+        buildEmptyOption(
+          "No visible codon composition rows",
+          "Adjust the filters or choose a residue to populate the browse chart.",
+        ),
+      );
+      return;
+    }
+
+    const taxonAxisValues = payload.rows.map((row) => String(row.taxonId));
+    const series = payload.visibleCodons.map((codon, codonIndex) => ({
+      name: codon,
+      type: "bar",
+      stack: "codon-composition",
+      barMaxWidth: 22,
+      itemStyle: {
+        color: PALETTE[codonIndex % PALETTE.length],
+      },
+      data: payload.rows.map((row) => ({
+        value: row.codonShares[codonIndex] || 0,
+        taxonName: row.taxonName,
+        codon,
+        branchExplorerUrl: row.branchExplorerUrl || "",
+      })),
+    }));
+
+    function browseGutterWidth(visibleRowCount) {
+      if (!hasTaxonomyGutter) {
+        return 0;
+      }
+      return taxonomyGutterReservedWidth(taxonomyGutterPayload, {
+        showLabels: shouldShowTaxonLabels(visibleRowCount),
+        visibleLeafCount: visibleRowCount,
+      });
+    }
+
+    function refreshBrowseGutter() {
+      if (!gutterOverlay) {
+        return;
+      }
+      const visibleRowCount = visibleRowCountForZoom(rowCount, currentZoomState);
+      gutterOverlay.render({
+        showLabels: shouldShowTaxonLabels(visibleRowCount),
+        zoomState: currentZoomState,
+        gutterWidth: browseGutterWidth(visibleRowCount),
+        top: 72,
+        bottom: 48,
+      });
+    }
+
+    function renderChart() {
+      const visibleRowCount = visibleRowCountForZoom(rowCount, currentZoomState);
+      const showTaxonLabels = shouldShowTaxonLabels(visibleRowCount);
+      chart.setOption({
+        animation: false,
+        grid: {
+          left: hasTaxonomyGutter
+            ? browseGutterWidth(visibleRowCount) + 20
+            : 180,
+          right: currentZoomState ? 56 : 24,
+          top: 72,
+          bottom: 48,
+        },
+        legend: {
+          top: 16,
+          textStyle: {
+            color: TEXT_COLOR,
+          },
+        },
+        tooltip: {
+          trigger: "axis",
+          axisPointer: {
+            type: "shadow",
+          },
+          formatter(params) {
+            if (!Array.isArray(params) || params.length === 0) {
+              return "";
+            }
+            const lines = [`<strong>${params[0].data.taxonName}</strong>`];
+            params.forEach((entry) => {
+              lines.push(`${entry.seriesName}: ${formatShare(entry.data.value)}`);
+            });
+            return lines.join("<br>");
+          },
+        },
+        xAxis: {
+          type: "value",
+          min: 0,
+          max: 1,
+          axisLabel: {
+            color: TEXT_COLOR,
+            formatter: (value) => formatShare(value),
+          },
+          splitLine: {
+            lineStyle: {
+              color: GRID_COLOR,
+            },
+          },
+        },
+        yAxis: {
+          type: "category",
+          inverse: true,
+          data: taxonAxisValues,
+          axisLabel: {
+            show: !hasTaxonomyGutter && showTaxonLabels,
+            interval: 0,
+            color: TEXT_COLOR,
+            formatter: (value) => taxonLabelByAxisValue.get(String(value)) || String(value),
+          },
+        },
+        dataZoom: buildYAxisZoom(rowCount, currentZoomState, {
+          yAxisIndex: 0,
+          right: 8,
+          top: 72,
+          bottom: 48,
+        }),
+        series,
+      }, { notMerge: true });
+      refreshBrowseGutter();
+    }
+
+    chart.off("datazoom");
+    chart.on("datazoom", (params) => {
+      const nextZoomState = resolveZoomState(chart, rowCount, params);
+      const previousVisibleRowCount = visibleRowCountForZoom(rowCount, currentZoomState);
+      const nextVisibleRowCount = visibleRowCountForZoom(rowCount, nextZoomState);
+      const previousShowTaxonLabels = shouldShowTaxonLabels(previousVisibleRowCount);
+      const nextShowTaxonLabels = shouldShowTaxonLabels(nextVisibleRowCount);
+      const previousGutterWidth = taxonomyGutterReservedWidth(taxonomyGutterPayload, {
+        showLabels: previousShowTaxonLabels,
+        visibleLeafCount: previousVisibleRowCount,
+      });
+      const nextGutterWidth = taxonomyGutterReservedWidth(taxonomyGutterPayload, {
+        showLabels: nextShowTaxonLabels,
+        visibleLeafCount: nextVisibleRowCount,
+      });
+      currentZoomState = nextZoomState;
+      if (
+        previousVisibleRowCount !== nextVisibleRowCount
+        || previousGutterWidth !== nextGutterWidth
+      ) {
+        renderChart();
+        return;
+      }
+      refreshBrowseGutter();
+    });
+
+    renderChart();
+
+    chart.on("click", (params) => {
+      if (params && params.data && params.data.branchExplorerUrl) {
+        window.location.href = params.data.branchExplorerUrl;
+      }
+    });
+
+    window.addEventListener("resize", () => {
+      chart.resize();
+      refreshBrowseGutter();
+    });
+  }
+
+  function renderInspectChart() {
+    const payload = parsePayload("codon-composition-inspect-payload");
+    const container = document.getElementById("codon-composition-inspect-chart");
+    if (!payload || !container || typeof window.echarts === "undefined") {
+      return;
+    }
+
+    container.style.height = "320px";
+    const chart = window.echarts.init(container);
+
+    if (!Array.isArray(payload.codonShares) || payload.codonShares.length === 0) {
+      chart.setOption(
+        buildEmptyOption(
+          "No inspect composition available",
+          "Choose a residue-scoped branch with imported codon-usage rows.",
+        ),
+      );
+      return;
+    }
+
+    chart.setOption({
+      animation: false,
       grid: {
-        left: 48,
-        right: 20,
-        top: 24,
-        bottom: 88,
+        left: 64,
+        right: 24,
+        top: 32,
+        bottom: 48,
       },
       tooltip: {
-        trigger: "item",
-        confine: true,
-        backgroundColor: "rgba(255, 253, 249, 0.98)",
-        borderColor: "rgba(23, 36, 44, 0.12)",
-        borderWidth: 1,
-        textStyle: {
-          color: TEXT_COLOR,
-          fontSize: 13,
+        trigger: "axis",
+        axisPointer: {
+          type: "shadow",
         },
         formatter(params) {
-          const histogramBin = histogramBins[params.dataIndex];
-          if (!histogramBin) {
+          if (!Array.isArray(params) || params.length === 0) {
             return "";
           }
+          const entry = params[0];
           return [
-            `<strong>${histogramBin.label}</strong>`,
-            `Observations: ${histogramBin.count}`,
+            `<strong>${payload.scopeLabel}</strong>`,
+            `Codon: ${entry.axisValue}`,
+            `Share: ${formatShare(entry.data)}`,
+            `Calls: ${payload.observationCount}`,
           ].join("<br>");
         },
       },
       xAxis: {
         type: "category",
-        data: histogramBins.map((histogramBin) => histogramBin.label),
-        name: "Codon ratio bin",
-        nameGap: 56,
-        nameLocation: "middle",
-        nameTextStyle: {
-          color: MUTED_TEXT_COLOR,
-          fontWeight: 700,
-          fontSize: 12,
-        },
+        data: payload.visibleCodons,
         axisLabel: {
-          color: MUTED_TEXT_COLOR,
-          interval: 0,
-          rotate: histogramBins.length > 6 ? 25 : 0,
-        },
-        axisTick: {
-          show: false,
-        },
-        axisLine: {
-          show: false,
+          color: TEXT_COLOR,
         },
       },
       yAxis: {
         type: "value",
-        name: "Observations",
-        nameGap: 28,
-        nameLocation: "middle",
-        nameTextStyle: {
-          color: MUTED_TEXT_COLOR,
-          fontWeight: 700,
-          fontSize: 12,
-        },
+        min: 0,
+        max: Math.max(1, payload.maxShare),
         axisLabel: {
-          color: MUTED_TEXT_COLOR,
+          color: TEXT_COLOR,
+          formatter: (value) => formatShare(value),
         },
         splitLine: {
           lineStyle: {
@@ -897,313 +1497,31 @@
       series: [
         {
           type: "bar",
-          data: histogramBins.map((histogramBin) => histogramBin.count),
+          barMaxWidth: 36,
           itemStyle: {
-            color: BOX_BORDER,
-            borderRadius: [6, 6, 0, 0],
+            color: "#0f5964",
           },
-          emphasis: {
-            itemStyle: {
-              color: MEDIAN_COLOR,
-            },
-          },
+          data: payload.codonShares.map((row) => row.share),
         },
       ],
-    };
-  }
-
-  function buildInspectBoxplotOption(payload) {
-    const summary = payload ? payload.summary : null;
-    if (!summary) {
-      return buildInspectEmptyOption("No inspect summary available");
-    }
-
-    return {
-      animationDuration: 250,
-      animationDurationUpdate: 150,
-      grid: {
-        left: 72,
-        right: 24,
-        top: 24,
-        bottom: 48,
-      },
-      tooltip: {
-        trigger: "item",
-        confine: true,
-        backgroundColor: "rgba(255, 253, 249, 0.98)",
-        borderColor: "rgba(23, 36, 44, 0.12)",
-        borderWidth: 1,
-        textStyle: {
-          color: TEXT_COLOR,
-          fontSize: 13,
-        },
-        formatter() {
-          return [
-            `<strong>${payload.scopeLabel || "Current scope"}</strong>`,
-            `Min-Max: ${formatCodonRatioValue(summary.min)}-${formatCodonRatioValue(summary.max)}`,
-            `Median: ${formatCodonRatioValue(summary.median)}`,
-            `IQR: ${formatCodonRatioValue(summary.q1)}-${formatCodonRatioValue(summary.q3)}`,
-          ].join("<br>");
-        },
-      },
-      xAxis: {
-        type: "value",
-        min: numericValue(payload ? payload.xMin : undefined, summary.min),
-        max: numericValue(payload ? payload.xMax : undefined, summary.max),
-        name: "Codon ratio",
-        nameGap: 22,
-        nameLocation: "middle",
-        nameTextStyle: {
-          color: MUTED_TEXT_COLOR,
-          fontWeight: 700,
-          fontSize: 12,
-        },
-        axisLabel: {
-          color: MUTED_TEXT_COLOR,
-          formatter(value) {
-            return formatCodonRatioValue(value);
-          },
-        },
-        splitLine: {
-          lineStyle: {
-            color: GRID_COLOR,
-          },
-        },
-      },
-      yAxis: {
-        type: "category",
-        data: ["scope"],
-        axisTick: {
-          show: false,
-        },
-        axisLine: {
-          show: false,
-        },
-        axisLabel: {
-          color: TEXT_COLOR,
-          fontWeight: 700,
-          formatter() {
-            return truncateTaxonName(payload.scopeLabel || "Current scope");
-          },
-        },
-      },
-      series: [
-        {
-          type: "boxplot",
-          data: [[summary.min, summary.q1, summary.median, summary.q3, summary.max]],
-          itemStyle: {
-            color: BOX_FILL,
-            borderColor: BOX_BORDER,
-            borderWidth: 2,
-          },
-          emphasis: {
-            itemStyle: {
-              color: "#eef6f7",
-              borderColor: BOX_BORDER,
-              borderWidth: 2,
-            },
-          },
-        },
-        {
-          type: "scatter",
-          data: [{ value: [summary.median, 0] }],
-          symbol: "circle",
-          symbolSize: 8,
-          itemStyle: {
-            color: MEDIAN_COLOR,
-          },
-          tooltip: {
-            show: false,
-          },
-          z: 4,
-        },
-      ],
-    };
-  }
-
-  function openBranchExplorer(rows, rowIndex) {
-    const row = rows[rowIndex];
-    if (!row || !row.branchExplorerUrl) {
-      return;
-    }
-    savePendingScrollPosition();
-    window.location.assign(row.branchExplorerUrl);
-  }
-
-  function rowIndexForAxisValue(rows, axisValue) {
-    return rows.findIndex((row) => rowCategoryValue(row) === String(axisValue));
-  }
-
-  function rowIndexForChartParams(params) {
-    if (params.data && typeof params.data.rowIndex === "number") {
-      return params.data.rowIndex;
-    }
-    if (typeof params.dataIndex === "number") {
-      return params.dataIndex;
-    }
-    return -1;
-  }
-
-  function installDrilldown(chart, payload) {
-    const rows = Array.isArray(payload.rows) ? payload.rows : [];
-    if (rows.length === 0) {
-      return;
-    }
-
-    chart.off("click");
-    chart.on("click", (params) => {
-      const rowIndex = rowIndexForChartParams(params);
-      if (rowIndex >= 0) {
-        openBranchExplorer(rows, rowIndex);
-        return;
-      }
-
-      if (params.componentType === "yAxis") {
-        const axisRowIndex = rowIndexForAxisValue(rows, params.value);
-        if (axisRowIndex >= 0) {
-          openBranchExplorer(rows, axisRowIndex);
-        }
-      }
-    });
-  }
-
-  function zoomStateFromChart(chart, rowCount) {
-    const dataZoom = chart.getOption().dataZoom;
-    if (!Array.isArray(dataZoom) || dataZoom.length === 0) {
-      return null;
-    }
-
-    return normalizeZoomState(rowCount, {
-      startValue: numericValue(dataZoom[0].startValue, 0),
-      endValue: numericValue(dataZoom[0].endValue, Math.max(0, rowCount - 1)),
-    });
-  }
-
-  function mountCodonInspectCharts() {
-    const payload = parsePayload("codon-ratio-inspect-payload");
-    const histogramContainer = document.getElementById("codon-ratio-inspect-histogram");
-    const boxplotContainer = document.getElementById("codon-ratio-inspect-boxplot");
-    if (!payload || typeof window.echarts === "undefined") {
-      return;
-    }
-
-    if (histogramContainer) {
-      histogramContainer.style.height = "360px";
-      const histogramChart = window.echarts.init(histogramContainer, null, { renderer: "svg" });
-      histogramChart.setOption(buildInspectHistogramOption(payload), { notMerge: true });
-      window.addEventListener("resize", () => {
-        histogramChart.resize();
-      });
-    }
-
-    if (boxplotContainer) {
-      boxplotContainer.style.height = "360px";
-      const boxplotChart = window.echarts.init(boxplotContainer, null, { renderer: "svg" });
-      boxplotChart.setOption(buildInspectBoxplotOption(payload), { notMerge: true });
-      window.addEventListener("resize", () => {
-        boxplotChart.resize();
-      });
-    }
-  }
-
-  function mountCodonRatioChart() {
-    const container = document.getElementById("codon-ratio-chart");
-    const payload = parsePayload("codon-ratio-chart-payload");
-    if (!container || !payload || typeof window.echarts === "undefined") {
-      return;
-    }
-
-    const modeButtons = Array.from(document.querySelectorAll("[data-chart-mode-button]"));
-    container.style.height = `${chartHeightForRowCount(payload.visibleTaxaCount || 0)}px`;
-
-    const chart = window.echarts.init(container, null, { renderer: "svg" });
-    let currentMode = CHART_MODE_FOCUSED;
-    let currentZoomState = normalizeZoomState(payload.visibleTaxaCount || 0, null);
-
-    function syncModeButtons() {
-      modeButtons.forEach((button) => {
-        const isActive = button.dataset.chartMode === currentMode;
-        button.classList.toggle("btn-brand", isActive);
-        button.classList.toggle("btn-outline-secondary", !isActive);
-        button.setAttribute("aria-pressed", isActive ? "true" : "false");
-      });
-    }
-
-    function renderChart() {
-      chart.setOption(buildChartOption(payload, currentMode, currentZoomState), { notMerge: true });
-      installDrilldown(chart, payload);
-    }
-
-    chart.off("datazoom");
-    chart.on("datazoom", () => {
-      const nextZoomState = zoomStateFromChart(chart, payload.visibleTaxaCount || 0);
-      const previousVisibleRowCount = visibleRowCountForZoom(payload.visibleTaxaCount || 0, currentZoomState);
-      const nextVisibleRowCount = visibleRowCountForZoom(payload.visibleTaxaCount || 0, nextZoomState);
-      currentZoomState = nextZoomState;
-      if (shouldShowObservationCounts(previousVisibleRowCount) !== shouldShowObservationCounts(nextVisibleRowCount)) {
-        renderChart();
-      }
     });
 
-    modeButtons.forEach((button) => {
-      button.addEventListener("click", () => {
-        const requestedMode = button.dataset.chartMode;
-        if (requestedMode !== CHART_MODE_FOCUSED && requestedMode !== CHART_MODE_FULL_RANGE) {
-          return;
-        }
-        if (requestedMode === currentMode) {
-          return;
-        }
-        currentMode = requestedMode;
-        syncModeButtons();
-        renderChart();
-      });
-    });
-
-    syncModeButtons();
-    renderChart();
-
-    window.addEventListener("resize", () => {
-      chart.resize();
-    });
+    window.addEventListener("resize", () => chart.resize());
   }
 
-  function mountCodonOverviewHeatmap() {
-    const container = document.getElementById("codon-ratio-heatmap");
-    const payload = parsePayload("codon-ratio-heatmap-payload");
-    if (!container || !payload || typeof window.echarts === "undefined") {
-      return;
-    }
-
-    container.style.height = `${chartHeightForRowCount(payload.visibleTaxaCount || 0)}px`;
-
-    const chart = window.echarts.init(container, null, { renderer: "svg" });
-    chart.setOption(buildHeatmapOption(payload), { notMerge: true });
-
-    window.addEventListener("resize", () => {
-      chart.resize();
-    });
-  }
-
-  function installScrollPreservingLinks() {
+  function bindScrollPreservingLinks() {
     document.querySelectorAll("[data-preserve-scroll-link]").forEach((link) => {
-      link.addEventListener("click", (event) => {
-        if (event.defaultPrevented || event.button !== 0) {
-          return;
-        }
-        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-          return;
-        }
+      link.addEventListener("click", () => {
         savePendingScrollPosition();
       });
     });
   }
 
   document.addEventListener("DOMContentLoaded", () => {
-    mountCodonOverviewHeatmap();
-    mountCodonInspectCharts();
-    mountCodonRatioChart();
-    installScrollPreservingLinks();
     restorePendingScrollPosition();
+    bindScrollPreservingLinks();
+    renderOverview();
+    renderBrowseChart();
+    renderInspectChart();
   });
 })();

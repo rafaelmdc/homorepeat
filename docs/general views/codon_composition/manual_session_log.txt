@@ -1,0 +1,2 @@
+implemented phase 1,2 and 3, there are still some bugs/stuff to sort out, from a visual point of view.
+ One explicit boundary remains: the old scalar codon-ratio helper functions still exist in the stats module as compatibility code, but the page route no longer uses them.

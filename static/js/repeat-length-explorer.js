@@ -11,7 +11,7 @@
   const TEXT_COLOR = "#17242c";
   const MUTED_TEXT_COLOR = "#63727a";
   const DEFAULT_VISIBLE_ROWS = 12;
-  const DEFAULT_SUMMARY_PAGE_SIZE = 25;
+
   const MAX_CHART_HEIGHT = 980;
   const MIN_CHART_HEIGHT = 380;
   const ROW_HEIGHT = 38;
@@ -436,7 +436,7 @@
               yAxisIndex: 0,
               zoomOnMouseWheel: false,
               moveOnMouseMove: true,
-              moveOnMouseWheel: true,
+              moveOnMouseWheel: false,
               startValue: normalizedZoomState.startValue,
               endValue: normalizedZoomState.endValue,
             },
@@ -449,6 +449,7 @@
               top: 24,
               bottom: 64,
               brushSelect: false,
+              zoomOnMouseWheel: false,
               startValue: normalizedZoomState.startValue,
               endValue: normalizedZoomState.endValue,
               fillerColor: "rgba(15, 89, 100, 0.16)",
@@ -615,6 +616,37 @@
     });
   }
 
+  function installWheelHandler(chart, rowCount, getCurrentZoomState) {
+    if (rowCount <= 1) return;
+    chart.getDom().addEventListener("wheel", (event) => {
+      event.preventDefault();
+      const zoomState = getCurrentZoomState();
+      if (!zoomState) return;
+      const direction = event.deltaY > 0 ? 1 : -1;
+      const { startValue, endValue } = zoomState;
+      const windowSize = endValue - startValue;
+      let newStart;
+      let newEnd;
+      if (event.shiftKey) {
+        const step = Math.max(1, Math.round(windowSize * 0.15));
+        const newWindowSize = clamp(windowSize + direction * 2 * step, 1, rowCount);
+        const rawPivot = chart.convertFromPixel({ yAxisIndex: 0 }, [event.offsetX, event.offsetY]);
+        const pivot = (typeof rawPivot === "number" && Number.isFinite(rawPivot))
+          ? clamp(rawPivot, startValue, endValue)
+          : (startValue + endValue) / 2;
+        const fraction = windowSize > 0 ? (pivot - startValue) / windowSize : 0.5;
+        newStart = clamp(Math.round(pivot - fraction * newWindowSize), 0, Math.max(0, rowCount - newWindowSize));
+        newEnd = Math.min(newStart + newWindowSize, rowCount - 1);
+        if (newEnd <= newStart) return;
+      } else {
+        const step = Math.max(1, Math.round(windowSize * 0.2));
+        newStart = clamp(Math.round(startValue + direction * step), 0, Math.max(0, rowCount - 1 - windowSize));
+        newEnd = newStart + windowSize;
+      }
+      chart.dispatchAction({ type: "dataZoom", dataZoomIndex: 0, startValue: newStart, endValue: newEnd });
+    }, { passive: false, capture: true });
+  }
+
   function mountLengthChart() {
     const container = document.getElementById("repeat-length-chart");
     const payload = parsePayload("repeat-length-chart-payload");
@@ -628,6 +660,7 @@
     const chart = window.echarts.init(container, null, { renderer: "svg" });
     let currentMode = CHART_MODE_FOCUSED;
     let currentZoomState = normalizeZoomState(payload.visibleTaxaCount || 0, null);
+    installWheelHandler(chart, payload.visibleTaxaCount || 0, () => currentZoomState);
 
     function syncModeButtons() {
       modeButtons.forEach((button) => {
@@ -677,65 +710,6 @@
     });
   }
 
-  function summaryPageStatus(pageNumber, pageCount, totalRows, pageSize) {
-    const startRow = ((pageNumber - 1) * pageSize) + 1;
-    const endRow = Math.min(pageNumber * pageSize, totalRows);
-    return `Rows ${startRow}-${endRow} of ${totalRows} visible taxa. Page ${pageNumber} of ${pageCount}.`;
-  }
-
-  function mountSummaryTablePagination() {
-    const section = document.querySelector("[data-summary-section]");
-    if (!section) {
-      return;
-    }
-
-    const tableBody = section.querySelector("[data-summary-table-body]");
-    const pagination = section.querySelector("[data-summary-pagination]");
-    const previousButton = section.querySelector("[data-summary-pagination-previous]");
-    const nextButton = section.querySelector("[data-summary-pagination-next]");
-    const status = section.querySelector("[data-summary-pagination-status]");
-    if (!tableBody || !pagination || !previousButton || !nextButton || !status) {
-      return;
-    }
-
-    const rows = Array.from(tableBody.querySelectorAll("[data-summary-row]"));
-    if (rows.length === 0) {
-      return;
-    }
-
-    const pageSize = positiveInteger(section.dataset.summaryPageSize, DEFAULT_SUMMARY_PAGE_SIZE);
-    const pageCount = Math.ceil(rows.length / pageSize);
-    if (pageCount <= 1) {
-      return;
-    }
-
-    function renderPage(pageNumber) {
-      const currentPage = clamp(pageNumber, 1, pageCount);
-      const startIndex = (currentPage - 1) * pageSize;
-      const endIndex = startIndex + pageSize;
-
-      rows.forEach((row, index) => {
-        row.hidden = index < startIndex || index >= endIndex;
-      });
-
-      previousButton.disabled = currentPage === 1;
-      nextButton.disabled = currentPage === pageCount;
-      status.textContent = summaryPageStatus(currentPage, pageCount, rows.length, pageSize);
-      pagination.hidden = false;
-      pagination.dataset.currentPage = String(currentPage);
-    }
-
-    previousButton.addEventListener("click", () => {
-      renderPage(positiveInteger(pagination.dataset.currentPage, 1) - 1);
-    });
-
-    nextButton.addEventListener("click", () => {
-      renderPage(positiveInteger(pagination.dataset.currentPage, 1) + 1);
-    });
-
-    renderPage(1);
-  }
-
   function installScrollPreservingLinks() {
     document.querySelectorAll("[data-preserve-scroll-link]").forEach((link) => {
       link.addEventListener("click", (event) => {
@@ -752,7 +726,6 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     mountLengthChart();
-    mountSummaryTablePagination();
     installScrollPreservingLinks();
     restorePendingScrollPosition();
   });

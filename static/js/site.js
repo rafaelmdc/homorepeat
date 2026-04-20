@@ -376,3 +376,80 @@
     });
   });
 })();
+
+(() => {
+  const DEFAULT_SUMMARY_PAGE_SIZE = 25;
+
+  function clamp(number, minimum, maximum) {
+    return Math.min(Math.max(number, minimum), maximum);
+  }
+
+  function positiveInteger(value, fallback) {
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      return fallback;
+    }
+    return parsed;
+  }
+
+  function summaryPageStatus(pageNumber, pageCount, totalRows, pageSize) {
+    const startRow = ((pageNumber - 1) * pageSize) + 1;
+    const endRow = Math.min(pageNumber * pageSize, totalRows);
+    return `Rows ${startRow}-${endRow} of ${totalRows} visible taxa. Page ${pageNumber} of ${pageCount}.`;
+  }
+
+  function mountSummaryTablePagination() {
+    const section = document.querySelector("[data-summary-section]");
+    if (!section) {
+      return;
+    }
+
+    const tableBody = section.querySelector("[data-summary-table-body]");
+    const pagination = section.querySelector("[data-summary-pagination]");
+    const previousButton = section.querySelector("[data-summary-pagination-previous]");
+    const nextButton = section.querySelector("[data-summary-pagination-next]");
+    const status = section.querySelector("[data-summary-pagination-status]");
+    if (!tableBody || !pagination || !previousButton || !nextButton || !status) {
+      return;
+    }
+
+    const rows = Array.from(tableBody.querySelectorAll("[data-summary-row]"));
+    if (rows.length === 0) {
+      return;
+    }
+
+    const pageSize = positiveInteger(section.dataset.summaryPageSize, DEFAULT_SUMMARY_PAGE_SIZE);
+    const pageCount = Math.ceil(rows.length / pageSize);
+    if (pageCount <= 1) {
+      return;
+    }
+
+    function renderPage(pageNumber) {
+      const currentPage = clamp(pageNumber, 1, pageCount);
+      const startIndex = (currentPage - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+      rows.forEach((row, index) => {
+        row.hidden = index < startIndex || index >= endIndex;
+      });
+      previousButton.disabled = currentPage === 1;
+      nextButton.disabled = currentPage === pageCount;
+      status.textContent = summaryPageStatus(currentPage, pageCount, rows.length, pageSize);
+      pagination.hidden = false;
+      pagination.dataset.currentPage = String(currentPage);
+    }
+
+    previousButton.addEventListener("click", () => {
+      renderPage(positiveInteger(pagination.dataset.currentPage, 1) - 1);
+    });
+
+    nextButton.addEventListener("click", () => {
+      renderPage(positiveInteger(pagination.dataset.currentPage, 1) + 1);
+    });
+
+    renderPage(1);
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    mountSummaryTablePagination();
+  });
+})();

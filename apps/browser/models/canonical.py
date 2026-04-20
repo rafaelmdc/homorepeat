@@ -265,3 +265,97 @@ class CanonicalRepeatCall(TimestampedModel):
 
     def __str__(self):
         return f"{self.accession}:{self.protein.protein_id}:{self.method}:{self.start}-{self.end}"
+
+
+class CanonicalRepeatCallCodonUsage(TimestampedModel):
+    repeat_call = models.ForeignKey(
+        CanonicalRepeatCall,
+        on_delete=models.CASCADE,
+        related_name="codon_usages",
+    )
+    amino_acid = models.CharField(max_length=16, db_index=True)
+    codon = models.CharField(max_length=16, db_index=True)
+    codon_count = models.PositiveIntegerField()
+    codon_fraction = models.FloatField()
+
+    class Meta:
+        ordering = ["repeat_call_id", "amino_acid", "codon"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["repeat_call", "amino_acid", "codon"],
+                name="brw_crccu_unique_call_aa_codon",
+            ),
+            models.CheckConstraint(
+                condition=Q(codon_fraction__gte=0) & Q(codon_fraction__lte=1),
+                name="brw_crccu_fraction_0_1",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["amino_acid", "codon"],
+                name="brw_crccu_aa_codon_idx",
+            ),
+            models.Index(
+                fields=["amino_acid", "repeat_call"],
+                name="brw_crccu_aa_call_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.repeat_call.source_call_id}:{self.amino_acid}:{self.codon}"
+
+
+class CanonicalCodonCompositionSummary(TimestampedModel):
+    repeat_residue = models.CharField(max_length=16)
+    display_rank = models.CharField(max_length=64)
+    display_taxon = models.ForeignKey(
+        "Taxon",
+        on_delete=models.CASCADE,
+        related_name="canonical_codon_composition_summaries",
+    )
+    display_taxon_name = models.CharField(max_length=255)
+    observation_count = models.PositiveIntegerField()
+    species_count = models.PositiveIntegerField()
+    codon = models.CharField(max_length=16)
+    codon_share = models.FloatField()
+
+    class Meta:
+        ordering = [
+            "repeat_residue",
+            "display_rank",
+            "-observation_count",
+            "display_taxon_name",
+            "display_taxon_id",
+            "codon",
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["repeat_residue", "display_rank", "display_taxon", "codon"],
+                name="brw_cccs_unique_scope",
+            ),
+            models.CheckConstraint(
+                condition=Q(codon_share__gte=0) & Q(codon_share__lte=1),
+                name="brw_cccs_share_0_1",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=[
+                    "repeat_residue",
+                    "display_rank",
+                    "observation_count",
+                    "display_taxon_name",
+                    "display_taxon",
+                ],
+                name="brw_cccs_browse_idx",
+            ),
+            models.Index(
+                fields=["repeat_residue", "display_rank", "display_taxon"],
+                name="brw_cccs_taxon_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.repeat_residue}:{self.display_rank}:{self.display_taxon_name}:{self.codon}"
+        )

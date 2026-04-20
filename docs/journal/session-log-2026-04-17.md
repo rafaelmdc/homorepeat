@@ -53,3 +53,55 @@
 
 ## Next step
 - Implement `C6`: add the `/browser/codon-ratios/` route and a server-rendered browse page that uses the new codon summary bundle before adding any chart JS.
+
+---
+
+# Session Log
+
+**Date:** 2026-04-17
+
+## Objective
+- Reframe the codon viewer work around codon composition instead of a single scalar codon-ratio value.
+- Clarify the system boundary so the browser imports the codon information already emitted by the pipeline rather than changing pipeline outputs by default.
+
+## What happened
+- Verified that the live Postgres-backed app database had no populated codon metric values in either raw or canonical repeat-call tables.
+- Traced the imported run artifacts back to the sibling pipeline and confirmed that `codon_metric_name` and `codon_metric_value` were blank in published `repeat_calls.tsv`, while finalized per-batch `*_codon_usage.tsv` files were populated.
+- Confirmed the real mismatch: the pipeline already emits codon composition data, but the web app had been built around a scalar codon metric contract that does not match the published artifacts.
+- Refactored `docs/general views` away from the scalar codon-ratio direction and replaced it with `Codon Composition` and `Codon Composition x Length`.
+- Started a pipeline-side implementation to add a merged codon-usage artifact, then stopped after the boundary was challenged.
+- Discarded all partial code changes and updated the docs to make the boundary explicit:
+  - do not modify `homorepeat_pipeline` unless the user explicitly approves it
+  - import the existing finalized codon-usage artifacts correctly
+
+## Files touched
+- `docs/general views/general_plan.txt`
+  Added the explicit no-pipeline-change-without-approval rule and clarified that finalized codon-usage artifacts are the expected source.
+- `docs/general views/shared_foundation.md`
+  Replaced the merged-artifact assumption with the existing finalized codon-usage layout and documented the boundary rule.
+- `docs/general views/codon_composition/overview.md`
+  Updated the codon-composition contract to use the existing finalized artifacts and not a new pipeline output.
+- `docs/general views/codon_composition/slices.md`
+  Reworked the first implementation slices so they discover and import finalized codon-usage TSVs instead of adding a merged file.
+- No code changes remain after the boundary correction.
+
+## Validation
+- Inspected the live Compose/Postgres database and confirmed no populated codon metric fields in current imported data.
+- Inspected the sibling pipeline code and run artifacts to confirm:
+  - finalized `*_codon_usage.tsv` files already exist and are populated
+  - merged `repeat_calls.tsv` keeps codon metric compatibility fields blank
+- Ran doc consistency checks with `rg` and `git status --short -- 'docs/general views'`.
+- No application tests were run in this final doc-only step.
+
+## Current status
+- General-view docs are aligned to a composition-first direction.
+- The browser/pipeline boundary is now explicit in the docs.
+- Implementation is still in progress; no codon-composition import code has been added yet.
+
+## Open issues
+- The web import layer does not yet enumerate or ingest finalized codon-usage TSVs.
+- The current browser code still reflects the older scalar codon-ratio implementation path.
+- The historical earlier log entry in this same file still documents the obsolete scalar direction; it remains as history, not as current guidance.
+
+## Next step
+- Implement the first import slice in `apps.imports.services.published_run` so published runs discover finalized `*_codon_usage.tsv` artifacts across method, residue, and batch without modifying the pipeline.
