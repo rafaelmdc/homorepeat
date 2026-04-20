@@ -14,6 +14,9 @@
   const DEFAULT_SIGNED_PREFERENCE_MAGNITUDE = SIGNED_PREFERENCE_LEGEND_EXTENT;
   const MIN_SIGNED_PREFERENCE_MAGNITUDE = 0.05;
   const SIGNED_PREFERENCE_MAGNITUDE_STEP = 0.05;
+  const DISTANCE_SCALE_STEP = 0.02;
+  const DISTANCE_SCALE_DEFAULT_MIN = 0;
+  const DISTANCE_SCALE_DEFAULT_MAX = 1;
   const ROW_HEIGHT = 38;
   const CHART_PADDING = 120;
 
@@ -352,6 +355,147 @@
     };
   }
 
+  function distanceScaleOffsetForValue(value, trackHeight) {
+    return clamp((1 - clamp(value, 0, 1)) * trackHeight, 0, trackHeight);
+  }
+
+  function distanceScaleValueFromOffset(offsetY, trackHeight) {
+    if (!(trackHeight > 0)) return 0.5;
+    return clamp(1 - offsetY / trackHeight, 0, 1);
+  }
+
+  function normalizedDistanceScaleRange(minValue, maxValue) {
+    const safeMin = clamp(numericValue(minValue, 0), 0, 1);
+    const safeMax = clamp(numericValue(maxValue, 1), 0, 1);
+    if (safeMax <= safeMin + DISTANCE_SCALE_STEP) {
+      return { min: Math.max(0, safeMin), max: Math.min(1, safeMin + DISTANCE_SCALE_STEP * 2) };
+    }
+    return { min: safeMin, max: safeMax };
+  }
+
+  function loadDistanceScaleRange(storageKey) {
+    try {
+      const raw = storageKey ? window.sessionStorage.getItem(storageKey) : null;
+      if (!raw) return { min: DISTANCE_SCALE_DEFAULT_MIN, max: DISTANCE_SCALE_DEFAULT_MAX };
+      const parsed = JSON.parse(raw);
+      return normalizedDistanceScaleRange(parsed.min, parsed.max);
+    } catch {
+      return { min: DISTANCE_SCALE_DEFAULT_MIN, max: DISTANCE_SCALE_DEFAULT_MAX };
+    }
+  }
+
+  function persistDistanceScaleRange(storageKey, min, max) {
+    try {
+      if (storageKey) window.sessionStorage.setItem(storageKey, JSON.stringify({ min, max }));
+    } catch {}
+  }
+
+  function createDistanceScaleLegend(container, { onRangeChange, onReset }) {
+    container.querySelector(".pairwise-distance-scale")?.remove();
+    container.style.position = "relative";
+
+    const root = document.createElement("div");
+    root.className = "pairwise-distance-scale";
+    root.hidden = true;
+    root.innerHTML = `
+      <div class="pairwise-distance-scale__panel">
+        <div class="pairwise-distance-scale__header">
+          <div>
+            <div class="pairwise-distance-scale__title">Color range</div>
+            <div class="pairwise-distance-scale__value" data-role="value"></div>
+          </div>
+          <button type="button" class="pairwise-distance-scale__reset" data-role="reset">Reset</button>
+        </div>
+        <div class="pairwise-distance-scale__body">
+          <div class="pairwise-distance-scale__label pairwise-distance-scale__label--max">Different</div>
+          <div class="pairwise-distance-scale__track-shell">
+            <div class="pairwise-distance-scale__tick-column">
+              <span class="pairwise-distance-scale__tick pairwise-distance-scale__tick--top" data-role="tick-top"></span>
+              <span class="pairwise-distance-scale__tick pairwise-distance-scale__tick--middle">0.5</span>
+              <span class="pairwise-distance-scale__tick pairwise-distance-scale__tick--bottom" data-role="tick-bottom"></span>
+            </div>
+            <button type="button" class="pairwise-distance-scale__track" data-role="track"
+                    aria-label="Click to set color range. Double-click to reset.">
+              <span class="pairwise-distance-scale__clip pairwise-distance-scale__clip--top" data-role="top-clip"></span>
+              <span class="pairwise-distance-scale__clip pairwise-distance-scale__clip--bottom" data-role="bottom-clip"></span>
+              <span class="pairwise-distance-scale__active-band" data-role="active-band"></span>
+              <span class="pairwise-distance-scale__marker" data-role="max-marker"></span>
+              <span class="pairwise-distance-scale__marker" data-role="min-marker"></span>
+            </button>
+          </div>
+          <div class="pairwise-distance-scale__label pairwise-distance-scale__label--min">Identical</div>
+        </div>
+        <div class="pairwise-distance-scale__hint">Click to adjust range. Double-click to reset.</div>
+      </div>
+    `;
+    container.append(root);
+
+    const valueNode = root.querySelector('[data-role="value"]');
+    const tickTopNode = root.querySelector('[data-role="tick-top"]');
+    const tickBottomNode = root.querySelector('[data-role="tick-bottom"]');
+    const resetButton = root.querySelector('[data-role="reset"]');
+    const track = root.querySelector('[data-role="track"]');
+    const topClip = root.querySelector('[data-role="top-clip"]');
+    const bottomClip = root.querySelector('[data-role="bottom-clip"]');
+    const activeBand = root.querySelector('[data-role="active-band"]');
+    const maxMarker = root.querySelector('[data-role="max-marker"]');
+    const minMarker = root.querySelector('[data-role="min-marker"]');
+    let lastRange = { min: DISTANCE_SCALE_DEFAULT_MIN, max: DISTANCE_SCALE_DEFAULT_MAX };
+
+    function updateTrackMarkers(min, max) {
+      const trackHeight = track.clientHeight;
+      const maxOffset = distanceScaleOffsetForValue(max, trackHeight);
+      const minOffset = distanceScaleOffsetForValue(min, trackHeight);
+      const bandHeight = Math.max(0, minOffset - maxOffset);
+      activeBand.style.top = `${maxOffset}px`;
+      activeBand.style.height = `${bandHeight}px`;
+      maxMarker.style.top = `${maxOffset}px`;
+      minMarker.style.top = `${minOffset}px`;
+      topClip.style.height = `${Math.max(0, maxOffset)}px`;
+      bottomClip.style.top = `${minOffset}px`;
+      bottomClip.style.height = `${Math.max(0, trackHeight - minOffset)}px`;
+    }
+
+    track.addEventListener("click", (event) => {
+      const bounds = track.getBoundingClientRect();
+      const clicked = distanceScaleValueFromOffset(event.clientY - bounds.top, bounds.height);
+      const { min: curMin, max: curMax } = lastRange;
+      if (Math.abs(clicked - curMax) <= Math.abs(clicked - curMin)) {
+        const newMax = Number(clamp(
+          Math.round(clicked / DISTANCE_SCALE_STEP) * DISTANCE_SCALE_STEP,
+          curMin + DISTANCE_SCALE_STEP,
+          1,
+        ).toFixed(2));
+        onRangeChange(curMin, newMax);
+      } else {
+        const newMin = Number(clamp(
+          Math.round(clicked / DISTANCE_SCALE_STEP) * DISTANCE_SCALE_STEP,
+          0,
+          curMax - DISTANCE_SCALE_STEP,
+        ).toFixed(2));
+        onRangeChange(newMin, curMax);
+      }
+    });
+    track.addEventListener("dblclick", (event) => { event.preventDefault(); onReset(); });
+    resetButton.addEventListener("click", () => onReset());
+
+    return {
+      render({ min, max, rightOffset, top, bottom }) {
+        lastRange = { min, max };
+        root.hidden = false;
+        root.style.right = `${rightOffset}px`;
+        root.style.top = `${Math.max(16, top - 4)}px`;
+        root.style.bottom = `${Math.max(16, bottom - 4)}px`;
+        valueNode.textContent = `${min.toFixed(2)} – ${max.toFixed(2)}`;
+        tickTopNode.textContent = max.toFixed(2);
+        tickBottomNode.textContent = min.toFixed(2);
+        updateTrackMarkers(min, max);
+        window.requestAnimationFrame(() => updateTrackMarkers(min, max));
+      },
+      hide() { root.hidden = true; },
+    };
+  }
+
   function buildYAxisZoom(rowCount, zoomState, {
     yAxisIndex = 0,
     right = 8,
@@ -648,6 +792,7 @@
     emptyStateMessages = {},
     emptyStateDetail = "Adjust the filters to populate the overview.",
     signedPreferenceStorageKey = "",
+    distanceScaleStorageKey = "",
     similarityTooltipFormatter = defaultSimilarityTooltipFormatter,
     signedTooltipFormatter = defaultSignedTooltipFormatter,
   }) {
@@ -684,6 +829,21 @@
       onResetMagnitude() {
         currentSignedPreferenceMagnitude = DEFAULT_SIGNED_PREFERENCE_MAGNITUDE;
         persistSignedPreferenceMagnitude(signedPreferenceStorageKey, currentSignedPreferenceMagnitude);
+        renderChart();
+      },
+    });
+    let currentDistanceRange = loadDistanceScaleRange(distanceScaleStorageKey);
+    const distanceScaleLegend = createDistanceScaleLegend(container, {
+      onRangeChange(newMin, newMax) {
+        const range = normalizedDistanceScaleRange(newMin, newMax);
+        if (range.min === currentDistanceRange.min && range.max === currentDistanceRange.max) return;
+        currentDistanceRange = range;
+        persistDistanceScaleRange(distanceScaleStorageKey, range.min, range.max);
+        renderChart();
+      },
+      onReset() {
+        currentDistanceRange = { min: DISTANCE_SCALE_DEFAULT_MIN, max: DISTANCE_SCALE_DEFAULT_MAX };
+        persistDistanceScaleRange(distanceScaleStorageKey, currentDistanceRange.min, currentDistanceRange.max);
         renderChart();
       },
     });
@@ -742,9 +902,7 @@
     }
 
     function currentOverviewMargins(gutterWidth) {
-      const rightMargin = payload.mode === "signed_preference_map"
-        ? (currentZoomState ? 176 : 132)
-        : (currentZoomState ? 148 : 96);
+      const rightMargin = currentZoomState ? 176 : 132;
       return {
         left: hasTaxonomyGutter ? gutterWidth + 20 : 160,
         right: rightMargin,
@@ -1037,6 +1195,7 @@
             },
           ],
         }, { notMerge: true });
+        distanceScaleLegend.hide();
         signedPreferenceLegend.render({
           magnitude: signedPreferenceRange.magnitude,
           codonOne: payload.codonOne,
@@ -1050,6 +1209,13 @@
       }
 
       signedPreferenceLegend.hide();
+      distanceScaleLegend.render({
+        min: currentDistanceRange.min,
+        max: currentDistanceRange.max,
+        rightOffset: currentZoomState ? 28 : 14,
+        top: layout.top,
+        bottom: layout.bottom,
+      });
       const heatmapData = buildVisibleSimilarityData(columnBounds);
       chart.setOption({
         animation: false,
@@ -1101,24 +1267,14 @@
           },
         },
         visualMap: {
-          min: visualRange.min,
-          max: visualRange.max,
+          show: false,
+          min: currentDistanceRange.min,
+          max: currentDistanceRange.max,
           calculable: false,
-          orient: "vertical",
-          right: currentZoomState ? 32 : 16,
-          top: "center",
-          itemWidth: 16,
-          itemHeight: 160,
-          text: payload.displayMetric === "divergence"
-            ? ["More divergent", "Less divergent"]
-            : ["More similar", "More divergent"],
-          textGap: 8,
-          textStyle: {
-            color: MUTED_TEXT_COLOR,
-            fontSize: 11,
-          },
           inRange: {
-            color: ["#d06e37", "#0f5964"],
+            color: payload.displayMetric === "divergence"
+              ? ["#0f5964", "#f2efe6", "#d06e37"]
+              : ["#d06e37", "#f2efe6", "#0f5964"],
           },
         },
         dataZoom: buildYAxisZoom(rowCount, currentZoomState, {

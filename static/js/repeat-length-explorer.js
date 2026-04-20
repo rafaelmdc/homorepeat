@@ -707,6 +707,7 @@
         container,
         payload,
         taxonomyGutterPayload,
+        distanceScaleStorageKey: `length-overview:scale:${currentMode}`,
         emptyStateMessages: { similarity: "No visible taxon distance cells." },
         emptyStateDetail: "Adjust the filters to populate the overview.",
         similarityTooltipFormatter: TOOLTIP_FORMATTERS[currentMode],

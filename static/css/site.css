@@ -881,3 +881,190 @@ h4,
     max-height: min(62vh, 42rem);
   }
 }
+
+.pairwise-distance-scale {
+  position: absolute;
+  z-index: 4;
+  width: 112px;
+  pointer-events: none;
+}
+
+.pairwise-distance-scale[hidden] {
+  display: none !important;
+}
+
+.pairwise-distance-scale__panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.85rem 0.75rem;
+  border: 1px solid rgba(23, 36, 44, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 20px 40px rgba(23, 36, 44, 0.12);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+
+.pairwise-distance-scale__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.pairwise-distance-scale__title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #63727a;
+}
+
+.pairwise-distance-scale__value {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #17242c;
+}
+
+.pairwise-distance-scale__reset {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #0f5964;
+  cursor: pointer;
+}
+
+.pairwise-distance-scale__reset:hover,
+.pairwise-distance-scale__reset:focus-visible {
+  color: #0c4a53;
+  text-decoration: underline;
+}
+
+.pairwise-distance-scale__hint {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #63727a;
+}
+
+.pairwise-distance-scale__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 210px;
+}
+
+.pairwise-distance-scale__label {
+  max-width: 88px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.pairwise-distance-scale__label--max {
+  color: #b2602f;
+}
+
+.pairwise-distance-scale__label--min {
+  color: #0f5964;
+}
+
+.pairwise-distance-scale__track-shell {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0.65rem;
+  min-height: 180px;
+}
+
+.pairwise-distance-scale__tick-column {
+  position: relative;
+  width: 2.35rem;
+  flex: 0 0 2.35rem;
+}
+
+.pairwise-distance-scale__tick {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  font-size: 0.68rem;
+  color: #63727a;
+  white-space: nowrap;
+}
+
+.pairwise-distance-scale__tick--top {
+  top: 0;
+  transform: translateY(0);
+}
+
+.pairwise-distance-scale__tick--middle {
+  top: 50%;
+}
+
+.pairwise-distance-scale__tick--bottom {
+  bottom: 0;
+  transform: translateY(0);
+}
+
+.pairwise-distance-scale__track {
+  position: relative;
+  flex: 0 0 18px;
+  width: 18px;
+  min-height: 180px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(208, 110, 55, 0.12) 0%, rgba(242, 239, 230, 0.9) 50%, rgba(15, 89, 100, 0.12) 100%);
+  box-shadow: inset 0 0 0 1px rgba(23, 36, 44, 0.12);
+  cursor: pointer;
+  appearance: none;
+}
+
+.pairwise-distance-scale__track:hover,
+.pairwise-distance-scale__track:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(23, 36, 44, 0.12), 0 0 0 3px rgba(15, 89, 100, 0.16);
+}
+
+.pairwise-distance-scale__clip,
+.pairwise-distance-scale__active-band,
+.pairwise-distance-scale__marker {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+
+.pairwise-distance-scale__active-band {
+  background: linear-gradient(180deg, #d06e37 0%, #f2efe6 50%, #0f5964 100%);
+}
+
+.pairwise-distance-scale__clip--top {
+  top: 0;
+  background: linear-gradient(180deg, rgba(208, 110, 55, 0.5) 0%, rgba(208, 110, 55, 0.14) 100%);
+}
+
+.pairwise-distance-scale__clip--bottom {
+  background: linear-gradient(180deg, rgba(15, 89, 100, 0.14) 0%, rgba(15, 89, 100, 0.5) 100%);
+}
+
+.pairwise-distance-scale__marker {
+  height: 0;
+  border-top: 2px solid rgba(23, 36, 44, 0.82);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.72);
+  transform: translateY(-50%);
+  left: -6px;
+  right: -6px;
+}
