@@ -339,7 +339,6 @@
           within <strong>&plusmn;1.25</strong>, and the tooltip still reports the
           unclipped signed value. The pairwise Jensen-Shannon divergence matrix
           remains available as an alternate statistic in the payload and tooltip.
-          Showing
         {% else %}
           Color encodes pairwise synonymous codon similarity
           (<strong>1 - Jensen-Shannon divergence</strong>) for the lineage-ordered
@@ -347,16 +346,10 @@
           profiles, <strong>0.0</strong> means maximally different, the color scale
           stretches to the visible matrix range so subtle differences stay
           readable, and tooltips include the supporting species counts for both
-          taxa. Showing
+          taxa.
         {% endif %}
-        {{ overview_visible_taxa_count }} of {{ overview_total_visible_taxa_count }}
-        visible taxon{{ overview_total_visible_taxa_count|pluralize }} across
-        {{ visible_codons|length }} synonymous codon{{ visible_codons|length|pluralize }}.
-        {% if overview_is_truncated %}
-          The overview is capped to the first {{ overview_visible_taxa_count }}
-          lineage-ordered taxa; the browse layer below still uses the full
-          visible set.
-        {% endif %}
+        Showing {{ overview_visible_taxa_count }} visible taxon{{ overview_visible_taxa_count|pluralize }}
+        across {{ visible_codons|length }} synonymous codon{{ visible_codons|length|pluralize }}.
       </p>
     </div>
   </div>
