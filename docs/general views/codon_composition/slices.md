@@ -144,6 +144,7 @@ Deferred work:
 
 Reason deferred:
 
+- naming cleanup is not required to keep the MVP correct or usable
 
 ### `CC11` Richer inspect and handoff behavior
 
