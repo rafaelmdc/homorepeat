@@ -139,6 +139,116 @@ def summarize_ranked_codon_composition_groups(group_rows, grouped_species_call_c
     return summary_rows
 
 
+def summarize_codon_length_composition_rows(
+    summary_rows,
+    grouped_species_length_call_counts,
+    grouped_species_length_codon_fraction_sums,
+    *,
+    visible_codons,
+):
+    call_counts_by_taxon_bin_species = defaultdict(lambda: defaultdict(int))
+    codon_sums_by_taxon_bin_species = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
+    visible_bin_starts = set()
+
+    for display_taxon_id, species_taxon_id, length, call_count in grouped_species_length_call_counts:
+        bin_start = build_length_bin_definition(length).start
+        normalized_call_count = int(call_count)
+        if normalized_call_count <= 0:
+            continue
+        call_counts_by_taxon_bin_species[(display_taxon_id, bin_start)][species_taxon_id] += (
+            normalized_call_count
+        )
+        visible_bin_starts.add(bin_start)
+
+    for display_taxon_id, species_taxon_id, length, codon, codon_fraction_sum in (
+        grouped_species_length_codon_fraction_sums
+    ):
+        bin_start = build_length_bin_definition(length).start
+        codon_sums_by_taxon_bin_species[(display_taxon_id, bin_start)][species_taxon_id][codon] += float(
+            codon_fraction_sum
+        )
+        visible_bin_starts.add(bin_start)
+
+    visible_bins = build_visible_length_bins(visible_bin_starts)
+    if not visible_bins:
+        return {
+            "visible_bins": [],
+            "matrix_rows": [],
+        }
+
+    visible_bins_by_start = {
+        length_bin.start: length_bin
+        for length_bin in visible_bins
+    }
+
+    matrix_rows = []
+    for row in summary_rows:
+        taxon_id = row["taxon_id"]
+        bin_rows = []
+        for length_bin in visible_bins:
+            species_call_counts = call_counts_by_taxon_bin_species.get((taxon_id, length_bin.start))
+            if not species_call_counts:
+                continue
+
+            observation_count = sum(species_call_counts.values())
+            species_count = len(species_call_counts)
+            codon_shares = []
+            for codon in visible_codons:
+                species_weighted_share_sum = 0.0
+                for species_taxon_id, call_count in species_call_counts.items():
+                    if call_count <= 0:
+                        continue
+                    species_weighted_share_sum += (
+                        codon_sums_by_taxon_bin_species[(taxon_id, length_bin.start)][species_taxon_id].get(
+                            codon,
+                            0.0,
+                        )
+                        / call_count
+                    )
+                share = (
+                    species_weighted_share_sum / species_count
+                    if species_count > 0
+                    else 0.0
+                )
+                codon_shares.append(
+                    {
+                        "codon": codon,
+                        "share": normalize_numeric_summary_value(share),
+                    }
+                )
+
+            dominant_codon, dominance_margin = _build_dominance_summary(codon_shares)
+            bin_rows.append(
+                {
+                    "bin": asdict(visible_bins_by_start[length_bin.start]),
+                    "observation_count": observation_count,
+                    "species_count": species_count,
+                    "codon_shares": codon_shares,
+                    "dominant_codon": dominant_codon,
+                    "dominance_margin": dominance_margin,
+                }
+            )
+
+        if not bin_rows:
+            continue
+
+        matrix_rows.append(
+            {
+                "taxon_id": taxon_id,
+                "taxon_name": row["taxon_name"],
+                "rank": row["rank"],
+                "observation_count": row["observation_count"],
+                "species_count": row.get("species_count", row["observation_count"]),
+                "bin_rows": bin_rows,
+            }
+        )
+
+    return {
+        "visible_bins": [asdict(length_bin) for length_bin in visible_bins],
+        "matrix_rows": matrix_rows,
+    }
+
+
 def _summarize_ranked_numeric_groups(group_rows, grouped_values, *, summary_builder):
     lengths_by_taxon = defaultdict(list)
     for display_taxon_id, value in grouped_values:
@@ -245,6 +355,22 @@ def normalize_numeric_summary_value(value: float):
 
 def normalize_length_summary_value(value: float):
     return normalize_numeric_summary_value(value)
+
+
+def _build_dominance_summary(codon_shares):
+    if not codon_shares:
+        return "", 0
+
+    ranked_codon_shares = sorted(
+        codon_shares,
+        key=lambda row: (-float(row["share"]), row["codon"]),
+    )
+    leading_share = float(ranked_codon_shares[0]["share"])
+    second_share = float(ranked_codon_shares[1]["share"]) if len(ranked_codon_shares) > 1 else 0.0
+    return (
+        ranked_codon_shares[0]["codon"],
+        normalize_numeric_summary_value(max(0.0, leading_share - second_share)),
+    )
 
 
 def _build_length_count_pairs(lengths):

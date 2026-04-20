@@ -1,0 +1,179 @@
+from django.urls import reverse
+from django.views.generic import TemplateView
+
+from apps.browser.stats import (
+    apply_stats_filter_context,
+    build_codon_length_composition_bundle,
+    build_filtered_repeat_call_queryset,
+    build_matching_repeat_calls_with_codon_usage_count,
+    build_stats_filter_state,
+)
+from apps.browser.stats.params import ALLOWED_STATS_RANKS
+
+from ...metadata import resolve_browser_facets
+from ...models import PipelineRun
+from ..navigation import _url_with_query
+
+
+class CodonCompositionLengthExplorerView(TemplateView):
+    template_name = "browser/codon_composition_length_explorer.html"
+
+    def _get_filter_state(self):
+        if not hasattr(self, "_filter_state"):
+            self._filter_state = build_stats_filter_state(self.request)
+        return self._filter_state
+
+    def _get_matching_repeat_calls_count(self) -> int:
+        if not hasattr(self, "_matching_repeat_calls_count"):
+            filter_state = self._get_filter_state()
+            if filter_state.residue:
+                self._matching_repeat_calls_count = self._get_summary_bundle()[
+                    "matching_repeat_calls_count"
+                ]
+            else:
+                self._matching_repeat_calls_count = build_filtered_repeat_call_queryset(
+                    filter_state
+                ).count()
+        return self._matching_repeat_calls_count
+
+    def _get_matching_repeat_calls_with_codon_usage_count(self) -> int:
+        if not hasattr(self, "_matching_repeat_calls_with_codon_usage_count"):
+            filter_state = self._get_filter_state()
+            if not filter_state.residue:
+                self._matching_repeat_calls_with_codon_usage_count = 0
+            else:
+                self._matching_repeat_calls_with_codon_usage_count = (
+                    build_matching_repeat_calls_with_codon_usage_count(filter_state)
+                )
+        return self._matching_repeat_calls_with_codon_usage_count
+
+    def _get_summary_bundle(self) -> dict[str, object]:
+        if not hasattr(self, "_summary_bundle"):
+            bundle = build_codon_length_composition_bundle(self._get_filter_state())
+            self._summary_bundle = {
+                **bundle,
+                "summary_rows": [self._with_row_links(row) for row in self._flatten_summary_rows(bundle)],
+            }
+        return self._summary_bundle
+
+    def _get_facet_choices(self) -> dict[str, list[str]]:
+        if not hasattr(self, "_facet_choices"):
+            filter_state = self._get_filter_state()
+            if filter_state.current_run is not None:
+                self._facet_choices = resolve_browser_facets(pipeline_run=filter_state.current_run)
+            else:
+                self._facet_choices = resolve_browser_facets()
+        return self._facet_choices
+
+    def _scope_items(self) -> list[dict[str, str]]:
+        filter_state = self._get_filter_state()
+        length_range = "Any length"
+        if filter_state.length_min is not None or filter_state.length_max is not None:
+            length_range = (
+                f"{filter_state.length_min if filter_state.length_min is not None else 0} "
+                f"to {filter_state.length_max if filter_state.length_max is not None else 'any'}"
+            )
+
+        return [
+            {
+                "label": "Display rank",
+                "value": filter_state.rank,
+            },
+            {
+                "label": "Target search",
+                "value": filter_state.q or "Any gene, protein, or accession prefix",
+            },
+            {
+                "label": "Method",
+                "value": filter_state.method or "All methods",
+            },
+            {
+                "label": "Residue",
+                "value": filter_state.residue or "Select one residue",
+            },
+            {
+                "label": "Length range",
+                "value": length_range,
+            },
+            {
+                "label": "Minimum observations",
+                "value": str(filter_state.min_count),
+            },
+            {
+                "label": "Visible taxa limit",
+                "value": str(filter_state.top_n),
+            },
+        ]
+
+    def _summary_empty_reason(self) -> str:
+        filter_state = self._get_filter_state()
+        if not filter_state.residue:
+            return "Select a residue to browse codon composition by length."
+        matching_repeat_calls_count = self._get_matching_repeat_calls_count()
+        matching_repeat_calls_with_codon_usage_count = (
+            self._get_matching_repeat_calls_with_codon_usage_count()
+        )
+        if matching_repeat_calls_count > 0 and matching_repeat_calls_with_codon_usage_count == 0:
+            return (
+                "Canonical repeat calls matched these filters, but no codon-usage rows "
+                "were available for the selected residue."
+            )
+        if matching_repeat_calls_count > 0 and not self._get_summary_bundle()["summary_rows"]:
+            return "No taxa reached the current display rank and minimum observation threshold."
+        return "No canonical repeat calls matched these filters."
+
+    def _flatten_summary_rows(self, bundle: dict[str, object]) -> list[dict[str, object]]:
+        summary_rows = []
+        for matrix_row in bundle["matrix_rows"]:
+            for bin_row in matrix_row["bin_rows"]:
+                summary_rows.append(
+                    {
+                        "taxon_id": matrix_row["taxon_id"],
+                        "taxon_name": matrix_row["taxon_name"],
+                        "rank": matrix_row["rank"],
+                        "bin": bin_row["bin"],
+                        "observation_count": bin_row["observation_count"],
+                        "species_count": bin_row["species_count"],
+                        "dominant_codon": bin_row["dominant_codon"],
+                        "dominance_margin": bin_row["dominance_margin"],
+                        "codon_shares": bin_row["codon_shares"],
+                    }
+                )
+        return summary_rows
+
+    def _with_row_links(self, row: dict[str, object]) -> dict[str, object]:
+        filter_state = self._get_filter_state()
+        return {
+            **row,
+            "taxon_detail_url": _url_with_query(
+                reverse("browser:taxon-detail", args=[row["taxon_id"]]),
+                run=filter_state.current_run_id,
+            ),
+        }
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        filter_state = self._get_filter_state()
+        facet_choices = self._get_facet_choices()
+        summary_bundle = self._get_summary_bundle()
+
+        apply_stats_filter_context(context, filter_state)
+        context["matching_repeat_calls_count"] = self._get_matching_repeat_calls_count()
+        context["matching_repeat_calls_with_codon_usage_count"] = (
+            self._get_matching_repeat_calls_with_codon_usage_count()
+        )
+        context["total_taxa_count"] = summary_bundle["total_taxa_count"]
+        context["visible_taxa_count"] = summary_bundle["visible_taxa_count"]
+        context["summary_rows"] = summary_bundle["summary_rows"]
+        context["visible_codons"] = summary_bundle["visible_codons"]
+        context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
+        context["rank_choices"] = [
+            {"value": rank, "label": rank}
+            for rank in ALLOWED_STATS_RANKS
+        ]
+        context["method_choices"] = facet_choices["methods"]
+        context["residue_choices"] = facet_choices["residues"]
+        context["scope_items"] = self._scope_items()
+        context["reset_url"] = reverse("browser:codon-composition-length")
+        context["summary_empty_reason"] = self._summary_empty_reason()
+        return context

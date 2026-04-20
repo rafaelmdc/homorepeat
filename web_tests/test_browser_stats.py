@@ -11,6 +11,7 @@ from django.test import RequestFactory, TestCase
 from apps.browser.stats import (
     apply_stats_filter_context,
     build_ccdf_points,
+    build_codon_length_composition_bundle,
     build_filtered_codon_usage_queryset,
     build_codon_overview_payload,
     build_group_codon_species_call_fraction_queryset,
@@ -283,6 +284,61 @@ class BrowserStatsTests(TestCase):
             [
                 (self.alpha["taxon"].pk, 11, 2),
                 (self.beta["taxon"].pk, 11, 1),
+            ],
+        )
+
+    def test_codon_length_composition_bundle_groups_visible_taxa_by_bin_and_codon(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 8, "codon_fraction": 1.0},
+            ],
+        )
+        beta_long_call = self._create_repeat_call(
+            self.beta,
+            suffix="beta-long-q",
+            residue="Q",
+            codon_metric_name="codon_ratio",
+            codon_ratio_value=0.75,
+            length=17,
+        )
+        self._set_repeat_call_codon_usages(
+            self.beta,
+            repeat_call=beta_long_call,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 8, "codon_fraction": 1.0},
+            ],
+        )
+        request = self.factory.get(
+            "/browser/codon-composition-length/",
+            {
+                "rank": "class",
+                "min_count": "1",
+                "top_n": "10",
+                "residue": "q",
+            },
+        )
+
+        bundle = build_codon_length_composition_bundle(build_stats_filter_state(request))
+
+        self.assertEqual(bundle["matching_repeat_calls_count"], 3)
+        self.assertEqual(bundle["total_taxa_count"], 1)
+        self.assertEqual(bundle["visible_taxa_count"], 1)
+        self.assertEqual(bundle["visible_codons"], ["CAA", "CAG"])
+        self.assertEqual(
+            [row["label"] for row in bundle["visible_bins"]],
+            ["10-14", "15-19"],
+        )
+        self.assertEqual(len(bundle["matrix_rows"]), 1)
+        self.assertEqual(bundle["matrix_rows"][0]["taxon_name"], "Mammalia")
+        self.assertEqual(
+            [
+                (row["bin"]["label"], row["dominant_codon"], row["observation_count"], row["species_count"])
+                for row in bundle["matrix_rows"][0]["bin_rows"]
+            ],
+            [
+                ("10-14", "CAA", 1, 1),
+                ("15-19", "CAG", 1, 1),
             ],
         )
 

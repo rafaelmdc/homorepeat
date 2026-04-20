@@ -17,6 +17,7 @@ from .summaries import (
     build_length_inspect_summary,
     normalize_length_summary_value,
     normalize_numeric_summary_value,
+    summarize_codon_length_composition_rows,
     summarize_length_profile_vectors,
     summarize_ranked_codon_composition_groups,
     summarize_ranked_length_groups,
@@ -177,6 +178,68 @@ def build_ranked_codon_composition_summary_bundle(filter_state: StatsFilterState
         "total_taxa_count": total_taxa_count,
         "visible_taxa_count": len(summary_rows),
         "visible_codons": visible_codons,
+    }
+    cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
+    return bundle
+
+
+def build_codon_length_composition_bundle(filter_state: StatsFilterState) -> dict[str, object]:
+    if not filter_state.residue:
+        return {
+            "matching_repeat_calls_count": 0,
+            "total_taxa_count": 0,
+            "visible_taxa_count": 0,
+            "visible_codons": [],
+            "visible_bins": [],
+            "matrix_rows": [],
+        }
+
+    cache_key = f"browser:stats:codon-composition-length:{filter_state.cache_key()}"
+    cached_bundle = cache.get(cache_key)
+    if cached_bundle is not None:
+        return cached_bundle
+
+    summary_bundle = build_ranked_codon_composition_summary_bundle(filter_state)
+    summary_rows = summary_bundle["summary_rows"]
+    visible_codons = summary_bundle["visible_codons"]
+    if not summary_rows or not visible_codons:
+        bundle = {
+            "matching_repeat_calls_count": summary_bundle["matching_repeat_calls_count"],
+            "total_taxa_count": summary_bundle["total_taxa_count"],
+            "visible_taxa_count": 0,
+            "visible_codons": list(visible_codons),
+            "visible_bins": [],
+            "matrix_rows": [],
+        }
+        cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
+        return bundle
+
+    visible_taxon_ids = [row["taxon_id"] for row in summary_rows]
+    grouped_species_length_call_counts = list(
+        build_group_codon_length_species_call_count_queryset(
+            filter_state,
+            display_taxon_ids=visible_taxon_ids,
+        )
+    )
+    grouped_species_length_codon_fraction_sums = list(
+        build_group_codon_length_species_codon_fraction_sum_queryset(
+            filter_state,
+            display_taxon_ids=visible_taxon_ids,
+        )
+    )
+    grouped_summary = summarize_codon_length_composition_rows(
+        summary_rows,
+        grouped_species_length_call_counts,
+        grouped_species_length_codon_fraction_sums,
+        visible_codons=visible_codons,
+    )
+    bundle = {
+        "matching_repeat_calls_count": summary_bundle["matching_repeat_calls_count"],
+        "total_taxa_count": summary_bundle["total_taxa_count"],
+        "visible_taxa_count": len(grouped_summary["matrix_rows"]),
+        "visible_codons": list(visible_codons),
+        "visible_bins": grouped_summary["visible_bins"],
+        "matrix_rows": grouped_summary["matrix_rows"],
     }
     cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
     return bundle
@@ -681,6 +744,55 @@ def build_group_codon_species_call_fraction_queryset(filter_state: StatsFilterSt
             "codon_fraction",
         )
         .order_by("display_taxon_id", "repeat_call__taxon_id", "repeat_call_id", "codon")
+    )
+
+
+def build_group_codon_length_species_call_count_queryset(filter_state: StatsFilterState, *, display_taxon_ids):
+    return (
+        _with_display_taxon_annotations(
+            build_filtered_codon_usage_queryset(filter_state),
+            rank=filter_state.rank,
+            taxon_field_name="repeat_call__taxon",
+        )
+        .filter(display_taxon_id__in=display_taxon_ids)
+        .values(
+            "display_taxon_id",
+            "repeat_call__taxon_id",
+            "repeat_call__length",
+        )
+        .annotate(call_count=Count("repeat_call_id", distinct=True))
+        .values_list("display_taxon_id", "repeat_call__taxon_id", "repeat_call__length", "call_count")
+        .order_by("display_taxon_id", "repeat_call__taxon_id", "repeat_call__length")
+    )
+
+
+def build_group_codon_length_species_codon_fraction_sum_queryset(
+    filter_state: StatsFilterState,
+    *,
+    display_taxon_ids,
+):
+    return (
+        _with_display_taxon_annotations(
+            build_filtered_codon_usage_queryset(filter_state),
+            rank=filter_state.rank,
+            taxon_field_name="repeat_call__taxon",
+        )
+        .filter(display_taxon_id__in=display_taxon_ids)
+        .values(
+            "display_taxon_id",
+            "repeat_call__taxon_id",
+            "repeat_call__length",
+            "codon",
+        )
+        .annotate(codon_fraction_sum=Sum("codon_fraction"))
+        .values_list(
+            "display_taxon_id",
+            "repeat_call__taxon_id",
+            "repeat_call__length",
+            "codon",
+            "codon_fraction_sum",
+        )
+        .order_by("display_taxon_id", "repeat_call__taxon_id", "repeat_call__length", "codon")
     )
 
 
