@@ -5,6 +5,8 @@
 {% block body_class %}repeat-length-explorer-page{% endblock %}
 {% block extra_scripts %}
   <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <script src="{% static 'js/taxonomy-gutter.js' %}"></script>
+  <script src="{% static 'js/pairwise-overview.js' %}"></script>
   <script src="{% static 'js/repeat-length-explorer.js' %}"></script>
 {% endblock %}
 
@@ -112,7 +114,32 @@
 <section class="surface-card surface-card-wide mb-4">
   <div class="section-header">
     <div>
-      <p class="section-kicker mb-2">Chart layer</p>
+      <p class="section-kicker mb-2">Overview layer</p>
+      <h2>Pairwise repeat-length similarity map</h2>
+      <p class="text-secondary mb-0">
+        Color encodes pairwise repeat-length distribution similarity
+        (<strong>1 - Jensen-Shannon divergence</strong>) for the lineage-ordered
+        visible taxa. <strong>1.0</strong> means identical bounded length
+        profiles, <strong>0.0</strong> means maximally different, and the color
+        scale stretches to the visible matrix range so subtle differences stay
+        readable.
+        Showing {{ overview_visible_taxa_count }} visible taxon{{ overview_visible_taxa_count|pluralize }}.
+      </p>
+    </div>
+  </div>
+
+  {{ overview_payload|json_script:overview_payload_id }}
+  {{ overview_taxonomy_gutter_payload|json_script:overview_taxonomy_gutter_payload_id }}
+  <div class="length-chart-shell" id="{{ overview_container_id }}"></div>
+  <noscript>
+    <p class="surface-note mb-0 mt-3">JavaScript is disabled, so the grouped summary table remains the active view.</p>
+  </noscript>
+</section>
+
+<section class="surface-card surface-card-wide mb-4">
+  <div class="section-header">
+    <div>
+      <p class="section-kicker mb-2">Browse layer</p>
       <h2>Ranked length distributions for the visible taxa</h2>
       <p class="text-secondary mb-0">Each row shows min, lower quartile, median, upper quartile, and max for the same bounded taxa listed in the summary table. Click a chart row to reopen the explorer scoped to that branch.</p>
     </div>
