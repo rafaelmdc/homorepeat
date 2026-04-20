@@ -1,3 +1,4 @@
+from .codon_length_rollups import rebuild_canonical_codon_composition_length_summaries
 from .filters import StatsFilterState, apply_stats_filter_context, build_stats_filter_state
 from .payloads import (
     build_codon_composition_inspect_payload,
@@ -70,6 +71,7 @@ __all__ = [
     "build_stats_filter_state",
     "build_taxonomy_gutter_payload",
     "normalize_length_summary_value",
+    "rebuild_canonical_codon_composition_length_summaries",
     "summarize_codon_length_composition_rows",
     "summarize_length_profile_vectors",
     "build_tail_burden_overview_payload",
