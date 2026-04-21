@@ -224,6 +224,11 @@ def build_codon_length_composition_bundle(filter_state: StatsFilterState) -> dic
 
     if matrix_rows:
         matrix_rows = order_taxon_rows_by_lineage(matrix_rows)
+        visible_bins, matrix_rows = _filter_codon_length_matrix_rows_by_min_count(
+            visible_bins,
+            matrix_rows,
+            min_count=filter_state.min_count,
+        )
 
     if not matrix_rows or not visible_codons:
         bundle = {
@@ -247,6 +252,54 @@ def build_codon_length_composition_bundle(filter_state: StatsFilterState) -> dic
     }
     cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
     return bundle
+
+
+def _filter_codon_length_matrix_rows_by_min_count(visible_bins, matrix_rows, *, min_count: int):
+    if min_count <= 1:
+        return visible_bins, matrix_rows
+
+    visible_bins_by_start = {
+        visible_bin["start"]: visible_bin
+        for visible_bin in visible_bins
+    }
+    retained_bin_starts = set()
+    filtered_matrix_rows = []
+    for matrix_row in matrix_rows:
+        retained_bin_rows = [
+            bin_row
+            for bin_row in matrix_row["bin_rows"]
+            if int(bin_row["observation_count"]) >= min_count
+        ]
+        if not retained_bin_rows:
+            continue
+        for bin_row in retained_bin_rows:
+            retained_bin_starts.add(bin_row["bin"]["start"])
+        filtered_matrix_rows.append(
+            {
+                **matrix_row,
+                "bin_rows": retained_bin_rows,
+            }
+        )
+
+    filtered_visible_bins = [
+        visible_bin
+        for visible_bin in visible_bins
+        if visible_bin["start"] in retained_bin_starts
+    ]
+    missing_visible_bins = [
+        bin_row["bin"]
+        for matrix_row in filtered_matrix_rows
+        for bin_row in matrix_row["bin_rows"]
+        if bin_row["bin"]["start"] not in visible_bins_by_start
+    ]
+    if missing_visible_bins:
+        filtered_visible_bins.extend(
+            sorted(
+                missing_visible_bins,
+                key=lambda visible_bin: visible_bin["start"],
+            )
+        )
+    return filtered_visible_bins, filtered_matrix_rows
 
 
 def build_matching_repeat_calls_with_codon_usage_count(filter_state: StatsFilterState) -> int:

@@ -368,6 +368,68 @@ class BrowserStatsTests(TestCase):
             ],
         )
 
+    def test_codon_length_composition_bundle_applies_min_count_to_bin_rows(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 8, "codon_fraction": 1.0},
+            ],
+        )
+        alpha_second_call = self._create_repeat_call(
+            self.alpha,
+            suffix="alpha-second-q",
+            residue="Q",
+            codon_metric_name="codon_ratio",
+            codon_ratio_value=0.0,
+            length=12,
+        )
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            repeat_call=alpha_second_call,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 8, "codon_fraction": 1.0},
+            ],
+        )
+        beta_long_call = self._create_repeat_call(
+            self.beta,
+            suffix="beta-low-support-long-q",
+            residue="Q",
+            codon_metric_name="codon_ratio",
+            codon_ratio_value=1.0,
+            length=17,
+        )
+        self._set_repeat_call_codon_usages(
+            self.beta,
+            repeat_call=beta_long_call,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 8, "codon_fraction": 1.0},
+            ],
+        )
+        request = self.factory.get(
+            "/browser/codon-composition-length/",
+            {
+                "rank": "class",
+                "min_count": "2",
+                "top_n": "10",
+                "residue": "q",
+            },
+        )
+
+        bundle = build_codon_length_composition_bundle(build_stats_filter_state(request))
+
+        self.assertEqual(bundle["visible_taxa_count"], 1)
+        self.assertEqual(
+            [row["label"] for row in bundle["visible_bins"]],
+            ["10-14"],
+        )
+        self.assertEqual(
+            [
+                (row["bin"]["label"], row["observation_count"], row["dominant_codon"])
+                for row in bundle["matrix_rows"][0]["bin_rows"]
+            ],
+            [("10-14", 2, "CAA")],
+        )
+
     def test_codon_length_composition_bundle_uses_rollup_on_default_scope(self):
         CanonicalCodonCompositionLengthSummary.objects.bulk_create(
             [

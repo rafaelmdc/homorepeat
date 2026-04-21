@@ -84,6 +84,23 @@
     return (zoomState.endValue - zoomState.startValue) + 1;
   }
 
+  function zoomSliderStyle(mutedTextColor) {
+    return {
+      fillerColor: "rgba(15, 89, 100, 0.16)",
+      borderColor: "rgba(23, 36, 44, 0.08)",
+      handleStyle: {
+        color: "#0f5964",
+        borderColor: "#0f5964",
+      },
+      moveHandleStyle: {
+        color: "#0f5964",
+      },
+      textStyle: {
+        color: mutedTextColor,
+      },
+    };
+  }
+
   function buildYAxisZoom(rowCount, zoomState, {
     yAxisIndex = 0,
     right = 8,
@@ -119,18 +136,51 @@
         zoomOnMouseWheel: "shift",
         startValue: zoomState.startValue,
         endValue: zoomState.endValue,
-        fillerColor: "rgba(15, 89, 100, 0.16)",
-        borderColor: "rgba(23, 36, 44, 0.08)",
-        handleStyle: {
-          color: "#0f5964",
-          borderColor: "#0f5964",
-        },
-        moveHandleStyle: {
-          color: "#0f5964",
-        },
-        textStyle: {
-          color: mutedTextColor,
-        },
+        ...zoomSliderStyle(mutedTextColor),
+      },
+    ];
+  }
+
+  function buildXAxisZoom(columnCount, zoomState, {
+    xAxisIndex = 0,
+    insideId,
+    sliderId,
+    left = 96,
+    right = 96,
+    bottom = 24,
+    height = 18,
+    mutedTextColor = DEFAULT_MUTED_TEXT_COLOR,
+  } = {}) {
+    if (!zoomState) {
+      return [];
+    }
+
+    return [
+      {
+        ...(insideId ? { id: insideId } : {}),
+        type: "inside",
+        xAxisIndex,
+        filterMode: "none",
+        zoomOnMouseWheel: false,
+        moveOnMouseMove: true,
+        moveOnMouseWheel: false,
+        startValue: zoomState.startValue,
+        endValue: Math.min(zoomState.endValue, Math.max(0, columnCount - 1)),
+      },
+      {
+        ...(sliderId ? { id: sliderId } : {}),
+        type: "slider",
+        xAxisIndex,
+        filterMode: "none",
+        left,
+        right,
+        bottom,
+        height,
+        brushSelect: false,
+        zoomOnMouseWheel: false,
+        startValue: zoomState.startValue,
+        endValue: Math.min(zoomState.endValue, Math.max(0, columnCount - 1)),
+        ...zoomSliderStyle(mutedTextColor),
       },
     ];
   }
@@ -305,6 +355,7 @@
 
   window.HomorepeatStatsChartShell = {
     attachTaxonomyGutter,
+    buildXAxisZoom,
     buildYAxisZoom,
     chartHeightForRowCount,
     clamp,

@@ -6,6 +6,7 @@
   const chartHeightForRowCount = chartShell.chartHeightForRowCount;
   const defaultZoomState = chartShell.defaultZoomState;
   const normalizeZoomState = chartShell.normalizeZoomState;
+  const buildXAxisZoom = chartShell.buildXAxisZoom;
   const buildYAxisZoom = chartShell.buildYAxisZoom;
   const installWheelHandler = chartShell.installWheelHandler;
   const resolveZoomState = chartShell.resolveZoomState;
@@ -183,40 +184,14 @@
 
   function chartOption(payload, rowZoomState, columnZoomState) {
     const labels = xLabels(payload);
-    const xZoom = columnZoomState
-      ? [
-          {
-            id: "codon-length-x-inside",
-            type: "inside",
-            xAxisIndex: 0,
-            filterMode: "none",
-            zoomOnMouseWheel: false,
-            moveOnMouseWheel: false,
-            moveOnMouseMove: true,
-            startValue: columnZoomState.startValue,
-            endValue: columnZoomState.endValue,
-          },
-          {
-            id: "codon-length-x-slider",
-            type: "slider",
-            xAxisIndex: 0,
-            filterMode: "none",
-            left: 172,
-            right: payload.mode === "dominance" ? 28 : 96,
-            bottom: 24,
-            height: 18,
-            brushSelect: false,
-            startValue: columnZoomState.startValue,
-            endValue: columnZoomState.endValue,
-            fillerColor: "rgba(15, 89, 100, 0.16)",
-            borderColor: "rgba(23, 36, 44, 0.08)",
-            handleStyle: {
-              color: "#0f5964",
-              borderColor: "#0f5964",
-            },
-          },
-        ]
-      : [];
+    const xZoom = buildXAxisZoom(labels.length, columnZoomState, {
+      insideId: "codon-length-x-inside",
+      sliderId: "codon-length-x-slider",
+      left: 172,
+      right: payload.mode === "dominance" ? 28 : 96,
+      bottom: 24,
+      height: 18,
+    });
     return {
       animation: false,
       grid: {
