@@ -2,45 +2,48 @@
 
 ## Purpose
 
-This is the flagship comparison viewer for the first wave.
-
-It is a **composition-first** viewer, not a scalar codon-ratio page. Its job is
-to preserve codon mixtures across repeat length instead of collapsing each
-taxon-length state into a single number.
+This viewer compares codon composition against repeat length across taxa.
 
 Planned route:
 
 - `/browser/codon-composition-length/`
 
-Core questions:
-
-- how codon mixtures change across repeat length bins
-- how those composition-length trajectories differ by lineage
-- where codon preference stays stable versus shifts across length
-- which taxa show distinct codon-composition structure across length
-- whether observed patterns remain well-supported across sparse long-length bins
-
-## Why it matters
-
-This viewer combines the two biological signals that motivate the first-wave
-family:
+It remains part of the first-wave browser viewer family because it combines the
+two main biological signals:
 
 - repeat length
 - codon composition
 
-It should become the main comparison viewer once the shared codon-usage
-contract and codon-composition browse layer exist.
+The first-wave design should be **composition-aware**, not "full composition
+everywhere". The overview should use simple matrix summaries that are readable
+at scale, while the browse and inspect layers preserve full composition detail
+where users can actually read it.
 
-Biologically, the value is not only in seeing the codon mixture at one bin.
-The important signal is often:
+Core questions:
 
-- whether one codon becomes dominant as length increases
-- whether codon composition stays stable or transitions across bins
-- whether related taxa share similar composition-length trajectories
-- whether long-bin composition differences are supported or are based on sparse counts
+- which codon is preferred at each length bin
+- how strong that preference is
+- where codon composition changes across length
+- whether observed patterns are well-supported
+- which taxa have similar overall codon-length behavior
 
-This viewer should therefore emphasize **trajectory, dominance, transition, and
-support**, not just static composition snapshots.
+## Design Principles
+
+- overview = state, strength, support, change
+- browse and inspect = full composition
+- lineage-aware taxon ordering is required
+- support awareness is required in every tier
+- fixed codon order is required in browse and inspect views
+- simple matrix summaries are preferred over miniature per-cell detail
+- scalar summaries may guide overview reading, but must not replace full
+  composition views in browse and inspect
+
+The biological object is still codon composition. The representation changes by
+scale:
+
+- Tier 1 summarizes codon composition into readable overview states.
+- Tier 2 shows full composition trajectories for selected taxa.
+- Tier 3 exposes exact values for one taxon, branch, or focused subset.
 
 ## Dependencies
 
@@ -62,97 +65,87 @@ As of `2026-04-20`, the viewer is intentionally reset to the `CL3.1` baseline.
 - the failure was in frontend chart binding, not in the biological summary
   contract
 
-This matters for the next attempt:
+The next overview pass should begin with the simplest stable renderer:
 
-- the next overview pass should preserve the same biological meaning
-- but it should begin with a much simpler matrix rendering path before
-  reintroducing taxonomy gutter and richer cell encodings
+- rectangular heatmap-style cells
+- simple scalar or categorical encodings
+- no miniature composition glyphs
+- no frontend-first complexity before the matrix binding is proven
 
-## Design principles
-
-- composition must remain the default biological unit
-- lineage-aware taxon ordering is required
-- low-support long bins must not read as equally trustworthy as dense central bins
-- codon order must stay fixed across all views
-- overview should show both composition and where composition changes
-- scalar summaries may exist as companions, but should not replace the
-  composition-first landing state
-
-## Target 3-tier structure
+## Target 3-Tier Structure
 
 ### `Tier 1 - Overview`
 
-Tier 1 should be an overview shell with multiple tightly related modes rather
-than a single overloaded chart.
+Tier 1 is a simple matrix-based overview with a small number of clear modes.
 
 Shared structure:
 
-- taxonomy-first matrix
-- y-axis: lineage-aware taxon ordering
-- x-axis: shared repeat length bins
-- each cell represents one taxon and one length bin
-- each mode preserves the idea that codon mixtures, not scalar summaries, are
-  the primary biological object
+- y-axis: taxa in lineage-aware order
+- x-axis: shared repeat length bins, or adjacent-bin transitions for shift mode
+- cells: compact summaries of codon composition state, strength, support, or
+  change
+- tooltips: exact codon fractions and support metadata where useful
 
-#### Primary mode: `Composition matrix`
+Tier 1 should not show the full codon mixture inside every `Taxon x Length-bin`
+cell. Tiny stacked bars, split tiles, or miniature composition glyphs are not
+first-wave defaults because they are too dense to read at scale and too
+expensive to render reliably on dense real data.
+
+#### Primary Mode for 2-Codon Residues: `Preference Matrix`
 
 Primary chart:
 
-- `Taxon x Length-bin` matrix with per-cell codon-composition glyphs
+- `Taxon x Length-bin` signed preference matrix
 
-Meaning:
+Encoding:
 
-- each cell preserves codon mixtures rather than collapsing them to one number
-- this is the main landing view for the page
-- users should be able to scan across rows to see composition trajectories with
-  increasing length
-- users should be able to scan down columns to compare taxa at the same length bin
+- each cell shows one continuous signed codon preference score
+- negative = codon B preferred
+- zero = balanced
+- positive = codon A preferred
+- stronger color magnitude = stronger preference
 
-Recommended encoding:
+This is the preferred overview for polyQ-like 2-codon cases. One codon fraction
+implies the other, so a signed scalar preserves direction and strength without
+forcing a tiny split bar into every cell.
 
-- for 2-codon residues:
-  - use a simple split tile or compact internal proportion bar
-  - do not overcomplicate with miniature stacked bars when one fraction implies the other
-- for 3+ codon residues:
-  - use a tiny stacked composition bar with fixed codon order across all cells
+Support handling:
 
-Support awareness:
-
-- every cell should carry support metadata
-- low-count bins should be visually downweighted or flagged
-- acceptable support encodings include:
+- every cell must visually reflect support
+- acceptable first-wave support encodings:
   - reduced opacity
-  - subtle corner marker or warning dot
-  - optional low-support toggle or legend state
+  - subtle dot or corner marker
+  - tooltip support tier
+- sparse long bins must not look equally trustworthy as dense central bins
 
-This matters biologically because sparse long bins may look dramatic while being
-based on very few observations.
+For 2-codon residues, the signed preference matrix is preferred over miniature
+split bars as the main Tier 1 representation.
 
-#### Companion mode: `Dominant codon`
+#### Primary Mode for 3+ Codon Residues: `Dominant-Codon Matrix`
 
 Primary chart:
 
-- same `Taxon x Length-bin` matrix layout
-- each cell emphasizes which codon is dominant in that bin
+- `Taxon x Length-bin` dominant-codon matrix
 
-Meaning:
+Encoding:
 
-- lets users quickly see which codon “wins” across length
-- makes codon-dominance flips easy to spot
-- provides a more interpretable lineage-level scan than raw mixtures alone
+- hue/category = dominant codon identity
+- intensity, saturation, or border strength = dominance margin
+- full mixture is not shown in-cell
+- tooltips may expose exact codon fractions and support
 
-Recommended encoding:
+This keeps overview cells readable while preserving the two key overview
+questions:
 
-- cell color or symbol indicates dominant codon
-- saturation, border strength, or secondary mark indicates dominance margin
+- which codon wins
+- how decisive that win is
 
-This mode is especially useful for questions like:
+For 3+ codon residues, tiny stacked bars or mini composition glyphs are
+explicitly rejected as the default first-wave overview. They may be considered
+later only if the simple matrix views are already stable and the real dataset
+shows a clear need.
 
-- where does codon dominance switch with length?
-- do related taxa share the same dominant-codon regime?
-- are long bins compositionally mixed or clearly dominated?
-
-#### Companion mode: `Composition shift`
+#### Companion Mode: `Composition Shift`
 
 Primary chart:
 
@@ -160,192 +153,238 @@ Primary chart:
 
 Meaning:
 
-- each cell measures how much codon composition changes from one length bin to the next
-- this highlights transition points rather than raw composition
-- it is often more biologically informative than raw composition when the goal
-  is to find where codon usage starts to diverge with increasing repeat length
+- each cell measures how much codon composition changes from one length bin to
+  the next
+- stable taxa stay visually quiet
+- sharp transition points stand out along the length axis
 
-Axes:
-
-- y-axis: taxa
-- x-axis: adjacent-bin transitions such as `1-2`, `2-3`, `3-4`, etc.
-
-Recommended statistics:
+Statistics:
 
 - for 2-codon residues:
-  - use absolute difference in one codon fraction between adjacent bins
+  - absolute change in one codon fraction
 - for 3+ codon residues:
-  - use L1 distance or JSD between adjacent-bin composition vectors
+  - L1 distance between adjacent-bin normalized composition vectors
 
-Default preference:
-
-- prefer L1 distance when simplicity and interpretability matter most
-- JSD is acceptable for 3+ codon full-mixture comparison, but should not be
-  introduced where a simpler measure is sufficient
+Default to L1 distance for simplicity and interpretability. JSD can be a later
+companion metric, but it is not the first-wave default.
 
 This mode should answer:
 
-- where along the length axis composition shifts sharply
-- which taxa are stable versus transition-heavy
-- whether shifts cluster by lineage
+- where composition changes sharply across length
+- which taxa are stable across length
+- which taxa show transition points
+
+#### Optional Companion Mode: `Pairwise Taxa Overview`
+
+Pairwise taxa similarity is useful, but it is secondary.
+
+Primary chart:
+
+- `Taxon x Taxon` distance heatmap
+
+Definition:
+
+- summarize each taxon's codon-length trajectory into a support-aware vector
+- compute pairwise taxa distances
+- show a distance heatmap for clustering and outlier detection
+
+Constraints:
+
+- this is a secondary comparison view
+- it must not replace the main `Taxon x Length-bin` overview
+- it should be presented as trajectory similarity, not as the core biological
+  representation
+
+Pairwise taxa similarity is too abstract for the landing view because it hides
+where along length taxa differ.
 
 ### `Tier 2 - Browse`
 
-Tier 2 should move from matrix scanning to per-taxon trajectory reading.
+Tier 2 is where full codon composition is preserved for selected taxa.
 
 Primary chart family:
 
-- per-taxon composition-across-length panels
-- one panel per selected or visible taxon
-- fixed axes and fixed codon order across panels
-
-Meaning:
-
-- users should be able to compare how codon mixtures evolve across length for
-  several taxa without forcing all taxa into one unreadable overlaid plot
+- per-taxon small multiples across length
+- one panel per selected taxon
+- fixed x-axis = length bins
+- fixed codon order across panels
 
 Recommended view rules:
 
 - for 2-codon residues:
-  - line or area views are acceptable and often clearer
+  - line or area chart is preferred
+  - do not force tiny internal composition glyphs
 - for 3+ codon residues:
   - stacked bars or stacked areas are preferred
-  - avoid cluttered multi-line overlays when too many codons are present
+  - avoid cluttered multi-line overlays
 
 Support display:
 
-- add a small support strip under each panel
-- this can be a tiny count bar series or dot strip by length bin
-- sparse long bins should remain visible as sparse, not visually equivalent to dense bins
+- add a compact support strip or count strip beneath each taxon panel
+- sparse bins must remain visibly sparse
+- long-bin differences should be easy to distinguish from long-bin uncertainty
 
 Tier 2 should answer:
 
-- how does this taxon’s codon mixture evolve across length?
-- how does that compare with neighboring taxa or selected peers?
-- are apparent long-bin differences well supported?
+- how codon composition evolves across length for a selected taxon
+- how neighboring or selected taxa compare
+- whether long-bin differences are supported
 
 ### `Tier 3 - Inspect`
 
-Tier 3 is for one selected taxon, branch, or filtered subset.
+Tier 3 is a focused inspect layer for one taxon, branch, or filtered subset.
 
-Primary views:
-
-- detailed composition-across-length chart
-- exact supporting table
-- optional comparison against branch or parent aggregate
-
-Meaning:
-
-- this is the analytical close-up layer
-- users should be able to inspect exact fractions, support, dominance, and
-  transitions for one focused lineage
-
-Recommended inspect components:
+Required inspect components:
 
 - one detailed composition-across-length chart
-- one table with:
-  - length bin
-  - codon fractions
-  - count / support
-  - dominant codon
-  - entropy or evenness
-  - optional delta from previous bin
-- optional comparison line or summary against:
-  - parent branch aggregate
-  - sibling mean
-  - selected reference lineage
+- one exact table
 
-## Deferred companion views
+The exact table should include:
 
-Secondary scalar summaries can still be useful, but only as companion analytical
-views.
-
-Examples:
-
+- length bin
+- codon counts
+- codon fractions
+- support count
+- dominant codon
 - dominance margin
-- entropy / evenness
-- support-aware uncertainty summary
+- optional entropy or evenness
+- optional delta from previous bin
 
-These may support interpretation, but should not replace the
-composition-first landing state.
+Optional comparison:
 
-## Statistical guidance
+- parent branch aggregate
+- selected reference taxon
+- sibling mean
 
-### Composition representation
+Tier 3 is where full composition detail and exact values belong.
 
-- codon composition vectors should remain normalized within each taxon-length bin
+## Statistical Guidance
+
+### Composition Representation
+
+- codon composition vectors remain normalized within each taxon-length bin
 - no mixed-residue codon aggregation by default
-- codon order must remain fixed across all tiers and all residues
+- codon order remains fixed across browse and inspect views
+- overview summaries must be derived from the same normalized composition
+  vectors used by browse and inspect
 
-### Shift statistics
+### Preference Statistics
+
+For 2-codon residues:
+
+- use a signed preference score based on the two codon fractions
+- keep codon sign direction fixed and documented in the payload
+- expose exact fractions in tooltips and inspect tables
+
+The preference score is the first-wave overview representation because it
+preserves direction and strength in one readable scalar.
+
+### Dominance Statistics
+
+For 3+ codon residues:
+
+- compute dominant codon per taxon-length bin
+- compute dominance margin between the top codon and the next strongest codon
+- use dominance margin for visual strength
+- expose full fractions in tooltips, browse, and inspect
+
+### Shift Statistics
 
 For adjacent-bin composition change:
 
 - 2-codon residues:
   - use absolute change in one codon fraction
-  - the second codon is implied, so no heavier divergence is needed
 - 3+ codon residues:
-  - use L1 distance or JSD between normalized codon-composition vectors
+  - use L1 distance between normalized codon-composition vectors
 
-Default bias:
+Default to simple, transparent measures. Do not introduce JSD as the first-wave
+default unless a later analysis shows L1 is insufficient.
 
-- prefer simple, transparent measures unless a more complex one is clearly justified
-
-### Support handling
+### Support Handling
 
 Every taxon-length bin should retain support metadata such as:
 
 - observation count
 - optional count tier classification
+- species count where available
 
-Support should inform rendering and interpretation throughout the page.
+Support should inform rendering and interpretation throughout the page. Sparse
+long bins must not visually read as equally reliable as dense central bins.
 
-## Constraints
+## Practical Implementation Guidance
 
-- no mixed-residue codon aggregation by default
-- no unbounded all-taxa trend plots
-- no second filter architecture
-- no overview page without lineage-aware ordering
-- no scalar color encoding as the primary representation of codon mixtures
-- no support-blind rendering of sparse long bins
-- no changing codon order between cells or views
+The first implementation pass should prioritize the simplest renderer path.
 
-## Recommended first-wave outcome
+- start with rectangular heatmap-style cells
+- wire the backend summary contract into a simple matrix first
+- prove row, bin, and tooltip binding on the real dataset
+- avoid taxonomy gutter complexity in the first pass unless the shared gutter
+  path is already stable for this chart shape
+- do not implement miniature SVG composition glyphs as the first overview
+  renderer
+- do not add rich support ornamentation until the base matrix is correct
+- only add richer visual details after the simple version works well on dense
+  real data
 
-The first-wave version of this viewer should aim for:
+Implementation should remain backend-contract first:
+
+- the backend owns taxon order
+- the backend owns length-bin order
+- the backend owns codon order
+- the frontend renders those ordered arrays without inventing a second
+  classification or binning contract
+
+## Non-Goals And Explicit Rejections
+
+First-wave defaults should not include:
+
+- tiny composition glyphs in every overview cell
+- miniature stacked bars as the default main matrix encoding
+- overviews that hide support
+- pairwise taxa heatmaps as the landing state
+- scalar-only summaries replacing Tier 2 and Tier 3 composition views
+- complex frontend-first rendering before a simple matrix path works
+- mixed-residue codon aggregation
+- a second filter architecture
+- unbounded all-taxa trend plots
+
+## Recommended First-Wave Outcome
 
 ### Tier 1
-- composition matrix
-- dominant codon mode
-- composition shift mode
-- lineage-aware taxon ordering
+
+- for 2-codon residues:
+  - signed preference matrix
+- for 3+ codon residues:
+  - dominant-codon matrix with dominance strength
+- composition shift matrix
 - support-aware cells
+- lineage-aware ordering
+- optional secondary pairwise taxa similarity tab
 
 ### Tier 2
+
 - per-taxon small multiples across length
-- residue-aware chart choice:
-  - line/area for 2-codon residues
-  - stacked bars/areas for 3+ codon residues
+- line or area chart for 2-codon residues
+- stacked bars or stacked areas for 3+ codon residues
 - support strip under each panel
 
 ### Tier 3
-- focused detailed chart
+
+- detailed composition-across-length chart
 - exact table
 - optional lineage comparison
 
 ## Summary
 
-This viewer should not try to force codon composition x length into one scalar
-overview.
+This viewer should not force full codon mixtures into every overview cell.
 
-Its job is to preserve codon mixtures while still making biological structure
-readable at scale. The most important signals are:
+The first-wave page should use simple graphs that work on dense real data:
 
-- what the codon mixture is
-- which codon dominates
-- where composition shifts across length
-- whether long-bin patterns are well supported
-- how these behaviors align with lineage structure
+- signed preference for 2-codon residues
+- dominant codon plus dominance strength for 3+ codon residues
+- adjacent-bin shift for transition detection
+- support-aware rendering throughout
+- full composition detail in browse and inspect
 
-That makes this viewer a composition-first comparison system, not just a more
-complex codon-ratio heatmap.
+That makes the viewer composition-aware without making the overview visually
+overloaded or technically fragile.

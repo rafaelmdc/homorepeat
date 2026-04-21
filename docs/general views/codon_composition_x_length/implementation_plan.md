@@ -4,143 +4,79 @@
 
 This document turns
 [overview.md](/home/rafael/Documents/GitHub/homorepeat/docs/general views/codon_composition_x_length/overview.md)
-into an execution sequence for building the codon-composition-by-length viewer.
+into an execution sequence for refactoring the current codon-composition-by-length
+viewer into the simpler first-wave design.
 
-It is explicitly architecture-aware:
+The plan starts from the current implemented baseline:
 
-- reuse the existing browser stats stack
-- reuse the existing codon-composition aggregation contract
-- reuse the existing length-bin and lineage-order helpers
-- only extract shared frontend/backend pieces when a second consumer already
-  exists or this viewer clearly needs them
+- `/browser/codon-composition-length/` exists
+- `CodonCompositionLengthExplorerView` exists
+- `templates/browser/codon_composition_length_explorer.html` exists
+- `build_codon_length_composition_bundle(filter_state)` exists
+- live and rollup-backed grouped bundle paths exist
+- the server-rendered grouped fallback table exists
+- the rejected `CL3.2` composition-glyph overview renderer is not the target
 
-It is also explicitly performance-aware:
+The goal is not to preserve the old "full composition glyph in every overview
+cell" concept. The first-wave implementation should refactor the existing
+bundle and page shell into simple overview matrices:
 
-- this page combines two high-cardinality dimensions
-- the default path must stay bounded and cheap enough for browser use
-- the implementation should be designed around grouped rows and compact
-  payloads, not raw repeat-call materialization
+- signed preference matrix for 2-codon residues
+- dominant-codon matrix for 3+ codon residues
+- composition shift matrix for transitions
+- optional secondary pairwise taxa similarity later
+
+Full composition detail belongs in browse and inspect, not in every overview
+cell.
 
 ## Product Boundary
 
-This plan is for a browser viewer inside `apps.browser`.
+This plan is for the browser viewer inside `apps.browser`.
 
-Out of scope for this track:
+Out of scope:
 
 - changing `homorepeat_pipeline`
 - introducing a second filter architecture
 - adding mixed-residue codon aggregation
-- building an unbounded all-taxa trend page
 - shipping per-call codon x length rows to the browser
+- rebuilding the first-wave overview around miniature per-cell composition
+  glyphs or tiny stacked bars
+- making pairwise taxa similarity the landing state
 
-## Reuse Rules
+## Current Baseline To Keep
 
-The implementation should preferentially reuse:
+Keep these existing pieces and refactor around them:
 
-- `apps/browser/views/stats/codon_ratios.py`
-- `apps/browser/views/stats/lengths.py`
-- `apps/browser/stats/filters.py`
-- `apps/browser/stats/queries.py`
-- `apps/browser/stats/summaries.py`
-- `apps/browser/stats/payloads.py`
-- `apps/browser/stats/taxonomy_gutter.py`
-- `apps/browser/stats/bins.py`
-- `static/js/pairwise-overview.js`
+- the route and view ownership for `/browser/codon-composition-length/`
+- normalized stats filter handling and residue-required semantics
+- the current grouped `matrix_rows` bundle shape as the source of truth
+- live grouped query path for filtered scopes
+- rollup-backed path for the broad default scope
+- lineage ordering through existing shared helpers
+- server-rendered fallback rows for no-JS usefulness and test coverage
 
-Reuse intent:
+The current bundle is already the right foundation because it carries:
 
-- codon composition supplies the residue-scoped grouped-composition semantics
-- length view supplies the shared length-bin contract and support-aware grouped
-  numeric handling
-- the pairwise-overview code supplies visible-window rendering, zoom handling,
-  and taxonomy gutter integration patterns
+- visible taxa
+- visible codons
+- visible length bins
+- sparse per-taxon occupied bins
+- codon shares
+- observation and species support counts
+- dominant codon and dominance margin
 
-Do not:
+The refactor should derive all first-wave overview modes from this bundle. Do
+not add separate database queries for preference, dominance, or shift.
 
-- fork a second lineage-order implementation
-- let JS invent bin definitions
-- compute the same grouped taxon set separately for overview and browse when
-  one shared bundle can drive both
+## Core Data Contract
 
-## Performance Rules
+### Shared Bundle
 
-These are implementation constraints, not later cleanup work.
-
-- always bound the visible taxa through the existing `top_n`, `rank`,
-  `min_count`, and branch-scope controls
-- require a residue before activating the page's biological contract
-- do not materialize per-call codon rows in Python for the default page path
-- prefer grouped SQL rows of the form:
-  - `display_taxon_id`
-  - `length_bin`
-  - `codon`
-  - `observation_count`
-  - `species_count`
-  - `codon_share`
-- keep zero-heavy payloads compact by sending:
-  - one ordered visible codon list
-  - one ordered visible bin list
-  - sparse per-taxon occupied-bin rows
-- treat the default unscoped page as the optimization target
-- plan for a rollup table once the live grouped path is correct and testable
-
-## Current Baseline
-
-Already implemented elsewhere in the browser:
-
-- normalized stats filter parsing
-- lineage-aware visible-taxon ordering
-- taxonomy gutter payload generation and attachment
-- pairwise overview shell with visible-window rendering
-- codon-composition grouped summaries and inspect mode
-- length-bin helpers and optimized grouped length profile generation
-- codon-composition summary rollup table for the default residue-scoped path
-
-Missing for this viewer:
-
-- route and page shell
-- grouped `taxon x length-bin x codon` data contract
-- `Taxon x Length-bin` overview renderer
-- browse small-multiples for composition-across-length
-- inspect table/chart for focused composition-across-length
-- default-path rollup table for fast generation
-
-## Current Status
-
-As of `2026-04-20`:
-
-- `CL3.1` remains implemented and should be kept
-- `CL3.2` was attempted, but then reverted back to the `CL3.1` baseline
-- the live/runtime codon-length overview payload was verified to be correct on
-  the real dataset:
-  - `38` taxa
-  - `287` bins
-  - `910` occupied cells
-  - row indices spanning `0..37`
-
-Current interpretation:
-
-- the failed `CL3.2` attempt was a frontend rendering problem
-- the problem was not in the summarized backend bundle
-- the next `CL3.2` attempt should start from a fresh renderer, not from
-  patching the discarded implementation
-
-Implementation rule for the retry:
-
-- prove plain `row x bin` binding first
-- do not add taxonomy gutter until the minimal matrix is visually correct
-- do not start with custom glyphs or support-opacity tricks
-- only reintroduce gutter and richer encodings after the base matrix is stable
-
-## Target Internal Contract
-
-The page should be built around one shared summarized bundle.
-
-Recommended builder:
+Continue to use:
 
 - `build_codon_length_composition_bundle(filter_state)`
 
-Recommended bundle shape:
+Required bundle fields:
 
 - `matching_repeat_calls_count`
 - `visible_taxa_count`
@@ -149,661 +85,542 @@ Recommended bundle shape:
 - `visible_bins`
 - `matrix_rows`
 
-Recommended `matrix_rows` shape:
+Each `matrix_rows[]` item should remain:
 
-- one row per visible taxon
-- fixed lineage order
-- sparse occupied-bin entries only
+- `taxon_id`
+- `taxon_name`
+- `rank`
+- `observation_count`
+- `species_count`
+- `bin_rows`
 
-Recommended occupied-bin entry shape:
+Each occupied `bin_rows[]` item should remain:
 
-- `bin_start`
-- `bin_label`
+- `bin`
 - `observation_count`
 - `species_count`
 - `codon_shares`
 - `dominant_codon`
 - `dominance_margin`
 
-Design rule:
+### Derived Overview Payloads
 
-- overview, browse, and most inspect views should read from this same bundle
-- dominant-codon and shift modes should be derived from this bundle, not built
-  through separate database passes
+Add derived payload builders in the stats payload layer. They should accept the
+shared bundle or the bundle's fields, not query the database.
 
-## Phase 1: Page Ownership And Shared Contract
+Required payloads:
 
-### Slice `CL1.1`: Add route, view shell, and template skeleton
+- preference overview payload for exactly 2 visible codons
+- dominance overview payload for 3+ visible codons
+- shift overview payload for all supported residues
+
+Recommended behavior:
+
+- the view chooses the default overview mode from `len(visible_codons)`
+- 2 codons defaults to preference
+- 3+ codons defaults to dominance
+- shift is available as a companion mode when there are enough occupied adjacent
+  bins to compute transitions
+
+## Phase 1: Refactor The Existing Page Contract
+
+### Slice `CL-R1`: Mark the current shell as the retained baseline
 
 Goal:
 
-- give the viewer a stable browser entry point without inventing new page
-  conventions
+- stop treating route, shell, bundle, rollup, and fallback table as future work
 
 Scope:
 
-- add `/browser/codon-composition-length/` to `apps/browser/urls.py`
-- add a URL-facing view under `apps/browser/views/stats/`
-- add a dedicated template under `templates/browser/`
-- re-export the view from `apps/browser/views/__init__.py`
+- update docs and tests to describe the existing baseline as implemented
+- keep the route, view, current filter controls, and fallback table
+- adjust overview copy so it no longer promises a full composition matrix
 
 Required behavior:
 
-- use `build_stats_filter_state(...)`
-- require residue selection for meaningful output
-- keep run, branch, rank, method, target search, and length-range controls
-  aligned with the existing stats pages
-- keep the page useful without JavaScript through server-rendered fallbacks
+- no change to public route
+- no change to filter semantics
+- no change to no-JS fallback availability
+- residue selection remains required for biological output
 
 Exit criteria:
 
-- the route resolves
-- the page renders a stable filter shell and current-scope summary
-- empty states are residue-aware and consistent with the codon-composition page
+- the page reads as a summary-first codon-length viewer
+- existing shell tests still pass after copy updates
 
-### Slice `CL1.2`: Define the shared bundle and payload boundaries
+### Slice `CL-R2`: Preserve and tighten the shared bundle
 
 Goal:
 
-- make the page data model explicit before implementing charts
+- make the current bundle the single source of truth for all derived modes
 
 Scope:
 
-- define the backend bundle shape in `apps/browser/stats/queries.py`
-- define any companion payload shaping in `apps/browser/stats/payloads.py`
-- keep the page contract centered on one summarized bundle
+- keep `build_codon_length_composition_bundle(...)`
+- keep live and rollup paths semantically equivalent
+- add tests only where the new overview derivations need stronger guarantees
 
 Required behavior:
 
-- one shared visible taxon set drives overview, browse, and table fallbacks
+- visible taxon order is lineage-aware before payload rendering
 - visible codon order is fixed by the backend
-- visible bin order is fixed by the backend
-- support metadata is present in every occupied taxon-bin state
+- visible length-bin order is fixed by the backend
+- absent codons inside occupied bins are represented as zero shares
+- empty taxon-bin states stay absent rather than being fabricated as real data
 
 Exit criteria:
 
-- the new builder has a documented return shape
-- the view can build context from the bundle without requerying for the same
-  visible taxon/bin state
+- preference, dominance, shift, browse, inspect, and fallback can all derive
+  from the same bundle
 
-### Slice `CL1.3`: Add tests for contract shape and empty-state semantics
+## Phase 2: Backend Overview Derivations
+
+### Slice `CL-R3`: Add 2-codon signed preference payload
 
 Goal:
 
-- lock the page boundary before adding rendering complexity
+- provide the default overview for 2-codon residues without tiny split bars
 
 Scope:
 
-- stats-layer tests for bundle shape
-- browser-view tests for residue-required behavior
-- template-context tests for empty states and current-scope details
+- add a payload builder that runs only when `len(visible_codons) == 2`
+- derive one cell per occupied `Taxon x Length-bin`
+- use the first backend-ordered codon as codon A and the second as codon B
+
+Required cell fields:
+
+- row index or taxon id
+- bin index or bin start
+- preference score
+- observation count
+- species count
+- tooltip codon shares
+
+Preference definition:
+
+- `preference = share(codon A) - share(codon B)`
+- range is `[-1, 1]`
+- negative means codon B preferred
+- zero means balanced
+- positive means codon A preferred
+
+Required metadata:
+
+- codon A
+- codon B
+- metric label
+- support fields needed for opacity, marker, or tooltip display
 
 Exit criteria:
 
-- failing fast on contract drift becomes easy
-- no future chart work can silently change the backend shape
+- 2-codon residues can render a signed preference matrix directly from the
+  payload
+- no per-cell composition glyph data is required for the default overview
 
-## Phase 2: Live Grouped Backend
-
-### Slice `CL2.1`: Reuse the existing visible-taxon selection path
+### Slice `CL-R4`: Add 3+ codon dominant-codon payload
 
 Goal:
 
-- avoid recomputing the visible taxon set through a second ranking algorithm
+- provide the default overview for residues with 3 or more codons
 
 Scope:
 
-- reuse the codon-composition summary selection rules for:
-  - residue scope
-  - rank
-  - `min_count`
-  - `top_n`
-- preserve lineage ordering after selection
+- add a payload builder that runs when `len(visible_codons) >= 3`
+- derive one cell per occupied `Taxon x Length-bin`
+- reuse existing `dominant_codon` and `dominance_margin` from the shared bundle
 
-Required behavior:
+Required cell fields:
 
-- visible taxa are selected once
-- the same visible taxa feed overview, browse, and fallback tables
-- the page does not rank taxa differently in different sections
+- row index or taxon id
+- bin index or bin start
+- dominant codon
+- dominance margin
+- observation count
+- species count
+- tooltip codon shares
+
+Required metadata:
+
+- fixed visible codon order
+- category colors can be assigned frontend-side from backend codon order
+- metric label for dominance margin
 
 Exit criteria:
 
-- the visible taxon list is derived from one source of truth
+- 3+ codon residues can render a readable dominant-codon matrix
+- full composition remains available in tooltip, browse, and inspect but is not
+  drawn inside each overview cell
 
-### Slice `CL2.2`: Add grouped live query for `taxon x length-bin x codon`
-
-Goal:
-
-- fetch only the grouped rows needed for the current visible taxon set
-
-Scope:
-
-- add a grouped query builder in `apps/browser/stats/queries.py`
-- filter first, then annotate display taxa, then group
-- group by:
-  - display taxon
-  - length bin
-  - codon
-
-Recommended live query output:
-
-- `display_taxon_id`
-- `length_bin_start`
-- `codon`
-- `codon_fraction_sum`
-- `observation_count`
-- `species_count`
-
-Implementation rule:
-
-- do not expand every repeat call into a Python-side nested structure before
-  grouping
-- compute grouped rows in SQL and only assemble the compact bundle in Python
-
-Exit criteria:
-
-- the live path can build the page bundle without loading raw repeat-call-level
-  codon usage into Python
-
-### Slice `CL2.3`: Summarize grouped rows into the shared bundle
+### Slice `CL-R5`: Add composition shift payload
 
 Goal:
 
-- translate grouped SQL output into one reusable page object
+- expose where codon composition changes across adjacent length bins
 
 Scope:
 
-- add summarization helpers in `apps/browser/stats/summaries.py`
-- build:
-  - visible bins
-  - taxon rows
-  - ordered codon shares per occupied bin
-  - support metadata
-  - dominant codon and margin
+- derive transitions from the shared bundle
+- compare only adjacent visible bins where the taxon has occupied data in both
+  bins
+- do not fabricate transitions across missing bins
 
-Required behavior:
+Statistics:
 
-- codon shares remain normalized within each taxon-length bin
-- absent codons are represented as zero using the fixed visible codon order
-- sparse bins remain sparse rather than being silently dropped from the support
-  model
-
-Exit criteria:
-
-- one summarized bundle is enough to render:
-  - composition overview
-  - dominant-codon overview
-  - shift overview
-  - browse small multiples
-  - fallback tables
-
-### Slice `CL2.4`: Profile the live path before adding frontend work
-
-Goal:
-
-- make sure the page is not already too slow before UI layers hide the problem
-
-Scope:
-
-- time the new builder on the real Compose/Postgres dataset
-- measure:
-  - visible taxon selection
-  - grouped live query
-  - Python summarization
-
-Required behavior:
-
-- profile with realistic residue-scoped default settings
-- record whether the grouped live path is already acceptable or clearly needs a
-  rollup before broad frontend work
-
-Exit criteria:
-
-- there is a measured baseline for the live grouped path
-
-## Phase 3: Overview Matrix
-
-### Slice `CL3.1`: Extract shared non-pairwise chart helpers
-
-Goal:
-
-- reuse the proven browser chart shell behavior without forcing a pairwise
-  abstraction onto the wrong chart type
-
-Scope:
-
-- extract generic pieces from `static/js/pairwise-overview.js`:
-  - chart sizing
-  - visible-window row zoom
-  - taxonomy gutter reservation and attachment
-  - wheel and slider behavior
-- keep pairwise-specific matrix semantics in place for existing pages
-
-Required behavior:
-
-- no regression to codon or length pairwise overviews
-- the new viewer can reuse shared row-window and gutter mechanics
-
-Exit criteria:
-
-- generic chart shell utilities exist without breaking the current pairwise
-  code
-
-### Slice `CL3.2`: Implement primary `Composition matrix` mode
-
-Goal:
-
-- ship the composition-first landing state described in the overview
-
-Scope:
-
-- render `Taxon x Length-bin` cells from the shared bundle
 - for 2-codon residues:
-  - use a compact split tile or internal proportion bar
+  - `abs(share_A(next_bin) - share_A(previous_bin))`
 - for 3+ codon residues:
-  - use a tiny fixed-order stacked bar inside each cell
+  - L1 distance across the normalized codon-share vectors
 
-Required behavior:
+Required transition cell fields:
 
-- taxonomy gutter stays attached to the y-axis
-- visible rows are lineage-ordered
-- x-axis uses the backend-defined shared bins
-- low-support bins are visually downweighted or flagged
+- row index or taxon id
+- transition index
+- previous bin
+- next bin
+- shift value
+- previous support
+- next support
+- tooltip codon shares for both sides
 
-Exit criteria:
+Required metadata:
 
-- the page lands on composition, not scalar summaries
-
-Retry note:
-
-- the previous `CL3.2` attempt was reverted
-- the retry should begin with a deliberately simpler matrix than originally
-  described here:
-  - stable `Taxon x Length-bin` binding first
-  - no taxonomy gutter on the first rendering pass
-  - no custom-series cell glyphs on the first rendering pass
-  - add gutter and richer composition encoding only after the base matrix is
-    proven correct
-
-### Slice `CL3.3`: Implement `Dominant codon` companion mode
-
-Goal:
-
-- make codon dominance flips easy to scan at lineage scale
-
-Scope:
-
-- derive dominant codon and dominance margin from the shared bundle
-- render the same `Taxon x Length-bin` geometry with alternate cell emphasis
-
-Required behavior:
-
-- do not issue a new backend query for this mode
-- tooltip/reporting still exposes the underlying composition and support
-- weak dominance remains visually distinguishable from clear domination
+- transition labels
+- metric label
+- metric max or display domain for the heatmap legend
 
 Exit criteria:
 
-- users can scan where codon winners change with length without leaving the
-  overview layer
+- users can identify stable taxa and sharp transition points without viewing
+  full mixtures in every overview cell
 
-### Slice `CL3.4`: Implement `Composition shift` companion mode
+## Phase 3: Simple Matrix Renderer
+
+### Slice `CL-R6`: Add the first rectangular matrix renderer
 
 Goal:
 
-- reveal where codon composition changes sharply between adjacent bins
+- prove row/bin binding with the simplest possible frontend renderer
 
 Scope:
 
-- derive adjacent-bin transitions from the shared bundle
+- add a page-specific JS module only if one does not already exist
+- render rectangular heatmap-style cells from one payload
+- start without taxonomy gutter unless the shared gutter path works with no
+  extra chart-shape changes
+- use backend-provided row order and bin order directly
+
+Required behavior:
+
+- no custom miniature SVG glyphs
+- no tiny stacked bars
+- no composition bars inside cells
+- tooltip shows support and exact codon shares
+- missing cells are blank, not zero-valued real observations
+
+Exit criteria:
+
+- the preference or dominance matrix renders correctly on the real dataset
+- row labels, bin labels, cells, and tooltips bind to the same backend data
+
+### Slice `CL-R7`: Wire default overview mode selection
+
+Goal:
+
+- make the page choose the correct simple landing view for the selected residue
+
+Scope:
+
+- if exactly 2 codons are visible, render preference by default
+- if 3 or more codons are visible, render dominance by default
+- if fewer than 2 codons are visible, show an explanatory empty state
+- expose shift as a companion tab or segmented control once its payload exists
+
+Required behavior:
+
+- the user does not need to understand codon-count internals to get the right
+  chart
+- mode labels should describe the biological question, not implementation
+  mechanics
+
+Exit criteria:
+
+- the landing overview is simple and residue-aware
+
+### Slice `CL-R8`: Add support-aware cell styling
+
+Goal:
+
+- prevent sparse long bins from looking as reliable as dense central bins
+
+Scope:
+
+- start with one simple support encoding:
+  - opacity by observation count, or
+  - a subtle low-support marker
+- show exact observation and species counts in tooltips
+
+Required behavior:
+
+- support styling must not obscure the preference or dominance encoding
+- support thresholds should be conservative and documented in payload metadata
+  or frontend constants
+
+Exit criteria:
+
+- low-support long-bin patterns are visibly lower-confidence
+
+### Slice `CL-R9`: Add taxonomy gutter only after base binding is stable
+
+Goal:
+
+- restore lineage context without repeating the previous frontend failure mode
+
+Scope:
+
+- reuse the existing SVG taxonomy gutter path only after the matrix itself is
+  correct
+- keep row centers derived from the same visible row model as the matrix
+- do not mix category labels, taxon ids, and row indices in the same renderer
+
+Required behavior:
+
+- gutter alignment is verified against the matrix at initial render and after
+  zoom or pan
+- if gutter integration destabilizes the chart, ship the simple matrix first
+  and leave gutter as the next slice
+
+Exit criteria:
+
+- lineage context is added without compromising the chart binding
+
+## Phase 4: Browse Layer Refactor
+
+### Slice `CL-R10`: Add per-taxon small multiples from the shared bundle
+
+Goal:
+
+- preserve full composition detail where it is readable
+
+Scope:
+
+- one panel per selected or visible taxon
+- fixed x-axis = backend length bins
+- fixed codon order across panels
+- reuse the same `matrix_rows` bundle
+
+Rendering rules:
+
 - for 2-codon residues:
-  - use absolute change in one codon share
+  - line or area chart for codon A share is preferred
+  - codon B is implied but can appear in tooltip or legend
 - for 3+ codon residues:
-  - use L1 distance between normalized composition vectors
-
-Required behavior:
-
-- reuse the same visible taxa and the same bin order
-- do not compute shift through a separate query
-- empty or missing adjacent bins should not fabricate transitions
+  - stacked bars or stacked areas are preferred
+  - avoid multi-line overlays for many codons
 
 Exit criteria:
 
-- the page highlights transition points rather than only static mixtures
+- users can read full codon-composition trajectories for selected taxa without
+  overview clutter
 
-## Phase 4: Browse Layer
-
-### Slice `CL4.1`: Implement per-taxon small multiples
+### Slice `CL-R11`: Add support strips to browse panels
 
 Goal:
 
-- move from lineage-scale scanning to per-taxon trajectory reading
+- keep full composition trajectories support-aware
 
 Scope:
 
-- build one panel per visible taxon
-- reuse the shared summarized bundle
-- for 2-codon residues:
-  - line or area view
-- for 3+ codon residues:
-  - stacked bars or stacked areas
-
-Required behavior:
-
-- fixed codon order across all panels
-- fixed x-axis bin order across all panels
-- bounded visible taxa only
+- add a compact count strip or dot strip under each taxon panel
+- use observation counts as the first support signal
+- include species counts in tooltips where available
 
 Exit criteria:
 
-- users can compare multiple taxa without overlay clutter
+- long-bin composition changes remain visually tied to their support
 
-### Slice `CL4.2`: Add support strips under each panel
+### Slice `CL-R12`: Keep the grouped fallback table aligned
 
 Goal:
 
-- keep sparse long bins biologically honest in the browse layer
+- keep no-JS and testable output consistent with the refactored page
 
 Scope:
 
-- render a simple count strip or dot strip from per-bin support metadata
-- expose support in tooltips and the server-rendered fallback table
-
-Required behavior:
-
-- support remains visible even when codon mixtures look dramatic
-- low-support long bins do not read as equally reliable as dense central bins
+- update table copy to match the new summary-first plan
+- keep table rows derived from the same bundle
+- include dominant codon, dominance margin, support, and codon shares
 
 Exit criteria:
 
-- browse panels preserve both mixture and support
-
-### Slice `CL4.3`: Add server-rendered grouped fallback output
-
-Goal:
-
-- preserve no-JS usefulness and simplify test coverage
-
-Scope:
-
-- render a grouped HTML table based on the shared bundle
-- include at minimum:
-  - taxon
-  - length bin
-  - observation count
-  - species count
-  - codon shares
-  - dominant codon
-
-Required behavior:
-
-- fallback output describes the same visible taxa and bins as the JS browse
-  layer
-- pagination, if needed, should reuse the grouped summary pagination pattern
-
-Exit criteria:
-
-- the page remains analytically useful without JavaScript
+- no-JS output remains useful and describes the same visible data as the JS
+  views
 
 ## Phase 5: Inspect Layer
 
-### Slice `CL5.1`: Add branch-scoped inspect activation
+### Slice `CL-R13`: Add focused inspect activation
 
 Goal:
 
-- match the current viewer-family inspect contract before broadening it
+- provide exact codon-length detail for one taxon, branch, or filtered subset
 
 Scope:
 
-- activate inspect only when branch scope is active
-- reuse the same residue and filter-state handling as the page shell
-
-Required behavior:
-
-- inspect does not create a separate filter system
-- branch scope remains the primary detail handoff from overview and browse
+- start with branch-scoped inspect to match the current viewer family
+- reuse the same filter-state and residue handling
+- do not create a second filter system
 
 Exit criteria:
 
-- the new viewer fits the current overview/browse/inspect page family
+- a focused lineage can be inspected without leaving the viewer contract
 
-### Slice `CL5.2`: Add focused detailed chart and exact table
+### Slice `CL-R14`: Add detailed chart and exact table
 
 Goal:
 
-- expose the full composition-across-length story for one focused lineage
+- make Tier 3 the home for exact full-composition detail
 
 Scope:
 
-- render a detailed composition-across-length chart
-- render a server-side exact table with:
+- render one detailed composition-across-length chart
+- render one exact table with:
   - length bin
-  - observation count
-  - species count
-  - codon shares
+  - codon counts where available
+  - codon fractions
+  - support count
   - dominant codon
   - dominance margin
+  - optional entropy or evenness
   - optional delta from previous bin
 
 Required behavior:
 
-- inspect reuses the same codon order as overview and browse
-- inspect reuses the same length-bin contract
-- inspect does not fall back to raw per-call browsing
+- codon order matches browse
+- length-bin order comes from the backend
+- exact values match the bundle or focused inspect query
 
 Exit criteria:
 
-- one lineage can be inspected in detail without leaving the viewer contract
+- exact composition values are available without overloading the overview
 
-### Slice `CL5.3`: Add optional comparison summary
+### Slice `CL-R15`: Add optional lineage comparison
 
 Goal:
 
-- provide context without turning inspect into a large dashboard
+- provide context without turning inspect into a second dashboard
 
 Scope:
 
-- optionally compare the focused branch against:
+- optionally compare the focused lineage with:
   - parent branch aggregate
+  - selected reference taxon
   - sibling mean
-- keep this as a compact companion, not a second main chart family
 
 Exit criteria:
 
-- inspect gains lineage context without exploding scope
+- inspect gains context while remaining focused
 
-## Phase 6: Default-Path Rollup Optimization
+## Phase 6: Optional Pairwise Taxa Similarity
 
-### Slice `CL6.1`: Add a dedicated rollup model and migration
+### Slice `CL-R16`: Add secondary trajectory-similarity payload
 
 Goal:
 
-- make the default residue-scoped page fast without depending on expensive live
-  grouped aggregation
-
-Recommended rollup grain:
-
-- `repeat_residue`
-- `display_rank`
-- `display_taxon`
-- `length_bin_start`
-- `observation_count`
-- `species_count`
-- `codon`
-- `codon_share`
+- support clustering and outlier detection without replacing the main overview
 
 Scope:
 
-- add a new canonical summary model and migration
-- add browse-oriented indexes for:
-  - residue
-  - rank
-  - observation count ordering
-  - display taxon lookup
-  - taxon-plus-bin lookup
+- summarize each taxon's codon-length trajectory into a support-aware vector
+- compute pairwise taxa distances
+- present as a secondary tab, not the landing state
 
 Required behavior:
 
-- the rollup preserves the same biological meaning as the live grouped path
-- one row grain is sufficient to reconstruct composition, dominance, support,
-  and shift at request time
+- preserve the main `Taxon x Length-bin` overview as the primary page identity
+- make clear that pairwise distance hides where along length taxa differ
 
 Exit criteria:
 
-- the database can answer the default page path from precomputed grouped rows
+- users can compare whole-trajectory similarity as a companion analysis
 
-### Slice `CL6.2`: Add rollup rebuild command
+## Phase 7: Stabilization And Freeze
+
+### Slice `CL-R17`: Verify performance and rendering on real data
 
 Goal:
 
-- give the browser an explicit backfill path like the codon-composition viewer
+- ensure the simple matrix design works under realistic load
 
 Scope:
 
-- add a rebuild helper in `apps/browser/stats/`
-- add a management command under `apps/browser/management/commands/`
-
-Required behavior:
-
-- support PostgreSQL-first rebuild logic
-- retain a Python fallback if the project still expects test/database
-  portability
+- time bundle construction on the Compose/Postgres dataset
+- verify default rollup path remains fast
+- verify live path remains acceptable for filtered scopes
+- test matrix rendering with dense bins and realistic visible taxa
 
 Exit criteria:
 
-- rollup rows can be rebuilt intentionally and repeatably
+- the viewer remains responsive under intended bounded settings
 
-### Slice `CL6.3`: Add safe rollup eligibility logic
-
-Goal:
-
-- use the rollup only when it actually matches the request semantics
-
-Recommended rollup-eligible scope:
-
-- residue selected
-- no explicit run filter
-- no branch scope
-- no target search
-- no method filter
-- no purity filter
-- no custom length range
-
-Required behavior:
-
-- default unscoped path uses rollup
-- narrower filtered paths fall back to the live grouped query
-- rollup and live paths produce the same visible contract
-
-Exit criteria:
-
-- the hot path is fast and correctness-preserving
-
-### Slice `CL6.4`: Add parity tests and timing checks
+### Slice `CL-R18`: Freeze first-wave contract
 
 Goal:
 
-- prevent the optimized path from silently drifting from the live path
+- document what shipped and mark deferred items explicitly
 
 Scope:
 
-- rollup/live parity tests for visible codons, bins, support counts, and codon
-  shares
-- timing checks against the Compose/Postgres dataset
+- update overview and implementation docs after implementation settles
+- record which modes shipped
+- record which support encoding shipped
+- record whether taxonomy gutter and pairwise similarity shipped or were
+  deferred
 
 Exit criteria:
 
-- the optimized default path is both faster and meaningfully equivalent
-
-## Phase 7: Final Integration And Stabilization
-
-### Slice `CL7.1`: Add browser navigation and handoffs
-
-Goal:
-
-- make the page discoverable only after its core semantics are stable
-
-Scope:
-
-- add links from the browser home or related viewer surfaces
-- preserve taxon detail and branch drill-down handoffs
-
-Exit criteria:
-
-- the page is discoverable without changing its core contract
-
-### Slice `CL7.2`: Harden browser performance and rendering behavior
-
-Goal:
-
-- keep the viewer usable at realistic visible-taxa sizes
-
-Scope:
-
-- clamp any page-specific `top_n` maximum if needed
-- reduce expensive per-cell styling for large windows
-- verify chart resize, wheel, and gutter behavior on desktop and mobile widths
-
-Exit criteria:
-
-- the page remains responsive under the intended bounded load
-
-### Slice `CL7.3`: Freeze the shipped contract
-
-Goal:
-
-- document what the first shipped version actually is
-
-Scope:
-
-- update the overview and slice docs once implementation settles
-- mark deferred items explicitly rather than leaving them implied
-
-Exit criteria:
-
-- future work starts from a clear shipped contract instead of a half-open plan
+- future work starts from a clear shipped contract
 
 ## Recommended Delivery Order
 
-If this work is done incrementally, the recommended order is:
-
-1. `CL1.1` to `CL1.3`
-2. `CL2.1` to `CL2.4`
-3. `CL3.1` and `CL3.2`
-4. `CL4.1` to `CL4.3`
-5. `CL3.3` and `CL3.4`
-6. `CL5.1` to `CL5.3`
-7. `CL6.1` to `CL6.4`
-8. `CL7.1` to `CL7.3`
+1. `CL-R1` to `CL-R2`
+2. `CL-R3` and `CL-R4`
+3. `CL-R6` and `CL-R7`
+4. `CL-R5`
+5. `CL-R8`
+6. `CL-R9` if the simple matrix is stable
+7. `CL-R10` to `CL-R12`
+8. `CL-R13` to `CL-R15`
+9. `CL-R16` only if a secondary pairwise view is still needed
+10. `CL-R17` to `CL-R18`
 
 Reasoning:
 
-- get the shared data contract correct before building specialized modes
-- prove the live grouped semantics before adding the rollup
-- make composition mode work before dominance and shift
-- let inspect and navigation follow the stable page contract
+- keep the existing backend bundle and page shell
+- derive simple overview payloads before adding frontend complexity
+- ship preference/dominance first because they define the new landing state
+- add shift next because it answers a distinct transition question
+- delay gutter, browse, inspect, and pairwise until the simple matrix path is
+  correct
 
 ## High-Risk Areas
 
-These slices are most likely to need extra care:
-
-- `CL2.2`
-  - grouped query design can become too expensive if it joins and expands
-    call-level codon rows carelessly
-- `CL3.1`
-  - frontend extraction can regress the existing pairwise pages if it is too
-    broad
-- `CL6.1`
-  - a rollup with the wrong grain will either lose biological meaning or still
-    force too much request-time work
+- frontend matrix binding:
+  - avoid mixing row indices, taxon ids, and category labels
+- support encoding:
+  - keep it subtle so it does not obscure the primary metric
+- shift calculations:
+  - do not fabricate transitions across missing bins
+- taxonomy gutter:
+  - add only after the base matrix is stable
+- pairwise similarity:
+  - keep secondary because it hides where along length differences occur
 
 ## Non-Negotiable Invariants
 
 - residue is required for the page's main contract
-- codon order stays fixed across all tiers
+- codon order stays fixed across browse and inspect
 - length bins come from shared backend helpers
 - visible taxa stay lineage-ordered
 - support metadata remains first-class
-- dominant-codon and shift views are derived companions, not separate biological
-  contracts
+- preference, dominance, and shift are derived from the shared bundle
+- overview does not use tiny composition glyphs as the first-wave default
 - default-path optimization must preserve the live grouped meaning
