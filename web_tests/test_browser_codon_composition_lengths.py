@@ -123,9 +123,15 @@ class BrowserCodonCompositionLengthExplorerTests(TestCase):
         self.assertEqual(response.context["total_taxa_count"], 0)
         self.assertEqual(response.context["visible_taxa_count"], 0)
         self.assertEqual(response.context["summary_rows"], [])
+        self.assertEqual(response.context["overview_default_mode"], "preference")
+        self.assertFalse(response.context["overview_preference_payload"]["available"])
+        self.assertFalse(response.context["overview_dominance_payload"]["available"])
+        self.assertFalse(response.context["overview_shift_payload"]["available"])
         self.assertContains(response, "Select a residue to summarize codon composition by length.")
         self.assertContains(response, "Codon preference and transition summaries")
-        self.assertContains(response, "future overview, browse, and inspect layers will reuse")
+        self.assertContains(response, "the overview uses and future browse and inspect layers will reuse")
+        self.assertContains(response, "codon-composition-length-explorer.js")
+        self.assertContains(response, "codon-composition-length-preference-overview-payload")
 
     def test_codon_composition_length_explorer_normalizes_filters(self):
         response = self.client.get(
@@ -193,6 +199,20 @@ class BrowserCodonCompositionLengthExplorerTests(TestCase):
         self.assertEqual(response.context["visible_taxa_count"], 1)
         self.assertEqual(response.context["visible_codons"], ["CAA", "CAG"])
         self.assertEqual(len(response.context["summary_rows"]), 2)
+        self.assertEqual(response.context["overview_default_mode"], "preference")
+        self.assertTrue(response.context["overview_preference_payload"]["available"])
+        self.assertFalse(response.context["overview_dominance_payload"]["available"])
+        self.assertTrue(response.context["overview_shift_payload"]["available"])
+        self.assertEqual(
+            [
+                (cell["binLabel"], cell["preference"])
+                for cell in response.context["overview_preference_payload"]["cells"]
+            ],
+            [
+                ("10-14", 1),
+                ("15-19", -1),
+            ],
+        )
         self.assertContains(response, "Mammalia")
         self.assertContains(response, "10-14")
         self.assertContains(response, "15-19")

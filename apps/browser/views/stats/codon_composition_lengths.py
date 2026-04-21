@@ -4,6 +4,9 @@ from django.views.generic import TemplateView
 from apps.browser.stats import (
     apply_stats_filter_context,
     build_codon_length_composition_bundle,
+    build_codon_length_dominance_overview_payload,
+    build_codon_length_preference_overview_payload,
+    build_codon_length_shift_overview_payload,
     build_filtered_repeat_call_queryset,
     build_matching_repeat_calls_with_codon_usage_count,
     build_stats_filter_state,
@@ -151,6 +154,14 @@ class CodonCompositionLengthExplorerView(TemplateView):
             ),
         }
 
+    def _default_overview_mode(self, summary_bundle: dict[str, object]) -> str:
+        visible_codon_count = len(summary_bundle["visible_codons"])
+        if visible_codon_count == 2:
+            return "preference"
+        if visible_codon_count >= 3:
+            return "dominance"
+        return "preference"
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         filter_state = self._get_filter_state()
@@ -166,6 +177,22 @@ class CodonCompositionLengthExplorerView(TemplateView):
         context["visible_taxa_count"] = summary_bundle["visible_taxa_count"]
         context["summary_rows"] = summary_bundle["summary_rows"]
         context["visible_codons"] = summary_bundle["visible_codons"]
+        context["overview_default_mode"] = self._default_overview_mode(summary_bundle)
+        context["overview_preference_payload"] = build_codon_length_preference_overview_payload(
+            summary_bundle
+        )
+        context["overview_dominance_payload"] = build_codon_length_dominance_overview_payload(
+            summary_bundle
+        )
+        context["overview_shift_payload"] = build_codon_length_shift_overview_payload(summary_bundle)
+        context["overview_preference_payload_id"] = (
+            "codon-composition-length-preference-overview-payload"
+        )
+        context["overview_dominance_payload_id"] = (
+            "codon-composition-length-dominance-overview-payload"
+        )
+        context["overview_shift_payload_id"] = "codon-composition-length-shift-overview-payload"
+        context["overview_container_id"] = "codon-composition-length-overview-chart"
         context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
         context["rank_choices"] = [
             {"value": rank, "label": rank}
