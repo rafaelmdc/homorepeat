@@ -12,6 +12,9 @@ from apps.browser.stats import (
     apply_stats_filter_context,
     build_ccdf_points,
     build_codon_length_composition_bundle,
+    build_codon_length_dominance_overview_payload,
+    build_codon_length_preference_overview_payload,
+    build_codon_length_shift_overview_payload,
     build_filtered_codon_usage_queryset,
     build_codon_overview_payload,
     build_group_codon_species_call_fraction_queryset,
@@ -441,6 +444,182 @@ class BrowserStatsTests(TestCase):
             ],
             [("10-14", "CAA", 2, 2)],
         )
+
+    def test_codon_length_preference_overview_payload_derives_from_two_codon_bundle(self):
+        bundle = {
+            "visible_codons": ["CAA", "CAG"],
+            "visible_bins": [
+                {"start": 10, "end": 14, "label": "10-14"},
+                {"start": 15, "end": 19, "label": "15-19"},
+            ],
+            "matrix_rows": [
+                {
+                    "taxon_id": 1,
+                    "taxon_name": "Mammalia",
+                    "rank": "class",
+                    "observation_count": 12,
+                    "species_count": 2,
+                    "bin_rows": [
+                        {
+                            "bin": {"start": 10, "end": 14, "label": "10-14"},
+                            "observation_count": 8,
+                            "species_count": 2,
+                            "codon_shares": [
+                                {"codon": "CAA", "share": 0.75},
+                                {"codon": "CAG", "share": 0.25},
+                            ],
+                            "dominant_codon": "CAA",
+                            "dominance_margin": 0.5,
+                        },
+                        {
+                            "bin": {"start": 15, "end": 19, "label": "15-19"},
+                            "observation_count": 4,
+                            "species_count": 1,
+                            "codon_shares": [
+                                {"codon": "CAA", "share": 0.2},
+                                {"codon": "CAG", "share": 0.8},
+                            ],
+                            "dominant_codon": "CAG",
+                            "dominance_margin": 0.6,
+                        },
+                    ],
+                },
+            ],
+        }
+
+        payload = build_codon_length_preference_overview_payload(bundle)
+
+        self.assertTrue(payload["available"])
+        self.assertEqual(payload["mode"], "preference")
+        self.assertEqual(payload["codonA"], "CAA")
+        self.assertEqual(payload["codonB"], "CAG")
+        self.assertEqual(payload["metricLabel"], "CAA - CAG")
+        self.assertEqual(
+            [
+                (cell["rowIndex"], cell["binIndex"], cell["preference"], cell["supportTier"])
+                for cell in payload["cells"]
+            ],
+            [
+                (0, 0, 0.5, "medium"),
+                (0, 1, -0.6, "low"),
+            ],
+        )
+        self.assertEqual(payload["cells"][0]["codonShares"][0], {"codon": "CAA", "share": 0.75})
+
+    def test_codon_length_dominance_overview_payload_derives_from_three_codon_bundle(self):
+        bundle = {
+            "visible_codons": ["AAA", "AAG", "AAC"],
+            "visible_bins": [{"start": 10, "end": 14, "label": "10-14"}],
+            "matrix_rows": [
+                {
+                    "taxon_id": 1,
+                    "taxon_name": "Mammalia",
+                    "rank": "class",
+                    "observation_count": 24,
+                    "species_count": 3,
+                    "bin_rows": [
+                        {
+                            "bin": {"start": 10, "end": 14, "label": "10-14"},
+                            "observation_count": 24,
+                            "species_count": 3,
+                            "codon_shares": [
+                                {"codon": "AAA", "share": 0.15},
+                                {"codon": "AAG", "share": 0.65},
+                                {"codon": "AAC", "share": 0.2},
+                            ],
+                            "dominant_codon": "AAG",
+                            "dominance_margin": 0.45,
+                        },
+                    ],
+                },
+            ],
+        }
+
+        payload = build_codon_length_dominance_overview_payload(bundle)
+
+        self.assertTrue(payload["available"])
+        self.assertEqual(payload["mode"], "dominance")
+        self.assertEqual(payload["metricLabel"], "Dominance margin")
+        self.assertEqual(payload["valueMax"], 0.45)
+        self.assertEqual(
+            payload["cells"][0],
+            {
+                "rowIndex": 0,
+                "binIndex": 0,
+                "binStart": 10,
+                "binLabel": "10-14",
+                "value": 0.45,
+                "dominantCodon": "AAG",
+                "dominantCodonIndex": 1,
+                "dominanceMargin": 0.45,
+                "codonShares": [
+                    {"codon": "AAA", "share": 0.15},
+                    {"codon": "AAG", "share": 0.65},
+                    {"codon": "AAC", "share": 0.2},
+                ],
+                "observationCount": 24,
+                "speciesCount": 3,
+                "supportTier": "high",
+            },
+        )
+
+    def test_codon_length_shift_overview_payload_skips_missing_adjacent_bins(self):
+        bundle = {
+            "visible_codons": ["AAA", "AAG", "AAC"],
+            "visible_bins": [
+                {"start": 10, "end": 14, "label": "10-14"},
+                {"start": 15, "end": 19, "label": "15-19"},
+                {"start": 20, "end": 24, "label": "20-24"},
+            ],
+            "matrix_rows": [
+                {
+                    "taxon_id": 1,
+                    "taxon_name": "Mammalia",
+                    "rank": "class",
+                    "observation_count": 30,
+                    "species_count": 3,
+                    "bin_rows": [
+                        {
+                            "bin": {"start": 10, "end": 14, "label": "10-14"},
+                            "observation_count": 20,
+                            "species_count": 3,
+                            "codon_shares": [
+                                {"codon": "AAA", "share": 0.5},
+                                {"codon": "AAG", "share": 0.25},
+                                {"codon": "AAC", "share": 0.25},
+                            ],
+                            "dominant_codon": "AAA",
+                            "dominance_margin": 0.25,
+                        },
+                        {
+                            "bin": {"start": 15, "end": 19, "label": "15-19"},
+                            "observation_count": 10,
+                            "species_count": 2,
+                            "codon_shares": [
+                                {"codon": "AAA", "share": 0.2},
+                                {"codon": "AAG", "share": 0.5},
+                                {"codon": "AAC", "share": 0.3},
+                            ],
+                            "dominant_codon": "AAG",
+                            "dominance_margin": 0.2,
+                        },
+                    ],
+                },
+            ],
+        }
+
+        payload = build_codon_length_shift_overview_payload(bundle)
+
+        self.assertTrue(payload["available"])
+        self.assertEqual(
+            [transition["label"] for transition in payload["transitions"]],
+            ["10-14 -> 15-19", "15-19 -> 20-24"],
+        )
+        self.assertEqual(len(payload["cells"]), 1)
+        self.assertEqual(payload["cells"][0]["transitionIndex"], 0)
+        self.assertEqual(payload["cells"][0]["shift"], 0.6)
+        self.assertEqual(payload["cells"][0]["previousSupport"]["supportTier"], "high")
+        self.assertEqual(payload["cells"][0]["nextSupport"]["supportTier"], "medium")
 
     def test_codon_length_composition_bundle_skips_rollup_for_filtered_scope(self):
         request = self.factory.get(
