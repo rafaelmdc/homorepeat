@@ -1159,7 +1159,8 @@
       return null;
     }
 
-    const bottomTop = chart.getHeight() - bottomGutterHeight;
+    const bottomOffset = numericValue(options.bottomOffset, 0);
+    const bottomTop = chart.getHeight() - bottomGutterHeight - bottomOffset;
     const showLabels = options.showLabels !== false;
     const showBraceLabels = options.showBraceLabels !== false;
     let bottomLeafLabelExtent = 0;

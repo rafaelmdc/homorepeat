@@ -662,8 +662,9 @@
       });
     }
 
-    const PAIRWISE_X_SLIDER_BOTTOM_OFFSET = 24;
+    const PAIRWISE_X_SLIDER_OUTER_PAD = 8;
     const PAIRWISE_X_SLIDER_HEIGHT = 12;
+    const PAIRWISE_X_SLIDER_INNER_PAD = 8;
 
     function computePairwiseLayout(visibleRowCount, hasXSlider) {
       const showBottomTreeLeafLabels = shouldShowBottomTreeLeafLabels(visibleRowCount);
@@ -673,14 +674,17 @@
         && shouldShowMatrixColumnLabels(visibleRowCount);
       const bottomGutterHeight = overviewBottomTreeHeight(visibleRowCount);
       const labelBand = showMatrixColumnLabels ? 92 : 28;
-      const sliderBand = hasXSlider
-        ? PAIRWISE_X_SLIDER_BOTTOM_OFFSET + PAIRWISE_X_SLIDER_HEIGHT
+      // xZoomBand: total vertical space reserved at container bottom for the slider row
+      const xZoomBand = hasXSlider
+        ? PAIRWISE_X_SLIDER_OUTER_PAD + PAIRWISE_X_SLIDER_HEIGHT + PAIRWISE_X_SLIDER_INNER_PAD
         : 0;
       return {
         top: 32,
-        bottom: bottomGutterHeight + sliderBand + labelBand,
-        xZoomBottom: hasXSlider ? bottomGutterHeight + PAIRWISE_X_SLIDER_BOTTOM_OFFSET : null,
+        // Stack from container bottom: xZoomBand | bottomGutterHeight | labelBand | grid
+        bottom: xZoomBand + bottomGutterHeight + labelBand,
+        xZoomBottom: hasXSlider ? PAIRWISE_X_SLIDER_OUTER_PAD : null,
         xZoomHeight: PAIRWISE_X_SLIDER_HEIGHT,
+        xZoomBand,
         bottomGutterHeight,
         showMatrixColumnLabels,
         showBottomTreeLeafLabels,
@@ -770,7 +774,8 @@
           right: margins.right,
           showLabels: layout.showBottomTreeLeafLabels,
           showBraceLabels: layout.showBottomTreeBraceLabels,
-          bottomGutterHeight: overviewBottomTreeHeight(visibleRowCount),
+          bottomGutterHeight: layout.bottomGutterHeight,
+          bottomOffset: layout.xZoomBand,
         });
       }
     }
