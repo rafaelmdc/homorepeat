@@ -23,11 +23,12 @@
     "#b04f6f",
     "#9a7b2f",
   ];
+  const DEFAULT_VISIBLE_COLUMNS = 64;
 
   function supportOpacity(cell, payload) {
     const maxObservationCount = Math.max(1, payload.maxObservationCount || 1);
     const observationCount = Math.max(0, cell.observationCount || 0);
-    return Math.max(0.32, Math.min(1, 0.32 + 0.68 * Math.sqrt(observationCount / maxObservationCount)));
+    return Math.max(0.62, Math.min(1, 0.62 + 0.38 * Math.sqrt(observationCount / maxObservationCount)));
   }
 
   function modePayload(payloads, mode) {
@@ -55,6 +56,46 @@
 
   function cellXIndex(cell, payload) {
     return payload.mode === "shift" ? cell.transitionIndex : cell.binIndex;
+  }
+
+  function defaultColumnZoomState(columnCount) {
+    if (columnCount <= DEFAULT_VISIBLE_COLUMNS) return null;
+    return {
+      startValue: 0,
+      endValue: DEFAULT_VISIBLE_COLUMNS - 1,
+    };
+  }
+
+  function normalizeColumnZoomState(columnCount, zoomState) {
+    if (columnCount <= DEFAULT_VISIBLE_COLUMNS) return null;
+    const fallback = defaultColumnZoomState(columnCount);
+    const startValue = Math.max(0, Math.min(columnCount - 1, Math.round(
+      typeof zoomState?.startValue === "number" ? zoomState.startValue : fallback.startValue,
+    )));
+    const endValue = Math.max(startValue, Math.min(columnCount - 1, Math.round(
+      typeof zoomState?.endValue === "number" ? zoomState.endValue : fallback.endValue,
+    )));
+    return { startValue, endValue };
+  }
+
+  function columnZoomStateFromParams(params, columnCount) {
+    if (!params) return null;
+    const payload = Array.isArray(params.batch) && params.batch.length > 0 ? params.batch[0] : params;
+    if (!payload || payload.dataZoomId !== "codon-length-x-slider") return null;
+    if (payload.startValue != null || payload.endValue != null) {
+      return normalizeColumnZoomState(columnCount, {
+        startValue: payload.startValue,
+        endValue: payload.endValue,
+      });
+    }
+    return null;
+  }
+
+  function labelInterval(columnCount) {
+    if (columnCount <= 32) return 0;
+    if (columnCount <= 96) return 4;
+    if (columnCount <= 180) return 9;
+    return 19;
   }
 
   function seriesData(payload) {
@@ -140,14 +181,49 @@
     ];
   }
 
-  function chartOption(payload, zoomState) {
+  function chartOption(payload, rowZoomState, columnZoomState) {
+    const labels = xLabels(payload);
+    const xZoom = columnZoomState
+      ? [
+          {
+            id: "codon-length-x-inside",
+            type: "inside",
+            xAxisIndex: 0,
+            filterMode: "none",
+            zoomOnMouseWheel: false,
+            moveOnMouseWheel: false,
+            moveOnMouseMove: true,
+            startValue: columnZoomState.startValue,
+            endValue: columnZoomState.endValue,
+          },
+          {
+            id: "codon-length-x-slider",
+            type: "slider",
+            xAxisIndex: 0,
+            filterMode: "none",
+            left: 172,
+            right: payload.mode === "dominance" ? 28 : 96,
+            bottom: 24,
+            height: 18,
+            brushSelect: false,
+            startValue: columnZoomState.startValue,
+            endValue: columnZoomState.endValue,
+            fillerColor: "rgba(15, 89, 100, 0.16)",
+            borderColor: "rgba(23, 36, 44, 0.08)",
+            handleStyle: {
+              color: "#0f5964",
+              borderColor: "#0f5964",
+            },
+          },
+        ]
+      : [];
     return {
       animation: false,
       grid: {
         left: 172,
         right: payload.mode === "dominance" ? 28 : 96,
         top: 36,
-        bottom: 92,
+        bottom: columnZoomState ? 112 : 76,
         containLabel: false,
       },
       tooltip: {
@@ -156,11 +232,14 @@
       },
       xAxis: {
         type: "category",
-        data: xLabels(payload),
+        data: labels,
         axisLabel: {
           color: "#63727a",
-          rotate: 45,
-          interval: 0,
+          rotate: 0,
+          interval: labelInterval(labels.length),
+          hideOverlap: true,
+          width: 52,
+          overflow: "truncate",
         },
         axisTick: { alignWithLabel: true },
       },
@@ -174,11 +253,14 @@
           overflow: "truncate",
         },
       },
-      dataZoom: buildYAxisZoom(payload.visibleTaxaCount || 0, zoomState, {
+      dataZoom: [
+        ...buildYAxisZoom(payload.visibleTaxaCount || 0, rowZoomState, {
         right: payload.mode === "dominance" ? 8 : 72,
         top: 36,
-        bottom: 92,
-      }),
+          bottom: columnZoomState ? 112 : 76,
+        }),
+        ...xZoom,
+      ],
       visualMap: visualMap(payload),
       series: [
         {
@@ -234,28 +316,35 @@
     }
 
     let currentMode = payload.mode;
-    let currentZoomState = normalizeZoomState(
+    let currentRowZoomState = normalizeZoomState(
       payload.visibleTaxaCount || 0,
       defaultZoomState(payload.visibleTaxaCount || 0),
     );
+    let currentColumnZoomState = normalizeColumnZoomState(
+      xLabels(payload).length,
+      defaultColumnZoomState(xLabels(payload).length),
+    );
     container.style.height = `${chartHeightForRowCount(payload.visibleTaxaCount || 0, { minimumHeight: 360 })}px`;
     const chart = window.echarts.init(container);
-    installWheelHandler(chart, payload.visibleTaxaCount || 0, () => currentZoomState);
+    installWheelHandler(chart, payload.visibleTaxaCount || 0, () => currentRowZoomState);
 
     function render() {
       payload = modePayload(payloads, currentMode);
-      currentZoomState = normalizeZoomState(payload.visibleTaxaCount || 0, currentZoomState);
+      currentRowZoomState = normalizeZoomState(payload.visibleTaxaCount || 0, currentRowZoomState);
+      currentColumnZoomState = normalizeColumnZoomState(xLabels(payload).length, currentColumnZoomState);
       container.hidden = false;
       if (emptyMessage) emptyMessage.hidden = true;
       syncButtons(buttons, currentMode, payloads);
       syncDescriptions(descriptions, currentMode);
       container.style.height = `${chartHeightForRowCount(payload.visibleTaxaCount || 0, { minimumHeight: 360 })}px`;
-      chart.setOption(chartOption(payload, currentZoomState), { notMerge: true });
+      chart.setOption(chartOption(payload, currentRowZoomState, currentColumnZoomState), { notMerge: true });
       chart.resize();
     }
 
     chart.on("datazoom", (params) => {
-      currentZoomState = resolveZoomState(chart, payload.visibleTaxaCount || 0, params);
+      currentRowZoomState = resolveZoomState(chart, payload.visibleTaxaCount || 0, params);
+      currentColumnZoomState = columnZoomStateFromParams(params, xLabels(payload).length)
+        || currentColumnZoomState;
     });
 
     buttons.forEach((button) => {
@@ -264,9 +353,13 @@
         const nextPayload = modePayload(payloads, nextMode);
         if (!nextPayload || !nextPayload.available || nextMode === currentMode) return;
         currentMode = nextMode;
-        currentZoomState = normalizeZoomState(
+        currentRowZoomState = normalizeZoomState(
           nextPayload.visibleTaxaCount || 0,
           defaultZoomState(nextPayload.visibleTaxaCount || 0),
+        );
+        currentColumnZoomState = normalizeColumnZoomState(
+          xLabels(nextPayload).length,
+          defaultColumnZoomState(xLabels(nextPayload).length),
         );
         render();
       });
