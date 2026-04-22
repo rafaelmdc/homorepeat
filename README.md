@@ -39,7 +39,11 @@ cp .env.example .env
 
 With no database env vars set, Django uses the local SQLite dev database under `db.sqlite3`.
 Inside Compose, the same project runs against the `postgres` service.
-If you want the import UI to auto-detect published runs, set `HOMOREPEAT_RUNS_ROOT` to the directory that contains your run folders. Otherwise import manually with `--publish-root`.
+If you want the import UI to auto-detect published runs in Compose, set
+`HOMOREPEAT_RUNS_ROOT` to the host-side directory that contains your run folders.
+Compose mounts that directory read-only at `/workspace/homorepeat_pipeline/runs`
+and passes that container path to Django. Otherwise import manually with
+`--publish-root`.
 
 Run the development stack from the repo root with:
 
@@ -47,11 +51,10 @@ Run the development stack from the repo root with:
 docker compose up web worker postgres
 ```
 
-The Compose `web` service also mounts the sibling repo `../homorepeat_pipeline`
-read-only at `/workspace/homorepeat_pipeline` and defaults
-`HOMOREPEAT_RUNS_ROOT` to `/workspace/homorepeat_pipeline/runs`.
-That means the import UI can auto-detect runs from the sibling pipeline repo in
-the common local checkout layout.
+The Compose `web` and `worker` services mount the configured host runs directory
+read-only at `/workspace/homorepeat_pipeline/runs`. If `HOMOREPEAT_RUNS_ROOT` is
+unset or empty, Compose defaults the host source to `../homorepeat_pipeline/runs`
+for the common local checkout layout.
 
 The Compose boundary is intentional:
 - the importer reads mounted pipeline artifacts

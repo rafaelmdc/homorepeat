@@ -27,7 +27,7 @@ docker compose up web worker postgres
 docker compose exec web python manage.py import_run --next-pending
 ```
 
-Set `HOMOREPEAT_RUNS_ROOT` to a directory of run folders for the import UI to auto-detect them. Without database env vars, Django falls back to `db.sqlite3`.
+Set `HOMOREPEAT_RUNS_ROOT` to a host-side directory of run folders for the Compose import UI to auto-detect them. Compose mounts it at `/workspace/homorepeat_pipeline/runs`; direct `python3 manage.py ...` commands must receive a process-visible local path. Without database env vars, Django falls back to `db.sqlite3`.
 
 ## Architecture
 

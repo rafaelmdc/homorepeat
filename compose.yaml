@@ -59,10 +59,10 @@ services:
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:-homorepeat}
       DATABASE_HOST: ${DATABASE_HOST:-postgres}
       DATABASE_PORT: ${DATABASE_PORT:-5432}
-      HOMOREPEAT_RUNS_ROOT: ${HOMOREPEAT_RUNS_ROOT:-/workspace/homorepeat_pipeline/runs}
+      HOMOREPEAT_RUNS_ROOT: /workspace/homorepeat_pipeline/runs
     volumes:
       - .:/app
-      - ../homorepeat_pipeline:/workspace/homorepeat_pipeline:ro
+      - ${HOMOREPEAT_RUNS_ROOT:-../homorepeat_pipeline/runs}:/workspace/homorepeat_pipeline/runs:ro
     restart: "no"
     depends_on:
       postgres:
@@ -100,10 +100,10 @@ services:
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:-homorepeat}
       DATABASE_HOST: ${DATABASE_HOST:-postgres}
       DATABASE_PORT: ${DATABASE_PORT:-5432}
-      HOMOREPEAT_RUNS_ROOT: ${HOMOREPEAT_RUNS_ROOT:-/workspace/homorepeat_pipeline/runs}
+      HOMOREPEAT_RUNS_ROOT: /workspace/homorepeat_pipeline/runs
     volumes:
       - .:/app
-      - ../homorepeat_pipeline:/workspace/homorepeat_pipeline:ro
+      - ${HOMOREPEAT_RUNS_ROOT:-../homorepeat_pipeline/runs}:/workspace/homorepeat_pipeline/runs:ro
     ports:
       - "8000:8000"
     depends_on:
@@ -144,10 +144,10 @@ services:
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:-homorepeat}
       DATABASE_HOST: ${DATABASE_HOST:-postgres}
       DATABASE_PORT: ${DATABASE_PORT:-5432}
-      HOMOREPEAT_RUNS_ROOT: ${HOMOREPEAT_RUNS_ROOT:-/workspace/homorepeat_pipeline/runs}
+      HOMOREPEAT_RUNS_ROOT: /workspace/homorepeat_pipeline/runs
     volumes:
       - .:/app
-      - ../homorepeat_pipeline:/workspace/homorepeat_pipeline:ro
+      - ${HOMOREPEAT_RUNS_ROOT:-../homorepeat_pipeline/runs}:/workspace/homorepeat_pipeline/runs:ro
     depends_on:
       postgres:
         condition: service_healthy

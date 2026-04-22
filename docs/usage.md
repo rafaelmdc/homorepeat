@@ -21,6 +21,11 @@ Docker Compose stack uses PostgreSQL:
 docker compose up web worker postgres
 ```
 
+For Compose auto-discovery, set `HOMOREPEAT_RUNS_ROOT` in `.env` to the
+host-side directory containing run folders. Compose mounts that directory at
+`/workspace/homorepeat_pipeline/runs` inside the web and worker containers, which
+is the path Django uses.
+
 The Compose stack exposes:
 
 - web app: `http://localhost:8000`
@@ -46,7 +51,9 @@ docker compose exec web python manage.py import_run --next-pending
 ```
 
 Set `HOMOREPEAT_RUNS_ROOT` to the directory containing run folders if the import
-UI should auto-detect published runs.
+UI should auto-detect published runs. In Docker Compose, use the host-side path
+in `.env`; inside the container, import paths use
+`/workspace/homorepeat_pipeline/runs`.
 
 ## Main Routes
 
