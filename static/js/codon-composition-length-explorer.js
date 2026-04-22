@@ -8,13 +8,18 @@
   const normalizeZoomState = chartShell.normalizeZoomState;
   const buildXAxisZoom = chartShell.buildXAxisZoom;
   const buildYAxisZoom = chartShell.buildYAxisZoom;
+  const attachTaxonomyGutter = chartShell.attachTaxonomyGutter;
+  const hasTaxonomyGutterPayload = chartShell.hasTaxonomyGutterPayload;
   const installWheelHandler = chartShell.installWheelHandler;
   const resolveZoomState = chartShell.resolveZoomState;
+  const taxonomyGutterReservedWidth = chartShell.taxonomyGutterReservedWidth;
+  const visibleRowCountForZoom = chartShell.visibleRowCountForZoom;
 
   const PAYLOAD_IDS = {
     preference: "codon-composition-length-preference-overview-payload",
     dominance: "codon-composition-length-dominance-overview-payload",
     shift: "codon-composition-length-shift-overview-payload",
+    taxonomyGutter: "codon-composition-length-overview-taxonomy-gutter-payload",
     pairwise: "codon-composition-length-pairwise-overview-payload",
     pairwiseTaxonomyGutter: "codon-composition-length-pairwise-taxonomy-gutter-payload",
     browse: "codon-composition-length-browse-payload",
@@ -29,6 +34,7 @@
     "#9a7b2f",
   ];
   const DEFAULT_VISIBLE_COLUMNS = 16;
+  const MAX_VISIBLE_ROWS_WITH_TAXON_LABELS = 24;
   const DEFAULT_BROWSE_WINDOW_SIZE = 12;
   const BROWSE_PANEL_HEIGHT = 250;
   const BROWSE_ROW_GAP = 16;
@@ -59,8 +65,12 @@
     return (payload.visibleBins || []).map((bin) => bin.label);
   }
 
-  function yLabels(payload) {
-    return (payload.taxa || []).map((taxon) => taxon.taxonName);
+  function yAxisValues(payload) {
+    return (payload.taxa || []).map((taxon) => String(taxon.taxonId));
+  }
+
+  function taxonLabelByAxisValue(payload) {
+    return new Map((payload.taxa || []).map((taxon) => [String(taxon.taxonId), taxon.taxonName]));
   }
 
   function cellXIndex(cell, payload) {
@@ -90,8 +100,11 @@
   function columnZoomStateFromParams(params, columnCount) {
     if (!params) return null;
     const events = Array.isArray(params.batch) && params.batch.length > 0 ? params.batch : [params];
-    const payload = events.find((entry) => entry && entry.dataZoomId === "codon-length-x-slider");
-    if (!payload || payload.dataZoomId !== "codon-length-x-slider") return null;
+    const payload = events.find((entry) => (
+      entry
+      && (entry.dataZoomId === "codon-length-x-slider" || entry.dataZoomId === "codon-length-x-inside")
+    ));
+    if (!payload) return null;
     if (payload.startValue != null || payload.endValue != null) {
       return normalizeColumnZoomState(columnCount, {
         startValue: payload.startValue,
@@ -106,6 +119,10 @@
     if (columnCount <= 96) return 4;
     if (columnCount <= 180) return 9;
     return 19;
+  }
+
+  function shouldShowTaxonLabels(visibleRowCount) {
+    return visibleRowCount <= MAX_VISIBLE_ROWS_WITH_TAXON_LABELS;
   }
 
   function seriesData(payload) {
@@ -211,8 +228,13 @@
     ];
   }
 
-  function chartOption(payload, rowZoomState, columnZoomState) {
+  function chartOption(payload, rowZoomState, columnZoomState, {
+    hasTaxonomyGutter = false,
+    gutterWidth = 0,
+    showTaxonLabels = true,
+  } = {}) {
     const labels = xLabels(payload);
+    const yLabelByValue = taxonLabelByAxisValue(payload);
     const xZoom = buildXAxisZoom(labels.length, columnZoomState, {
       insideId: "codon-length-x-inside",
       sliderId: "codon-length-x-slider",
@@ -224,7 +246,7 @@
     return {
       animation: false,
       grid: {
-        left: 172,
+        left: hasTaxonomyGutter ? gutterWidth + 20 : 172,
         right: payload.mode === "dominance" ? 28 : 96,
         top: 36,
         bottom: columnZoomState ? 112 : 76,
@@ -250,11 +272,14 @@
       yAxis: {
         type: "category",
         inverse: true,
-        data: yLabels(payload),
+        data: yAxisValues(payload),
         axisLabel: {
+          show: !hasTaxonomyGutter && showTaxonLabels,
+          interval: 0,
           color: "#17242c",
           width: 156,
           overflow: "truncate",
+          formatter: (value) => yLabelByValue.get(String(value)) || String(value),
         },
       },
       dataZoom: [
@@ -324,6 +349,8 @@
       return;
     }
 
+    const taxonomyGutterPayload = parsePayload(PAYLOAD_IDS.taxonomyGutter) || null;
+    const hasTaxonomyGutter = hasTaxonomyGutterPayload(taxonomyGutterPayload);
     let currentMode = payload.mode;
     let currentRowZoomState = normalizeZoomState(
       payload.visibleTaxaCount || 0,
@@ -335,6 +362,7 @@
     );
     container.style.height = `${chartHeightForRowCount(payload.visibleTaxaCount || 0, { minimumHeight: 360 })}px`;
     const chart = window.echarts.init(container);
+    const gutterOverlay = hasTaxonomyGutter ? attachTaxonomyGutter(chart, taxonomyGutterPayload) : null;
     installWheelHandler(chart, payload.visibleTaxaCount || 0, () => currentRowZoomState);
 
     if (pairwiseContainer && pairwisePayload?.available && window.HomorepeatPairwiseOverview) {
@@ -346,6 +374,41 @@
         distanceScaleStorageKey: "codon-length-pairwise-distance-scale",
       });
       pairwiseContainer.hidden = true;
+    }
+
+    function overviewGutterWidth(visibleRowCount) {
+      if (!hasTaxonomyGutter) return 0;
+      return taxonomyGutterReservedWidth(taxonomyGutterPayload, {
+        showLabels: shouldShowTaxonLabels(visibleRowCount),
+        visibleLeafCount: visibleRowCount,
+      });
+    }
+
+    function currentLayout() {
+      const visibleRowCount = visibleRowCountForZoom(payload.visibleTaxaCount || 0, currentRowZoomState);
+      const showTaxonLabels = shouldShowTaxonLabels(visibleRowCount);
+      return {
+        visibleRowCount,
+        showTaxonLabels,
+        gutterWidth: overviewGutterWidth(visibleRowCount),
+        top: 36,
+        bottom: currentColumnZoomState ? 112 : 76,
+        right: payload.mode === "dominance" ? 28 : 96,
+      };
+    }
+
+    function refreshOverviewGutter() {
+      if (!gutterOverlay) return;
+      const layout = currentLayout();
+      gutterOverlay.render({
+        showLabels: layout.showTaxonLabels,
+        zoomState: currentRowZoomState,
+        gutterWidth: layout.gutterWidth,
+        top: layout.top,
+        bottom: layout.bottom,
+        left: hasTaxonomyGutter ? layout.gutterWidth + 20 : 172,
+        right: layout.right,
+      });
     }
 
     function render() {
@@ -367,15 +430,43 @@
       syncButtons(buttons, currentMode, payloads);
       syncDescriptions(descriptions, currentMode);
       container.style.height = `${chartHeightForRowCount(payload.visibleTaxaCount || 0, { minimumHeight: 360 })}px`;
-      chart.setOption(chartOption(payload, currentRowZoomState, currentColumnZoomState), { notMerge: true });
+      const layout = currentLayout();
+      chart.setOption(chartOption(payload, currentRowZoomState, currentColumnZoomState, {
+        hasTaxonomyGutter,
+        gutterWidth: layout.gutterWidth,
+        showTaxonLabels: layout.showTaxonLabels,
+      }), { notMerge: true });
       chart.resize();
+      refreshOverviewGutter();
     }
 
     chart.on("datazoom", (params) => {
       if (currentMode === "similarity") return;
+      const nextColumnZoomState = columnZoomStateFromParams(params, xLabels(payload).length);
+      if (nextColumnZoomState) {
+        currentColumnZoomState = nextColumnZoomState;
+        refreshOverviewGutter();
+        return;
+      }
+      const previousVisibleRowCount = visibleRowCountForZoom(
+        payload.visibleTaxaCount || 0,
+        currentRowZoomState,
+      );
+      const previousGutterWidth = overviewGutterWidth(previousVisibleRowCount);
       currentRowZoomState = resolveZoomState(chart, payload.visibleTaxaCount || 0, params);
-      currentColumnZoomState = columnZoomStateFromParams(params, xLabels(payload).length)
-        || currentColumnZoomState;
+      const nextVisibleRowCount = visibleRowCountForZoom(
+        payload.visibleTaxaCount || 0,
+        currentRowZoomState,
+      );
+      const nextGutterWidth = overviewGutterWidth(nextVisibleRowCount);
+      if (
+        previousVisibleRowCount !== nextVisibleRowCount
+        || previousGutterWidth !== nextGutterWidth
+      ) {
+        render();
+        return;
+      }
+      refreshOverviewGutter();
     });
 
     buttons.forEach((button) => {
@@ -398,7 +489,10 @@
       });
     });
 
-    window.addEventListener("resize", () => chart.resize());
+    window.addEventListener("resize", () => {
+      chart.resize();
+      refreshOverviewGutter();
+    });
     render();
   }
 

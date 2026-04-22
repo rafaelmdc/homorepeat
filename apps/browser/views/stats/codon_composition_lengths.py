@@ -240,11 +240,14 @@ class CodonCompositionLengthExplorerView(TemplateView):
         )
         context["overview_shift_payload"] = build_codon_length_shift_overview_payload(summary_bundle)
         pairwise_payload = build_codon_length_pairwise_overview_payload(summary_bundle)
-        context["overview_pairwise_payload"] = pairwise_payload
-        context["overview_pairwise_taxonomy_gutter_payload"] = build_taxonomy_gutter_payload(
+        overview_taxonomy_gutter_payload = build_taxonomy_gutter_payload(
             summary_bundle.get("matrix_rows", []),
             filter_state=filter_state,
+            collapse_rank=filter_state.rank,
         )
+        context["overview_taxonomy_gutter_payload"] = overview_taxonomy_gutter_payload
+        context["overview_pairwise_payload"] = pairwise_payload
+        context["overview_pairwise_taxonomy_gutter_payload"] = overview_taxonomy_gutter_payload
         context["browse_payload"] = build_codon_length_browse_payload(summary_bundle)
         context["overview_preference_payload_id"] = (
             "codon-composition-length-preference-overview-payload"
@@ -256,6 +259,9 @@ class CodonCompositionLengthExplorerView(TemplateView):
         context["overview_pairwise_payload_id"] = "codon-composition-length-pairwise-overview-payload"
         context["overview_pairwise_taxonomy_gutter_payload_id"] = (
             "codon-composition-length-pairwise-taxonomy-gutter-payload"
+        )
+        context["overview_taxonomy_gutter_payload_id"] = (
+            "codon-composition-length-overview-taxonomy-gutter-payload"
         )
         context["overview_container_id"] = "codon-composition-length-overview-chart"
         context["overview_pairwise_container_id"] = "codon-composition-length-pairwise-chart"
