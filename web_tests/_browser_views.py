@@ -803,6 +803,43 @@ class BrowserViewTests(TestCase):
         self.assertIn("run-alpha", payload["rows_html"])
         self.assertEqual(payload["count"], 2)
 
+    def test_run_list_tsv_export_uses_full_filtered_queryset(self):
+        response = self.client.get(
+            reverse("browser:run-list"),
+            {
+                "q": "run",
+                "order_by": "run_id",
+                "page": "2",
+                "fragment": "virtual-scroll",
+                "download": "tsv",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/tab-separated-values; charset=utf-8")
+        self.assertEqual(response["Content-Disposition"], 'attachment; filename="homorepeat_runs.tsv"')
+
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn("Run\tStatus\tProfile\tImported genomes", body)
+        self.assertIn("run-alpha", body)
+        self.assertIn("run-beta", body)
+        self.assertLess(body.index("run-alpha"), body.index("run-beta"))
+
+    def test_run_list_tsv_export_honors_search_filter(self):
+        response = self.client.get(
+            reverse("browser:run-list"),
+            {
+                "q": "run-alpha",
+                "download": "tsv",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn("run-alpha", body)
+        self.assertNotIn("run-beta", body)
+
     def test_accession_list_virtual_scroll_fragment_returns_rows(self):
         response = self.client.get(
             reverse("browser:accession-list"),
