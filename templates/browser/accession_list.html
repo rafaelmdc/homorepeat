@@ -177,6 +177,7 @@
       <p class="section-kicker mb-2">Accession inventory</p>
       <h2>{{ page_obj.paginator.count }} accession{{ page_obj.paginator.count|pluralize }}</h2>
     </div>
+    {% include "browser/includes/download_tsv_button.html" %}
   </div>
 
   <div

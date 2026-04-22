@@ -803,6 +803,82 @@ class BrowserViewTests(TestCase):
         self.assertIn("run-alpha", payload["rows_html"])
         self.assertEqual(payload["count"], 2)
 
+    def test_run_list_tsv_export_uses_full_filtered_queryset(self):
+        response = self.client.get(
+            reverse("browser:run-list"),
+            {
+                "q": "run",
+                "order_by": "run_id",
+                "page": "1",
+                "fragment": "virtual-scroll",
+                "download": "tsv",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/tab-separated-values; charset=utf-8")
+        self.assertEqual(response["Content-Disposition"], 'attachment; filename="homorepeat_runs.tsv"')
+
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn("Run\tStatus\tProfile\tImported genomes", body)
+        self.assertIn("run-alpha", body)
+        self.assertIn("run-beta", body)
+        self.assertLess(body.index("run-alpha"), body.index("run-beta"))
+
+    def test_run_list_tsv_export_honors_search_filter(self):
+        response = self.client.get(
+            reverse("browser:run-list"),
+            {
+                "q": "run-alpha",
+                "download": "tsv",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn("run-alpha", body)
+        self.assertNotIn("run-beta", body)
+
+    def test_run_list_tsv_export_honors_status_filter(self):
+        beta_run = self.beta["pipeline_run"]
+        beta_run.status = "failed"
+        beta_run.save(update_fields=["status"])
+
+        response = self.client.get(
+            reverse("browser:run-list"),
+            {
+                "status": "success",
+                "download": "tsv",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn("run-alpha", body)
+        self.assertNotIn("run-beta", body)
+
+    def test_run_list_renders_tsv_download_link_with_filters(self):
+        url = reverse("browser:run-list")
+        response = self.client.get(
+            url,
+            {
+                "q": "run",
+                "status": "success",
+                "order_by": "run_id",
+                "page": "1",
+                "fragment": "virtual-scroll",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'href="{url}?q=run&amp;status=success&amp;order_by=run_id&amp;download=tsv"',
+        )
+        self.assertNotContains(response, "page=1&amp;download=tsv")
+        self.assertNotContains(response, "fragment=virtual-scroll&amp;download=tsv")
+
     def test_accession_list_virtual_scroll_fragment_returns_rows(self):
         response = self.client.get(
             reverse("browser:accession-list"),
@@ -815,6 +891,86 @@ class BrowserViewTests(TestCase):
         self.assertIn("rows_html", payload)
         self.assertIn("GCF_ALPHA", payload["rows_html"])
         self.assertEqual(payload["count"], 2)
+
+    def test_accession_list_tsv_export_honors_search_filter(self):
+        response = self.client.get(
+            reverse("browser:accession-list"),
+            {
+                "q": "GCF_ALPHA",
+                "download": "tsv",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Disposition"], 'attachment; filename="homorepeat_accessions.tsv"')
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn("Accession\tLatest genome id\tLatest run\tImported observations", body)
+        self.assertIn("GCF_ALPHA", body)
+        self.assertNotIn("GCF_BETA", body)
+
+    def test_genome_list_tsv_export_honors_accession_filter(self):
+        response = self.client.get(
+            reverse("browser:genome-list"),
+            {
+                "accession": "GCF_ALPHA",
+                "download": "tsv",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Disposition"], 'attachment; filename="homorepeat_genomes.tsv"')
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn("Accession\tGenome id\tGenome\tTaxon id\tTaxon\tLatest run", body)
+        self.assertIn("GCF_ALPHA", body)
+        self.assertIn("Human reference genome", body)
+        self.assertNotIn("GCF_BETA", body)
+
+    def test_sequence_list_tsv_export_uses_full_filtered_queryset(self):
+        response = self.client.get(
+            reverse("browser:sequence-list"),
+            {
+                "run": "run-alpha",
+                "fragment": "virtual-scroll",
+                "download": "tsv",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Disposition"], 'attachment; filename="homorepeat_sequences.tsv"')
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn("Sequence id\tSequence\tGene\tGenome accession", body)
+        self.assertIn("seq_alpha", body)
+        self.assertIn("NM_run-alpha", body)
+        self.assertNotIn("seq_beta", body)
+
+    def test_catalog_list_download_links_preserve_filters(self):
+        cases = [
+            (
+                reverse("browser:accession-list"),
+                {"q": "GCF", "order_by": "accession", "page": "1", "fragment": "virtual-scroll"},
+                "?q=GCF&amp;order_by=accession&amp;download=tsv",
+            ),
+            (
+                reverse("browser:genome-list"),
+                {"accession": "GCF_ALPHA", "order_by": "genome_name", "page": "1"},
+                "?accession=GCF_ALPHA&amp;order_by=genome_name&amp;download=tsv",
+            ),
+            (
+                reverse("browser:sequence-list"),
+                {"run": "run-alpha", "genome": "genome_alpha", "page": "1", "fragment": "virtual-scroll"},
+                "?run=run-alpha&amp;genome=genome_alpha&amp;download=tsv",
+            ),
+        ]
+
+        for url, params, expected_query in cases:
+            with self.subTest(url=url):
+                response = self.client.get(url, params)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, f'href="{url}{expected_query}"')
+                self.assertNotContains(response, "page=1&amp;download=tsv")
+                self.assertNotContains(response, "fragment=virtual-scroll&amp;download=tsv")
 
     def test_branch_filter_forms_use_branch_q_text_input_across_hot_pages(self):
         urls = [

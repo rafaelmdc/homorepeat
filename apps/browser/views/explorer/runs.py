@@ -5,6 +5,7 @@ from django.views.generic import DetailView
 
 from apps.imports.models import ImportBatch
 
+from ...exports import BrowserTSVExportMixin, TSVColumn
 from ...metadata import resolve_run_browser_metadata
 from ...models import PipelineRun
 from ..filters import _run_distinct_taxa_count, _run_import_batches
@@ -14,12 +15,23 @@ from ..pagination import VirtualScrollListView
 from ..querysets import _annotated_batches, _annotated_runs, _summary_runs
 
 
-class RunListView(VirtualScrollListView):
+class RunListView(BrowserTSVExportMixin, VirtualScrollListView):
     model = PipelineRun
     template_name = "browser/run_list.html"
     context_object_name = "runs"
     virtual_scroll_row_template_name = "browser/includes/run_list_rows.html"
     virtual_scroll_colspan = 8
+    tsv_filename_slug = "runs"
+    tsv_columns = (
+        TSVColumn("Run", "run_id"),
+        TSVColumn("Status", "status"),
+        TSVColumn("Profile", "profile"),
+        TSVColumn("Imported genomes", "genomes_count"),
+        TSVColumn("Imported sequences", "sequences_count"),
+        TSVColumn("Imported proteins", "proteins_count"),
+        TSVColumn("Imported repeat calls", "repeat_calls_count"),
+        TSVColumn("Imported", "imported_at"),
+    )
     search_fields = ("run_id", "status", "profile", "git_revision")
     ordering_map = {
         "run_id": ("run_id",),

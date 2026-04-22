@@ -50,6 +50,7 @@
       <p class="eyebrow">History</p>
       <h2>{{ page_obj.paginator.count }} imported run{{ page_obj.paginator.count|pluralize }}</h2>
     </div>
+    {% include "browser/includes/download_tsv_button.html" %}
   </div>
 
   <div

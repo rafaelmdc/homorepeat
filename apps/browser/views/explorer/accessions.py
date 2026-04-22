@@ -10,6 +10,7 @@ from apps.browser.explorer.canonical import (
     scoped_source_genomes,
 )
 
+from ...exports import BrowserTSVExportMixin, TSVColumn
 from ...models import CanonicalGenome, PipelineRun, RepeatCall
 from ..filters import _resolve_branch_scope, _resolve_current_run, _update_branch_scope_context
 from ..formatting import _ordering_label
@@ -17,13 +18,24 @@ from ..navigation import _url_with_query
 from ..pagination import VirtualScrollListView
 
 
-class AccessionsListView(VirtualScrollListView):
+class AccessionsListView(BrowserTSVExportMixin, VirtualScrollListView):
     model = CanonicalGenome
     template_name = "browser/accession_list.html"
     context_object_name = "accession_groups"
     virtual_scroll_row_template_name = "browser/includes/accession_list_rows.html"
     virtual_scroll_colspan = 6
     paginate_by = 20
+    tsv_filename_slug = "accessions"
+    tsv_columns = (
+        TSVColumn("Accession", "accession"),
+        TSVColumn("Latest genome id", "genome_id"),
+        TSVColumn("Latest run", "latest_pipeline_run.run_id"),
+        TSVColumn("Imported observations", "source_genomes_count"),
+        TSVColumn("Supporting runs", "source_runs_count"),
+        TSVColumn("Current repeat calls", "repeat_calls_count"),
+        TSVColumn("Current proteins", "proteins_count"),
+        TSVColumn("Analyzed proteins", "analyzed_protein_count"),
+    )
     ordering_map = {
         "accession": ("accession",),
         "-accession": ("-accession",),

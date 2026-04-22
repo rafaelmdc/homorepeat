@@ -10,6 +10,7 @@ TEST_NAMES = [
     "test_genome_list_branch_filter_includes_descendant_taxa",
     "test_genome_list_branch_q_numeric_taxon_id_filters_descendants",
     "test_genome_list_accession_filter_works",
+    "test_genome_list_tsv_export_honors_accession_filter",
     "test_genome_detail_shows_run_provenance_and_related_records",
 ]
 

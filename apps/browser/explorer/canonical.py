@@ -189,6 +189,7 @@ def scoped_canonical_sequences(
             "genome_id",
             "taxon_id",
             "taxon__id",
+            "taxon__taxon_id",
             "taxon__taxon_name",
             "sequence_id",
             "sequence_name",

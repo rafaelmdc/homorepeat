@@ -20,6 +20,10 @@ TEST_NAMES = [
     "test_run_list_sort_header_cycles_desc_asc_clear",
     "test_virtual_scroll_hooks_render_across_browser_lists",
     "test_run_list_virtual_scroll_fragment_returns_rows",
+    "test_run_list_tsv_export_uses_full_filtered_queryset",
+    "test_run_list_tsv_export_honors_search_filter",
+    "test_run_list_tsv_export_honors_status_filter",
+    "test_run_list_renders_tsv_download_link_with_filters",
     "test_branch_filter_forms_use_branch_q_text_input_across_hot_pages",
 ]
 

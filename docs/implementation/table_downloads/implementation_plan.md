@@ -2,326 +2,399 @@
 
 ## Summary
 
-Add reusable server-side TSV downloads for every browser table surface,
-including list pages, detail-page embedded tables, and statistical browser
-datasets. Use existing page URLs with `download` query parameters, preserve
-current filters where they exist, preserve table context where filters do not
-exist, and ignore pagination/virtual-scroll state. Keep the MVP synchronous and
-TSV-only.
+Add synchronous, server-side TSV downloads for every browser table surface:
+list pages, virtual-scroll tables, detail-page embedded tables, and statistical
+view tables. Filters must be preserved where tables have filters. Tables
+without independent filters must export their current detail-object or section
+context. Pagination, cursors, virtual-scroll windows, and frontend-only row
+sections must never limit the downloaded rows.
 
-## Phase 1: Reusable TSV Core
+Implement this in small slices. Each slice should land with focused tests before
+moving to the next slice.
 
-Add a small backend export module under `apps/browser/exports.py` or
-`apps/browser/views/exports.py`.
+## Delivery Rules
 
-Required helpers:
+- Use existing page URLs with a `download` query parameter.
+- Export from server-side querysets or stats bundles, never from DOM rows.
+- Preserve semantic query params: search, sort, run, branch, accession, genome,
+  sequence, protein, method, residue, length, purity, rank, min-count, top-N.
+- Strip display-only params in generated links: `page`, `after`, `before`,
+  `fragment`, and any virtual-scroll-only section cursor.
+- Stream rows so large exports do not load the whole result into memory.
+- Keep MVP format TSV-only.
+- Add one visible `Download TSV` action per table section.
 
-- `clean_tsv_value(value) -> str`
-  - `None` -> `""`
-  - booleans -> `"true"` / `"false"`
-  - all other values -> `str(value)`
-  - replace `\t`, `\r`, and `\n` with a single space
-- `iter_tsv_rows(headers, rows)`
-  - yields UTF-8 text rows
-  - first row is headers
-  - every row has the same number of cells as headers
-- `stream_tsv_response(filename, headers, rows)`
-  - returns `StreamingHttpResponse`
-  - content type `text/tab-separated-values; charset=utf-8`
-  - sets attachment `Content-Disposition`
+## Phase 1: Export Foundation
 
-Testing:
+Build reusable backend and template primitives. This phase should not wire every
+view; it creates the pattern and proves it on one small list table.
 
-- header-only export for empty rows
-- tab/newline normalization
-- `None` and boolean formatting
-- response headers and filename
+### Slice 1.1: TSV Helpers
 
-## Phase 2: List Page Exports
+Files:
 
-Add `BrowserTSVExportMixin` for `BrowserListView` descendants.
+- `apps/browser/exports.py`
+- focused tests in `web_tests`
 
-Mixin behavior:
+Work:
 
-- if `request.GET["download"] != "tsv"`, fall through to normal page rendering
-- if `download=tsv`, call `get_queryset()` and export the full filtered,
-  searched, ordered queryset
-- do not paginate
-- ignore `page`, `after`, `before`, and `fragment` in generated download links
-- use explicit per-view column definitions
+- add `clean_tsv_value(value) -> str`
+- add `iter_tsv_rows(headers, rows)`
+- add `stream_tsv_response(filename, headers, rows)`
+- normalize tabs, carriage returns, and newlines inside values to spaces
+- format `None` as an empty cell and booleans as `true`/`false`
+- set `Content-Type: text/tab-separated-values; charset=utf-8`
+- set attachment `Content-Disposition`
 
-Suggested mixin interface:
+Validation:
 
-```python
-class BrowserTSVExportMixin:
-    tsv_filename_slug = ""
-    tsv_columns = ()
+- helper tests for empty rows, normalization, booleans, `None`, and headers
+- response-header test
 
-    def get_tsv_columns(self):
-        return self.tsv_columns
+### Slice 1.2: List Export Mixin
 
-    def get_tsv_filename(self):
-        return f"homorepeat_{self.tsv_filename_slug}.tsv"
+Files:
 
-    def get_tsv_queryset(self):
-        return self.get_queryset()
-```
+- `apps/browser/exports.py`
+- `apps/browser/views/base.py` or `apps/browser/views/pagination.py`
 
-Column definition shape:
+Work:
 
-```python
-("Column header", lambda obj: obj.field)
-```
+- add `BrowserTSVExportMixin`
+- when `download=tsv`, call the view's full `get_queryset()`
+- do not call pagination or virtual-scroll fragment rendering
+- iterate querysets with `.iterator(chunk_size=...)`
+- support explicit per-view column definitions
+- support callable column accessors for flattened relationship/provenance fields
 
-or a tiny dataclass if preferred:
+Validation:
 
-```python
-TSVColumn("Column header", "field.path")
-```
+- prove that `download=tsv&page=2`, `download=tsv&after=...`, and
+  `download=tsv&fragment=virtual-scroll` export the full filtered queryset
 
-The implementation must support callables because several list pages expose
-linked/provenance fields that are easier to flatten explicitly.
+### Slice 1.3: Download URL Helper
 
-List pages to wire:
+Files:
 
-- `RunListView`
+- `apps/browser/exports.py` or a browser view utility module
+- `apps/browser/views/base.py`
+- one shared template include under `templates/browser/includes/`
+
+Work:
+
+- generate `download_tsv_url` from the current path and current query params
+- set `download=tsv`
+- strip `page`, `after`, `before`, and `fragment`
+- add a reusable button/include for table section headers
+
+Validation:
+
+- rendered link preserves filters and ordering
+- rendered link removes pagination/cursor/fragment params
+
+### Slice 1.4: First End-to-End Table
+
+Files:
+
+- `apps/browser/views/explorer/runs.py`
+- `templates/browser/run_list.html`
+
+Work:
+
+- add run-list TSV columns
+- add the `Download TSV` action to the run table header
+- keep the existing virtual-scroll behavior unchanged
+
+Validation:
+
+- `RunListView` exports all filtered rows
+- export honors search, status filter, and ordering
+- export is not limited by page/cursor/fragment
+- existing virtual-scroll tests still pass
+
+## Phase 2: Top-Level Browser List Tables
+
+Wire the reusable list-export pattern across every primary browser list table.
+Each slice should add columns, a button, and tests for that group.
+
+### Slice 2.1: Canonical Catalog Lists
+
+Views:
+
 - `AccessionsListView`
 - `GenomeListView`
 - `SequenceListView`
+
+Templates:
+
+- `accession_list.html`
+- `genome_list.html`
+- `sequence_list.html`
+
+Columns:
+
+- stable accession/genome/sequence identifiers and names
+- taxon name/id where visible
+- latest run where visible
+- visible counts such as source runs, genomes, proteins, and repeat calls
+
+Validation:
+
+- run, branch, accession, genome, gene, search, and ordering filters are
+  preserved where applicable
+- cursor/virtual-scroll state does not limit rows
+
+### Slice 2.2: Protein and Repeat-Call Lists
+
+Views:
+
 - `ProteinListView`
 - `RepeatCallListView`
+
+Templates:
+
+- `protein_list.html`
+- `repeatcall_list.html`
+
+Columns:
+
+- stable protein/call identifiers
+- accession, genome/sequence/protein identifiers where visible
+- gene symbol, taxon, run, method, residue, length, purity
+- repeat-call coordinates and support fields already shown in the table
+
+Validation:
+
+- method, residue, length, purity, branch, run, genome, sequence, protein, and
+  search filters are preserved
+- exports stream the full queryset even for virtual-scroll pages without counts
+
+### Slice 2.3: Taxonomy List
+
+Views:
+
 - `TaxonListView`
+
+Templates:
+
+- `taxon_list.html`
+
+Columns:
+
+- taxon id
+- taxon name
+- rank
+- parent taxon id/name
+
+Validation:
+
+- run, branch, rank, search, and ordering filters are preserved
+- export remains distinct when lineage joins are active
+
+### Slice 2.4: Operational Lists
+
+Views:
+
 - `NormalizationWarningListView`
 - `AccessionStatusListView`
 - `AccessionCallCountListView`
 - `DownloadManifestEntryListView`
 
-Minimum columns:
+Templates:
 
-- include stable IDs/accessions/names shown in the table
-- include run/batch/provenance fields where already visible
-- include counts and statuses already visible
-- avoid HTML-only action columns
+- `normalizationwarning_list.html`
+- `accessionstatus_list.html`
+- `accessioncallcount_list.html`
+- `downloadmanifest_list.html`
 
-Testing:
+Columns:
 
-- each representative list type exports TSV
-- filters/search are honored
-- ordering is honored
-- pagination does not restrict export rows
-- virtual-scroll `fragment` is ignored for export
+- visible run and batch provenance
+- accession/source identifiers
+- statuses, warning codes/scopes/messages, counts, paths, checksums, and sizes
+  already visible in each table
 
-## Phase 3: Download Link Generation
+Validation:
 
-Add a reusable context helper for download links.
+- run, batch, accession, status, method, residue, warning, package, search, and
+  ordering filters are preserved where applicable
 
-For list pages:
+## Phase 3: Detail-Page Embedded Tables
 
-- `download_tsv_url` should be current path plus current query params
-- set `download=tsv`
-- remove `page`, `after`, `before`, and `fragment`
+Add exports for contextual tables that do not necessarily have independent
+filters. These exports use the current detail object as their data scope.
 
-Add a `Download TSV` button near each primary table heading.
+### Slice 3.1: Detail Export Dispatcher
 
-Suggested template placement:
+Files:
 
-- in the section header area beside filter summary/count text
-- use `btn btn-outline-secondary`
-- no JavaScript required
+- `apps/browser/exports.py`
+- shared detail-view mixin or local helper in browser views
 
-Testing:
+Work:
 
-- rendered list pages contain a download link
-- link preserves current filters
-- link excludes pagination/cursor params
+- add a dispatcher for `download=<table-key>`
+- use stable lowercase snake_case table keys
+- return a consistent 404 or 400 for unknown table keys
+- support header-only exports for empty contextual tables
 
-## Phase 4: Detail and Embedded Table Exports
+Validation:
 
-Add a small dispatcher for detail views with embedded table sections.
+- unknown keys fail consistently
+- valid keys export only rows belonging to the current detail object
 
-Behavior:
+### Slice 3.2: Genome and Accession Detail Tables
 
-- if `download` is absent, render normally
-- if `download=<table-key>` is present, export the matching table section
-- use the same object context as the visible detail page
-- preserve any section-specific filters if a detail table already has them
-- do not paginate embedded table exports
-- unknown table keys return the same HTTP 404 or 400 used by stat exports
-
-Suggested interface:
-
-```python
-class DetailTableTSVExportMixin:
-    tsv_table_exporters = {}
-
-    def dispatch(self, request, *args, **kwargs):
-        table_key = request.GET.get("download", "").strip()
-        if table_key:
-            return self.render_table_tsv_export(table_key)
-        return super().dispatch(request, *args, **kwargs)
-```
-
-Table-key naming:
-
-- use stable lowercase snake_case names
-- match the section meaning, not the model class when that would be less clear
-- examples: `sequences`, `proteins`, `repeat_calls`, `warnings`, `batches`,
-  `source_calls`, `provenance`
-
-Detail pages to inspect and wire where table sections exist:
+Pages:
 
 - accession detail
 - genome detail
+
+Likely keys:
+
+- `source_genomes`
+- `source_sequences`
+- `source_proteins`
+- `source_repeat_calls`
+- `warnings`
+
+Validation:
+
+- exports are scoped to the accession/genome being viewed
+- current visible context and provenance columns are included
+
+### Slice 3.3: Sequence, Protein, and Repeat-Call Detail Tables
+
+Pages:
+
 - sequence detail
 - protein detail
 - repeat-call detail
+
+Likely keys:
+
+- `source_sequences`
+- `source_proteins`
+- `source_repeat_calls`
+- `repeat_calls`
+- `codon_usage`
+- `observations`
+
+Validation:
+
+- exports are scoped to the sequence/protein/repeat call being viewed
+- source observation tables include enough provenance to trace rows back to
+  run, accession, sequence, protein, method, residue, and coordinates
+
+### Slice 3.4: Taxon and Run Detail Tables
+
+Pages:
+
 - taxon detail
 - run detail
 
-Minimum columns:
+Likely keys:
 
-- include the stable identifiers and names shown in the table
-- include relationship/provenance columns needed to understand why the row
-  appears in that detail context
-- avoid HTML-only action columns
+- `linked_genomes`
+- `method_residue_summary`
+- `terminal_status_summary`
+- `warning_summary`
+- `batch_preview`
+- `recent_import_batches`
 
-Testing:
+Validation:
 
-- each wired detail table exports TSV
-- exports are scoped to the current detail object
-- empty related tables return headers only
-- generated links use explicit table keys
+- taxon exports honor optional run context
+- run exports are scoped to the selected run
 
-## Phase 5: Statistical View Export Dispatcher
+## Phase 4: Statistical View Export Infrastructure
 
-Add a reusable pattern for stats `TemplateView` classes.
+Add export dispatch for stats pages. This phase wires reusable infrastructure
+and then each analysis view as its own slice.
 
-Behavior:
+### Slice 4.1: Stats Export Dispatcher
 
-- if `download` is absent, render normally
-- if `download` is present, dispatch to a dataset-specific export method
-- unknown dataset keys return HTTP 404 or 400; choose one and use consistently
-- export methods reuse the same bundles already used for visible tables/charts
+Files:
 
-Suggested interface:
+- `apps/browser/exports.py`
+- `apps/browser/views/stats/*.py`
 
-```python
-class StatsTSVExportMixin:
-    tsv_exporters = {}
+Work:
 
-    def dispatch(self, request, *args, **kwargs):
-        dataset = request.GET.get("download", "").strip()
-        if dataset:
-            return self.render_tsv_export(dataset)
-        return super().dispatch(request, *args, **kwargs)
-```
+- add `StatsTSVExportMixin`
+- dispatch on `download=<dataset-key>`
+- reuse the same server-side bundles that feed visible charts and tables
+- do not export chart JSON directly
+- return headers only for valid but currently unavailable datasets
 
-Use explicit exporter methods instead of introspecting JSON payloads. Payloads
-are optimized for charting; exports should be stable analysis tables.
+Validation:
 
-## Phase 6: Repeat Length Exports
+- unknown dataset keys fail consistently
+- active filters are preserved
+- unavailable datasets return valid header-only TSV
 
-Add dataset keys:
+### Slice 4.2: Repeat Length Exports
+
+View:
+
+- repeat length explorer
+
+Dataset keys:
 
 - `summary`
 - `overview_typical`
 - `overview_tail`
 - `inspect`
 
-`summary` columns:
+Columns:
 
-- taxon_id
-- taxon_name
-- rank
-- observations
-- species
-- min_length
-- q1
-- median
-- q3
-- max_length
+- `summary`: taxon id/name, rank, observations, species, min, q1, median, q3,
+  max
+- `overview_typical`: row taxon, column taxon, Wasserstein-1 distance
+- `overview_tail`: row taxon, column taxon, tail-burden distance
+- `inspect`: scope label, observations, median, q90, q95, max, CCDF length,
+  CCDF survival fraction
 
-`overview_typical` columns:
+Validation:
 
-- row_taxon_id
-- row_taxon_name
-- column_taxon_id
-- column_taxon_name
-- wasserstein1_distance
+- exports match visible grouped taxa, overview, and inspect values
+- inspect exports headers only when inspect scope is inactive
 
-`overview_tail` columns:
+### Slice 4.3: Codon Composition Exports
 
-- row_taxon_id
-- row_taxon_name
-- column_taxon_id
-- column_taxon_name
-- tail_burden_distance
+View:
 
-`inspect` columns:
+- codon composition explorer
 
-- scope_label
-- observations
-- median
-- q90
-- q95
-- max
-- ccdf_length
-- ccdf_survival_fraction
-
-If inspect scope is inactive or empty, export headers only.
-
-## Phase 7: Codon Composition Exports
-
-Add dataset keys:
+Dataset keys:
 
 - `summary`
 - `overview`
 - `browse`
 - `inspect`
 
-`summary` columns:
+Columns:
 
-- taxon_id
-- taxon_name
-- rank
-- observations
-- species
-- one column per visible codon share
+- `summary`: taxon id/name, rank, observations, species, one column per visible
+  synonymous codon share
+- `overview`: row taxon, column taxon, metric, value, row support, column
+  support
+- `browse`: same content as `summary` unless the browse table diverges later
+- `inspect`: scope label, observations, codon, share
 
-`overview` columns:
+Validation:
 
-- row_taxon_id
-- row_taxon_name
-- column_taxon_id
-- column_taxon_name
-- metric
-- value
-- row_observations
-- row_species
-- column_observations
-- column_species
+- species-weighted codon shares are preserved
+- selected-residue semantics are preserved
+- codon shares remain normalized to the selected residue's synonymous codon set
 
-For two-codon signed preference, `metric` should be
-`signed_preference_difference`. For multi-codon overview, `metric` should be
-`jensen_shannon_divergence` or `similarity`, matching the view's displayed
-metric.
+### Slice 4.4: Codon Composition by Length Exports
 
-`browse` can export the same content as `summary` for this page unless the
-visible browse chart diverges later. Keep the separate key so the UI can expose
-section-specific buttons consistently.
+View:
 
-`inspect` columns:
+- codon composition by length explorer
 
-- scope_label
-- observations
-- codon
-- share
-
-If inspect scope is inactive or empty, export headers only.
-
-## Phase 8: Codon Composition by Length Exports
-
-Add dataset keys:
+Dataset keys:
 
 - `summary`
 - `preference`
@@ -332,152 +405,108 @@ Add dataset keys:
 - `inspect`
 - `comparison`
 
-`summary` and `browse` columns:
+Columns:
 
-- taxon_id
-- taxon_name
-- rank
-- length_bin_start
-- length_bin_label
-- observations
-- species
-- dominant_codon
-- dominance_margin
-- codon
-- codon_share
+- `summary` and `browse`: one row per taxon, length bin, and codon; include
+  taxon, rank, length bin, observations, species, dominant codon, dominance
+  margin, codon, and codon share
+- `preference`: taxon, length bin, preference value, codon A/B shares, support
+- `dominance`: taxon, length bin, dominant codon, dominance margin, codon share,
+  support
+- `shift`: taxon, previous/next length bins, shift value, previous/next support
+- `similarity`: row taxon, column taxon, trajectory Jensen-Shannon divergence
+- `inspect` and `comparison`: scope label, length bin, support, dominant codon,
+  codon share, shift from previous
 
-Use one row per taxon/bin/codon. This is easier to analyze than one wide column
-per codon and remains stable for residues with different codon counts.
+Validation:
 
-`preference` columns:
+- long-form codon-by-length rows parse cleanly
+- unavailable modes return headers only
+- pairwise matrices are long-form and symmetric where the underlying matrix is
+  symmetric
 
-- taxon_id
-- taxon_name
-- rank
-- length_bin_start
-- length_bin_label
-- metric_label
-- preference_value
-- codon_a
-- codon_a_share
-- codon_b
-- codon_b_share
-- observations
-- species
+## Phase 5: UI Integration and Consistency Pass
 
-Return headers only when preference mode is unavailable.
+Bring the table actions together after backend exports exist.
 
-`dominance` columns:
+### Slice 5.1: Shared Button Placement
 
-- taxon_id
-- taxon_name
-- rank
-- length_bin_start
-- length_bin_label
-- dominant_codon
-- dominance_margin
-- observations
-- species
-- codon
-- codon_share
+Work:
 
-Return headers only when dominance mode is unavailable.
+- use one shared `Download TSV` include where possible
+- place actions in table/section headers, not inside table rows
+- keep no-JS behavior
+- ensure buttons preserve filters and strip display-only state
 
-`shift` columns:
+Validation:
 
-- taxon_id
-- taxon_name
-- rank
-- previous_bin_start
-- previous_bin_label
-- next_bin_start
-- next_bin_label
-- shift_value
-- previous_observations
-- previous_species
-- next_observations
-- next_species
+- every browser table section has a visible action
+- labels are clear when a section has multiple datasets
 
-`similarity` columns:
+### Slice 5.2: Stats Section Actions
 
-- row_taxon_id
-- row_taxon_name
-- column_taxon_id
-- column_taxon_name
-- trajectory_jensen_shannon_divergence
+Work:
 
-`inspect` columns:
+- add section-level buttons for repeat lengths, codon composition, and codon
+  composition by length
+- for overview modes with multiple datasets, use explicit labels such as
+  `Download Preference TSV` and `Download Similarity TSV`
 
-- scope_label
-- length_bin_start
-- length_bin_label
-- observations
-- species
-- dominant_codon
-- dominance_margin
-- codon
-- codon_share
-- shift_from_previous
+Validation:
 
-`comparison` uses the same columns as `inspect` but with the comparison scope
-label. Return headers only if no comparison is available.
+- each visible statistical table or matrix has the correct dataset key
+- unavailable modes do not show awkward or broken actions
 
-## Phase 9: UI Integration for Stat Views
+### Slice 5.3: Final Coverage Audit
 
-Add section-level buttons:
+Work:
 
-- Repeat lengths:
-  - Overview: `overview_typical`, `overview_tail`
-  - Browse/grouped taxa: `summary`
-  - Inspect: `inspect`
-- Codon composition:
-  - Overview: `overview`
-  - Browse/grouped taxa: `summary` or `browse`
-  - Inspect: `inspect`
-- Codon composition by length:
-  - Overview mode buttons can share one download dropdown or individual buttons
-    for available datasets
-  - Browse: `browse`
-  - Inspect: `inspect`
-  - Comparison: `comparison`
-  - Grouped taxa fallback: `summary`
+- scan `templates/browser/` for every `<table`
+- confirm each table is either wired to TSV or deliberately non-data/static
+- document any intentionally excluded static table in the plan or follow-up
 
-Keep MVP UI simple. A single `Download TSV` link per table section is enough;
-for overview modes with several datasets, use clearly labeled links such as
-`Download Preference TSV` and `Download Similarity TSV`.
+Validation:
 
-## Phase 10: Tests and Acceptance Criteria
+- no browser data table is missed
 
-Backend tests:
+## Phase 6: Final Test and Release Checks
+
+### Slice 6.1: Automated Test Pass
+
+Run focused browser tests after each slice, then run the broader browser suite
+after phase completion.
+
+Required automated coverage:
 
 - TSV helper escaping and response headers
-- list exports honor filters and ordering
-- list exports ignore pagination/cursor/fragment
-- list exports include all matching rows
-- detail table exports are scoped to the current detail object
-- stat exports return headers for unavailable datasets
-- stat exports match source summary bundles
-- codon-by-length summary export emits one row per taxon/bin/codon
-- pairwise exports are long-form and symmetric if the underlying matrix is
-  symmetric
+- list exports honor filters, ordering, and full-row export
+- list exports ignore pagination, cursor, fragment, and virtual-scroll state
+- detail table exports are scoped to current detail objects
+- stat exports match source server-side bundles
+- unavailable stat datasets return headers only
+
+### Slice 6.2: Manual Export Checks
 
 Manual checks:
 
 - download from a paginated list while on page 2 and confirm page 1 rows are
-  still included
+  included
+- download from a virtual-scroll table after scrolling and confirm export is not
+  limited to mounted rows
 - download from detail-page embedded tables and confirm unrelated objects are
   excluded
-- download from virtual-scroll pages after scrolling and confirm export is not
-  limited to mounted rows
 - download from each stats view with filters active
-- open files in a spreadsheet and with `python csv.reader(..., delimiter="\t")`
+- open files in a spreadsheet and with
+  `python csv.reader(..., delimiter="\t")`
 
-Acceptance criteria:
+## Acceptance Criteria
 
 - every browser table section has a working TSV download
-- all current filters are preserved where filters exist
-- contextual tables export the rows belonging to their current detail object or
+- current filters are preserved where filters exist
+- contextual tables export rows belonging to their current detail object or
   section
-- exported rows are not limited by pagination
-- statistical exports use server-side biological/statistical calculations
+- exported rows are not limited by pagination, cursor state, virtual-scroll
+  section state, or frontend rendering
+- statistical exports use the same server-side biological/statistical
+  calculations as the visible analysis
 - no JavaScript is required for downloading

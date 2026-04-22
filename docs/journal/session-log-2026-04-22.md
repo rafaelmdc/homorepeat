@@ -85,3 +85,95 @@
 
 ## Next steps
 - Review the implementation plan for any remaining slices beyond CL-R16.
+
+---
+
+# Session Log
+
+**Date:** 2026-04-22
+
+## Objective
+- Start implementing reusable TSV downloads for browser tables.
+- Preserve current filters/context while ensuring virtual-scroll sections do not limit exports.
+- Keep implementation slice-based per `docs/implementation/table_downloads/implementation_plan.md`.
+
+## What happened
+- Added table-download implementation docs earlier in the session under `docs/implementation/table_downloads/`.
+- Refactored the implementation plan into phases and small slices.
+- Implemented Phase 1:
+  - TSV helpers.
+  - `BrowserTSVExportMixin`.
+  - reusable download URL generation.
+  - first end-to-end run-list TSV export.
+- Implemented Phase 2.1 for canonical catalog lists:
+  - accessions
+  - genomes
+  - sequences
+- Added `Download TSV` buttons to run, accession, genome, and sequence table headers.
+- Confirmed manual run-list export worked. A header-only TSV was traced to an active `q=run` filter that matched no real run id; `q=raw` / no `q` exported the real row.
+- Investigated browser download “unknown time left”:
+  - Tried a `FileResponse`/spooled-temp-file approach to provide `Content-Length`.
+  - Reverted it because it delayed the download and made the page appear to load while the file was precomputed.
+  - Decision: keep true streaming for MVP. Native browser ETA is not viable without exact `Content-Length`, and estimating in `Content-Length` is invalid.
+
+## Files touched
+- `apps/browser/exports.py`
+  - Added `TSVColumn`, `clean_tsv_value`, `iter_tsv_rows`, `stream_tsv_response`, and `BrowserTSVExportMixin`.
+  - Uses true `StreamingHttpResponse`; no `Content-Length`.
+- `apps/browser/views/explorer/runs.py`
+  - Added TSV export support for `RunListView`.
+- `apps/browser/views/explorer/accessions.py`
+  - Added TSV export support for `AccessionsListView`.
+- `apps/browser/views/explorer/genomes.py`
+  - Added TSV export support for `GenomeListView`.
+- `apps/browser/views/explorer/sequences.py`
+  - Added TSV export support for `SequenceListView`.
+- `apps/browser/explorer/canonical.py`
+  - Included sequence taxon numeric id in the narrow queryset to avoid deferred lookup during sequence exports.
+- `templates/browser/includes/download_tsv_button.html`
+  - New shared download button include.
+- `templates/browser/run_list.html`
+  - Added `Download TSV` action.
+- `templates/browser/accession_list.html`
+  - Added `Download TSV` action.
+- `templates/browser/genome_list.html`
+  - Added `Download TSV` action.
+- `templates/browser/sequence_list.html`
+  - Added `Download TSV` action.
+- `web_tests/test_browser_exports.py`
+  - Added TSV helper and download URL tests.
+- `web_tests/_browser_views.py`
+  - Added route-level export and button tests for run/accession/genome/sequence lists.
+- `web_tests/test_browser_home_runs.py`
+  - Added run-list TSV export tests to named suite.
+- `web_tests/test_browser_accessions.py`
+  - Added accession export/link tests to named suite.
+- `web_tests/test_browser_taxa_genomes.py`
+  - Added genome export test to named suite.
+- `web_tests/test_browser_sequences.py`
+  - Added sequence export test to named suite.
+
+## Validation
+- `python manage.py test web_tests.test_browser_exports web_tests.test_browser_home_runs`
+- `python manage.py test web_tests.test_browser_exports web_tests.test_browser_accessions web_tests.test_browser_taxa_genomes web_tests.test_browser_sequences`
+- `python manage.py test web_tests.test_browser_exports web_tests.test_browser_home_runs web_tests.test_browser_accessions web_tests.test_browser_taxa_genomes web_tests.test_browser_sequences`
+- `python -m py_compile apps/browser/exports.py apps/browser/explorer/canonical.py apps/browser/views/explorer/accessions.py apps/browser/views/explorer/genomes.py apps/browser/views/explorer/sequences.py web_tests/_browser_views.py web_tests/test_browser_accessions.py web_tests/test_browser_taxa_genomes.py web_tests/test_browser_sequences.py`
+- Manual run-list TSV download checked by the user and confirmed working.
+
+## Current status
+- Phase 1 complete.
+- Phase 2.1 complete.
+- Downloads currently implemented for:
+  - run list
+  - accession list
+  - genome list
+  - sequence list
+- Exports are server-side, streamed, filter-preserving, and ignore pagination/virtual-scroll display state.
+
+## Open issues
+- Browser native download UI may show “unknown time left” because true streaming cannot provide exact `Content-Length`.
+- Do not reintroduce pre-generation just to provide ETA unless the user explicitly accepts delayed downloads.
+- Remaining table surfaces still need implementation.
+
+## Next step
+- Implement Phase 2.2: TSV exports and buttons for `ProteinListView` and `RepeatCallListView`, including method/residue/length/purity filters and virtual-scroll-without-count behavior.

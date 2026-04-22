@@ -9,6 +9,7 @@ TEST_NAMES = [
     "test_sequence_list_uses_local_ids_and_denormalized_fields_for_links",
     "test_sequence_list_uses_cursor_pagination_for_default_raw_order",
     "test_sequence_list_alternate_sort_falls_back_to_page_pagination",
+    "test_sequence_list_tsv_export_uses_full_filtered_queryset",
     "test_sequence_detail_shows_linked_records_and_navigation",
     "test_sequence_list_virtual_scroll_fragment_returns_rows_without_count",
 ]
