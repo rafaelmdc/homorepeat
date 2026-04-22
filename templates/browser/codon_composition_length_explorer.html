@@ -321,7 +321,7 @@
   </div>
 </section>
 
-<section class="surface-card surface-card-wide">
+<section class="surface-card surface-card-wide" data-summary-section data-summary-page-size="25">
   <div class="section-header">
     <div>
       <p class="section-kicker mb-2">Grouped taxa</p>
@@ -347,9 +347,9 @@
           <th>Codon shares</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody data-summary-table-body>
         {% for row in summary_rows %}
-          <tr>
+          <tr data-summary-row>
             <td><a href="{{ row.taxon_detail_url }}">{{ row.taxon_name }}</a></td>
             <td>{{ row.rank }}</td>
             <td>{{ row.bin.label }}</td>
@@ -373,5 +373,10 @@
       </tbody>
     </table>
   </div>
+  <nav class="pagination-bar" aria-label="Grouped taxa pagination" data-summary-pagination hidden>
+    <button class="btn btn-outline-secondary" type="button" data-summary-pagination-previous>Previous</button>
+    <span class="pagination-status" aria-live="polite" data-summary-pagination-status></span>
+    <button class="btn btn-outline-secondary" type="button" data-summary-pagination-next>Next</button>
+  </nav>
 </section>
 {% endblock %}
