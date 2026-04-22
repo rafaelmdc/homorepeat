@@ -285,8 +285,10 @@
     buttons.forEach((button) => {
       const mode = button.dataset.overviewMode;
       const payload = modePayload(payloads, mode);
+      const isAvailable = Boolean(payload && payload.available);
       const isActive = mode === activeMode;
-      button.disabled = !payload || !payload.available;
+      button.hidden = !isAvailable;
+      button.disabled = !isAvailable;
       button.classList.toggle("btn-brand", isActive);
       button.classList.toggle("btn-outline-secondary", !isActive);
       button.setAttribute("aria-pressed", isActive ? "true" : "false");
