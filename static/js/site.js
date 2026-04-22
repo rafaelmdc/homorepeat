@@ -378,6 +378,43 @@
 })();
 
 (() => {
+  const DEFAULT_IMPORT_REFRESH_MS = 5000;
+  const MIN_IMPORT_REFRESH_MS = 3000;
+  const FORM_CONTROL_SELECTOR = "input, textarea, select, button, [contenteditable='true']";
+
+  function refreshInterval(marker) {
+    const parsed = Number.parseInt(marker.dataset.refreshIntervalMs || "", 10);
+    if (!Number.isFinite(parsed)) {
+      return DEFAULT_IMPORT_REFRESH_MS;
+    }
+    return Math.max(MIN_IMPORT_REFRESH_MS, parsed);
+  }
+
+  function formControlHasFocus() {
+    const activeElement = document.activeElement;
+    return activeElement instanceof Element && activeElement.matches(FORM_CONTROL_SELECTOR);
+  }
+
+  function mountImportAutoRefresh() {
+    const marker = document.querySelector("[data-import-auto-refresh]");
+    if (!marker) {
+      return;
+    }
+
+    window.setInterval(() => {
+      if (document.hidden || formControlHasFocus()) {
+        return;
+      }
+      window.location.reload();
+    }, refreshInterval(marker));
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    mountImportAutoRefresh();
+  });
+})();
+
+(() => {
   const DEFAULT_SUMMARY_PAGE_SIZE = 25;
 
   function clamp(number, minimum, maximum) {

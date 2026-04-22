@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from itertools import chain
 
 from .import_batches import latest_completed_import_batch_for_run
 from .models import PipelineRun
@@ -118,11 +119,13 @@ def browser_metadata_is_complete(metadata: Mapping[str, object] | None) -> bool:
 
 def _build_browser_facets(pipeline_run: PipelineRun) -> dict[str, list[str]]:
     methods = pipeline_run.run_parameters.order_by("method").values_list("method", flat=True).distinct()
-    residues = list(pipeline_run.run_parameters.order_by().values_list("repeat_residue", flat=True))
-    residues.extend(pipeline_run.accession_call_count_rows.order_by().values_list("repeat_residue", flat=True))
+    run_parameter_residues = pipeline_run.run_parameters.order_by().values_list("repeat_residue", flat=True).distinct()
+    accession_count_residues = (
+        pipeline_run.accession_call_count_rows.order_by().values_list("repeat_residue", flat=True).distinct()
+    )
     return {
         "methods": _normalize_string_list(methods),
-        "residues": _normalize_string_list(residues),
+        "residues": _normalize_string_list(chain(run_parameter_residues, accession_count_residues)),
     }
 
 

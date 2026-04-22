@@ -4,6 +4,10 @@
 {% block body_class %}imports-history-page{% endblock %}
 
 {% block content %}
+{% if enable_import_auto_refresh %}
+  <div data-import-auto-refresh data-refresh-interval-ms="5000" hidden></div>
+{% endif %}
+
 <section class="landing-band mb-4">
   <div class="landing-band-shell">
     <div class="landing-copy">
@@ -58,9 +62,7 @@
             <td>{{ batch.status }}</td>
             <td>
               {{ batch.phase|default:"-" }}
-              {% if batch.progress_payload.message %}
-                <div class="small text-secondary">{{ batch.progress_payload.message }}</div>
-              {% endif %}
+              {% include "imports/includes/progress.html" with batch=batch %}
             </td>
             <td>{{ batch.started_at|date:"Y-m-d H:i:s" }}</td>
             <td>{{ batch.heartbeat_at|date:"Y-m-d H:i:s"|default:"-" }}</td>

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from django.db import transaction
+from django.db import connection, transaction
 
 from apps.browser.catalog import sync_canonical_catalog_for_run
 from apps.browser.metadata import build_browser_metadata
@@ -22,6 +22,7 @@ from apps.imports.services.published_run import ImportContractError, inspect_pub
 
 from .copy import _analyze_models
 from .orchestrator import _import_inspected_run
+from .postgresql import _import_inspected_run_postgresql
 from .prepare import _prepare_streamed_import_data
 from .state import (
     ImportPhase,
@@ -87,37 +88,60 @@ def process_import_batch(batch_or_id: ImportBatch | int) -> ImportRunResult:
             },
             reporter=reporter,
         )
-        prepared = _prepare_streamed_import_data(batch, inspected, reporter=reporter)
-
-        _set_batch_state(
-            batch,
-            phase=ImportPhase.IMPORTING,
-            progress_payload={
-                "message": "Writing streamed rows into the database transaction.",
-                "batch_count": len(inspected.artifact_paths.acquisition_batches),
-                "retained_sequences": len(prepared.retained_sequence_ids),
-                "retained_proteins": len(prepared.retained_protein_ids),
-                "repeat_calls": prepared.total_repeat_calls,
-            },
-            reporter=reporter,
-        )
-
-        with transaction.atomic():
-            pipeline_run, counts = _import_inspected_run(
+        if connection.vendor == "postgresql":
+            _set_batch_state(
                 batch,
-                inspected,
-                prepared,
-                replace_existing=batch.replace_existing,
+                phase=ImportPhase.IMPORTING,
+                progress_payload={
+                    "message": "Writing staged rows into PostgreSQL.",
+                    "batch_count": len(inspected.artifact_paths.acquisition_batches),
+                },
                 reporter=reporter,
             )
-            pipeline_run.browser_metadata = build_browser_metadata(
-                pipeline_run,
-                raw_counts=counts,
+            with transaction.atomic():
+                pipeline_run, counts = _import_inspected_run_postgresql(
+                    batch,
+                    inspected,
+                    replace_existing=batch.replace_existing,
+                    reporter=reporter,
+                )
+                pipeline_run.browser_metadata = build_browser_metadata(
+                    pipeline_run,
+                    raw_counts=counts,
+                )
+                pipeline_run.save(update_fields=["browser_metadata"])
+                batch.pipeline_run = pipeline_run
+                batch.save(update_fields=["pipeline_run"])
+        else:
+            prepared = _prepare_streamed_import_data(batch, inspected, reporter=reporter)
+            _set_batch_state(
+                batch,
+                phase=ImportPhase.IMPORTING,
+                progress_payload={
+                    "message": "Writing streamed rows into the database transaction.",
+                    "batch_count": len(inspected.artifact_paths.acquisition_batches),
+                    "retained_sequences": len(prepared.retained_sequence_ids),
+                    "retained_proteins": len(prepared.retained_protein_ids),
+                    "repeat_calls": prepared.total_repeat_calls,
+                },
+                reporter=reporter,
             )
-            pipeline_run.save(update_fields=["browser_metadata"])
-            batch.pipeline_run = pipeline_run
-            batch.save(update_fields=["pipeline_run"])
-        del prepared
+            with transaction.atomic():
+                pipeline_run, counts = _import_inspected_run(
+                    batch,
+                    inspected,
+                    prepared,
+                    replace_existing=batch.replace_existing,
+                    reporter=reporter,
+                )
+                pipeline_run.browser_metadata = build_browser_metadata(
+                    pipeline_run,
+                    raw_counts=counts,
+                )
+                pipeline_run.save(update_fields=["browser_metadata"])
+                batch.pipeline_run = pipeline_run
+                batch.save(update_fields=["pipeline_run"])
+            del prepared
         _set_batch_state(
             batch,
             phase=ImportPhase.CATALOG_SYNC,

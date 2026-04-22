@@ -6,6 +6,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from apps.browser.catalog import sync_canonical_catalog_for_run
+from apps.browser.catalog.sync import _import_batch_row_count
 from apps.browser.models import (
     AcquisitionBatch,
     CanonicalGenome,
@@ -76,6 +77,26 @@ class CanonicalModelTests(TestCase):
             accession=self.genome.accession,
             gene_symbol="GENE1",
         )
+
+    def test_import_batch_row_count_uses_progress_counts_before_db_row_counts(self):
+        self.import_batch.progress_payload = {
+            "counts": {
+                "repeat_call_codon_usages": "12",
+            },
+        }
+        self.import_batch.row_counts = {
+            "repeat_call_codon_usages": 5,
+        }
+
+        self.assertEqual(_import_batch_row_count(self.import_batch, "repeat_call_codon_usages"), 12)
+
+    def test_import_batch_row_count_falls_back_to_saved_row_counts(self):
+        self.import_batch.progress_payload = {}
+        self.import_batch.row_counts = {
+            "repeat_call_codon_usages": 5,
+        }
+
+        self.assertEqual(_import_batch_row_count(self.import_batch, "repeat_call_codon_usages"), 5)
 
     def test_canonical_genome_links_to_latest_import_provenance(self):
         self.assertEqual(self.genome.latest_pipeline_run, self.pipeline_run)

@@ -20,6 +20,7 @@ from apps.browser.models import (
     TaxonClosure,
 )
 from apps.imports.models import ImportBatch
+from apps.imports.services.import_run.state import _normalize_progress_payload
 
 
 class PipelineRunModelTests(TestCase):
@@ -94,6 +95,58 @@ class ImportBatchModelTests(TestCase):
         self.assertEqual(batch.phase, "")
         self.assertIsNone(batch.heartbeat_at)
         self.assertEqual(batch.progress_payload, {})
+
+    def test_progress_payload_normalizes_percent_from_current_and_total(self):
+        payload = _normalize_progress_payload(
+            {
+                "message": "Importing retained sequence rows.",
+                "current": 25,
+                "total": 80,
+                "unit": "sequences",
+            }
+        )
+
+        self.assertEqual(payload["percent"], 31.2)
+
+    def test_progress_payload_normalizes_percent_from_processed_and_total(self):
+        payload = _normalize_progress_payload(
+            {
+                "message": "Syncing canonical protein rows.",
+                "processed": 5,
+                "total": 10,
+                "unit": "proteins",
+            }
+        )
+
+        self.assertEqual(payload["current"], 5)
+        self.assertEqual(payload["percent"], 50.0)
+
+    def test_import_batch_progress_steps_mark_current_phase(self):
+        batch = ImportBatch.objects.create(
+            source_path="/tmp/run-alpha/publish",
+            status=ImportBatch.Status.RUNNING,
+            phase="importing_rows",
+        )
+
+        states = {step["phase"]: step["state"] for step in batch.progress_steps}
+
+        self.assertEqual(states["queued"], "complete")
+        self.assertEqual(states["importing_rows"], "active")
+        self.assertEqual(states["syncing_canonical_catalog"], "pending")
+
+    def test_import_batch_progress_steps_mark_failed_phase(self):
+        batch = ImportBatch.objects.create(
+            source_path="/tmp/run-alpha/publish",
+            status=ImportBatch.Status.FAILED,
+            phase="failed",
+            progress_payload={"failed_phase": "importing_rows"},
+        )
+
+        states = {step["phase"]: step["state"] for step in batch.progress_steps}
+
+        self.assertEqual(states["preparing_import"], "complete")
+        self.assertEqual(states["importing_rows"], "failed")
+        self.assertEqual(states["syncing_canonical_catalog"], "pending")
 
 
 class RawProvenanceModelTests(TestCase):

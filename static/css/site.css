@@ -691,6 +691,116 @@ h4,
   font-weight: 700;
 }
 
+.import-progress {
+  min-width: 12rem;
+  max-width: 20rem;
+}
+
+.import-stepper {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.25rem;
+  min-width: 14rem;
+  max-width: 24rem;
+  margin-bottom: 0.5rem;
+}
+
+.import-step {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 0.16rem;
+  min-width: 0;
+  color: var(--site-muted);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.import-step:not(:first-child)::before {
+  content: "";
+  position: absolute;
+  top: 0.3rem;
+  left: calc(-50% + 0.42rem);
+  right: calc(50% + 0.42rem);
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(23, 36, 44, 0.14);
+}
+
+.import-step-complete,
+.import-step-active {
+  color: var(--site-brand-dark);
+}
+
+.import-step-complete:not(:first-child)::before,
+.import-step-active:not(:first-child)::before,
+.import-step-failed:not(:first-child)::before {
+  background: rgba(15, 89, 100, 0.55);
+}
+
+.import-step-dot {
+  position: relative;
+  z-index: 1;
+  width: 0.64rem;
+  height: 0.64rem;
+  border: 2px solid rgba(23, 36, 44, 0.2);
+  border-radius: 999px;
+  background: var(--site-paper);
+}
+
+.import-step-complete .import-step-dot {
+  border-color: var(--site-brand);
+  background: var(--site-brand);
+}
+
+.import-step-active .import-step-dot {
+  border-color: var(--site-brand);
+  background: var(--site-paper);
+  box-shadow: 0 0 0 3px rgba(15, 89, 100, 0.16);
+}
+
+.import-step-failed {
+  color: #9f1d1d;
+}
+
+.import-step-failed .import-step-dot {
+  border-color: #b42318;
+  background: #b42318;
+}
+
+.import-step-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--site-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.import-progress-track {
+  width: 100%;
+  height: 0.4rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(23, 36, 44, 0.1);
+}
+
+.import-progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--site-brand);
+}
+
 .data-table thead th {
   border-bottom-color: rgba(23, 36, 44, 0.08);
   color: var(--site-muted);

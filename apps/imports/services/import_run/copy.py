@@ -13,6 +13,7 @@ from .state import ImportPhase, _ImportBatchStateReporter, _set_batch_state
 
 BULK_CREATE_BATCH_SIZE = 5000
 COPY_FLUSH_ROW_COUNT = 10000
+COPY_FLUSH_BYTE_COUNT = 8 * 1024 * 1024
 
 
 def _copy_rows_to_model(
@@ -65,7 +66,7 @@ def _copy_rows_to_model(
             for row in rows:
                 writer.writerow(_serialize_copy_row(row))
                 count += 1
-                if count % COPY_FLUSH_ROW_COUNT == 0:
+                if count % COPY_FLUSH_ROW_COUNT == 0 or buffer.tell() >= COPY_FLUSH_BYTE_COUNT:
                     flush_buffer(copy)
                 if batch is not None and reporter is not None and count % BULK_CREATE_BATCH_SIZE == 0:
                     progress_payload = {progress_key: count}
@@ -92,6 +93,54 @@ def _copy_rows_to_model(
             reporter=reporter,
             force=True,
         )
+    return count
+
+
+def _copy_rows_to_table(
+    table_name: str,
+    column_names: list[str],
+    rows: Iterable[tuple[object, ...]],
+) -> int | None:
+    connection = connections[DEFAULT_DB_ALIAS]
+    if connection.vendor != "postgresql":
+        return None
+
+    connection.ensure_connection()
+    with connection.cursor() as cursor_wrapper:
+        raw_cursor = getattr(cursor_wrapper, "cursor", None)
+        if raw_cursor is None or not hasattr(raw_cursor, "copy"):
+            return None
+
+        quoted_table = connection.ops.quote_name(table_name)
+        quoted_columns = ", ".join(connection.ops.quote_name(column_name) for column_name in column_names)
+        count = 0
+        buffer = StringIO()
+        writer = csv.writer(
+            buffer,
+            delimiter="\t",
+            quotechar='"',
+            lineterminator="\n",
+            quoting=csv.QUOTE_MINIMAL,
+        )
+
+        def flush_buffer(copy) -> None:
+            payload = buffer.getvalue()
+            if not payload:
+                return
+            copy.write(payload)
+            buffer.seek(0)
+            buffer.truncate(0)
+
+        with raw_cursor.copy(
+            f"COPY {quoted_table} ({quoted_columns}) FROM STDIN WITH (FORMAT CSV, DELIMITER E'\\t', NULL '\\N')"
+        ) as copy:
+            for row in rows:
+                writer.writerow(_serialize_copy_row(row))
+                count += 1
+                if count % COPY_FLUSH_ROW_COUNT == 0 or buffer.tell() >= COPY_FLUSH_BYTE_COUNT:
+                    flush_buffer(copy)
+            flush_buffer(copy)
+
     return count
 
 

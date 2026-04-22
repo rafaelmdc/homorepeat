@@ -1,0 +1,32 @@
+{% if batch.status != "completed" %}
+  <div class="import-stepper mt-2" role="list" aria-label="Import steps">
+    {% for step in batch.progress_steps %}
+      <span class="import-step import-step-{{ step.state }}" role="listitem">
+        <span class="import-step-dot" aria-hidden="true"></span>
+        <span class="import-step-label">{{ step.label }}</span>
+      </span>
+    {% endfor %}
+  </div>
+{% endif %}
+
+{% if batch.progress_payload.message %}
+  <div class="small text-secondary">{{ batch.progress_payload.message }}</div>
+{% endif %}
+{% if batch.progress_payload.total %}
+  <div class="import-progress mt-2">
+    <div class="import-progress-meta">
+      <span>{{ batch.progress_payload.percent|default:"0" }}%</span>
+      <span>
+        {{ batch.progress_payload.current|default:"0" }}/{{ batch.progress_payload.total }}
+        {{ batch.progress_payload.unit|default:"rows" }}
+      </span>
+    </div>
+    <div class="import-progress-track" aria-hidden="true">
+      <div class="import-progress-bar" style="width: {{ batch.progress_payload.percent|default:'0' }}%;"></div>
+    </div>
+  </div>
+{% elif batch.progress_payload.processed %}
+  <div class="small text-secondary mt-1">
+    Processed {{ batch.progress_payload.processed }} {{ batch.progress_payload.unit|default:"rows" }}.
+  </div>
+{% endif %}

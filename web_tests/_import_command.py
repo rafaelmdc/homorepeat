@@ -97,7 +97,7 @@ class ImportRunCommandTests(TestCase):
             self.assertEqual(Genome.objects.count(), 1)
             self.assertEqual(Sequence.objects.count(), 1)
             self.assertEqual(Protein.objects.count(), 1)
-            self.assertEqual(Genome.objects.get().analyzed_protein_count, 2)
+            self.assertEqual(Genome.objects.get().analyzed_protein_count, 1)
             self.assertEqual(RunParameter.objects.count(), 1)
             self.assertEqual(RunParameter.objects.get().repeat_residue, "Q")
             self.assertEqual(RepeatCall.objects.count(), 1)
@@ -147,7 +147,7 @@ class ImportRunCommandTests(TestCase):
             )
             (publish_root / "status" / "accession_status.tsv").write_text(
                 "assembly_accession\tbatch_id\tdownload_status\tnormalize_status\ttranslate_status\tdetect_status\tfinalize_status\tterminal_status\tfailure_stage\tfailure_reason\tn_genomes\tn_proteins\tn_repeat_calls\tnotes\n"
-                "GCF_000001405.40\tbatch_0001\tsuccess\tsuccess\tsuccess\tsuccess\tsuccess\tcompleted\t\t\t1\t2\t2\t\n",
+                "GCF_000001405.40\tbatch_0001\tsuccess\tsuccess\tsuccess\tsuccess\tsuccess\tcompleted\t\t\t1\t1\t2\t\n",
                 encoding="utf-8",
             )
             (publish_root / "status" / "accession_call_counts.tsv").write_text(
@@ -331,7 +331,7 @@ class ImportRunCommandTests(TestCase):
             self.assertEqual(RepeatCall.objects.count(), 1)
             self.assertEqual(DownloadManifestEntry.objects.count(), 2)
             self.assertEqual(NormalizationWarning.objects.count(), 1)
-            self.assertEqual(Genome.objects.get(genome_id="genome_1").analyzed_protein_count, 2)
+            self.assertEqual(Genome.objects.get(genome_id="genome_1").analyzed_protein_count, 1)
             self.assertEqual(Genome.objects.get(genome_id="genome_2").analyzed_protein_count, 1)
             self.assertEqual(
                 set(Sequence.objects.values_list("genome__genome_id", flat=True)),
@@ -409,7 +409,7 @@ class ImportRunCommandTests(TestCase):
             self.assertEqual(DownloadManifestEntry.objects.count(), 1)
             self.assertEqual(NormalizationWarning.objects.count(), 1)
             self.assertEqual(Genome.objects.get().genome_name, "Replacement genome")
-            self.assertEqual(Genome.objects.get().analyzed_protein_count, 2)
+            self.assertEqual(Genome.objects.get().analyzed_protein_count, 1)
             self.assertEqual(RepeatCall.objects.get().call_id, "call_2")
             self.assertEqual(RepeatCall.objects.get().method, RepeatCall.Method.SEED_EXTEND)
             self.assertEqual(RepeatCall.objects.get().repeat_residue, "A")
@@ -513,9 +513,17 @@ class ImportRunCommandTests(TestCase):
                 "pure\tQ\tmin_repeat_count\t6\n",
                 encoding="utf-8",
             )
+            (publish_root / "acquisition" / "batches" / "batch_0002" / "proteins.tsv").write_text(
+                "protein_id\tsequence_id\tgenome_id\tprotein_name\tprotein_length\tgene_symbol\ttranslation_method\ttranslation_status\tassembly_accession\ttaxon_id\tgene_group\tprotein_external_id\n",
+                encoding="utf-8",
+            )
+            (publish_root / "acquisition" / "batches" / "batch_0002" / "proteins.faa").write_text(
+                "",
+                encoding="utf-8",
+            )
             (publish_root / "status" / "accession_status.tsv").write_text(
                 "assembly_accession\tbatch_id\tdownload_status\tnormalize_status\ttranslate_status\tdetect_status\tfinalize_status\tterminal_status\tfailure_stage\tfailure_reason\tn_genomes\tn_proteins\tn_repeat_calls\tnotes\n"
-                "GCF_000001405.40\tbatch_0001\tsuccess\tsuccess\tsuccess\tsuccess\tsuccess\tcompleted\t\t\t1\t2\t1\t\n",
+                "GCF_000001405.40\tbatch_0001\tsuccess\tsuccess\tsuccess\tsuccess\tsuccess\tcompleted\t\t\t1\t1\t1\t\n",
                 encoding="utf-8",
             )
             (publish_root / "status" / "accession_call_counts.tsv").write_text(
@@ -558,8 +566,7 @@ class ImportRunCommandTests(TestCase):
             )
             (publish_root_beta / "acquisition" / "batches" / "batch_0001" / "proteins.tsv").write_text(
                 "protein_id\tsequence_id\tgenome_id\tprotein_name\tprotein_length\tgene_symbol\ttranslation_method\ttranslation_status\tassembly_accession\ttaxon_id\tgene_group\tprotein_external_id\n"
-                "prot_1\tseq_1\tgenome_1\tNP_BETA.1\t30\tGENE1\ttranslated\ttranslated\tGCF_000001405.40\t9606\tGENE1\tNP_000001.1\n"
-                "prot_2\tseq_2\tgenome_1\tNP_000002.1\t28\tGENE2\ttranslated\ttranslated\tGCF_000001405.40\t9606\tGENE2\tNP_000002.1\n",
+                "prot_1\tseq_1\tgenome_1\tNP_BETA.1\t30\tGENE1\ttranslated\ttranslated\tGCF_000001405.40\t9606\tGENE1\tNP_000001.1\n",
                 encoding="utf-8",
             )
             (publish_root_beta / "calls" / "repeat_calls.tsv").write_text(

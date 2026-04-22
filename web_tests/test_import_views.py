@@ -68,6 +68,28 @@ class ImportViewTests(TestCase):
             self.assertEqual(batch.phase, "queued")
             self.assertEqual(batch.progress_payload["message"], "Queued for background import.")
 
+    def test_imports_home_auto_refreshes_when_recent_batch_is_active(self):
+        ImportBatch.objects.create(
+            source_path="/tmp/run-alpha/publish",
+            status=ImportBatch.Status.RUNNING,
+            phase="importing_rows",
+            progress_payload={
+                "message": "Importing genome rows.",
+                "current": 10,
+                "total": 20,
+                "percent": 50,
+                "unit": "genomes",
+            },
+        )
+
+        self.client.force_login(self.staff_user)
+        response = self.client.get(reverse("imports:home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "data-import-auto-refresh")
+        self.assertContains(response, "import-stepper")
+        self.assertContains(response, "10/20")
+
     def test_import_history_shows_completed_and_failed_batches(self):
         with TemporaryDirectory() as tempdir:
             publish_root = build_minimal_publish_root(Path(tempdir) / "run-alpha", run_id="run-alpha")

@@ -4,6 +4,10 @@
 {% block body_class %}run-detail-page{% endblock %}
 
 {% block content %}
+{% if enable_import_auto_refresh %}
+  <div data-import-auto-refresh data-refresh-interval-ms="5000" hidden></div>
+{% endif %}
+
 <section class="hero-panel py-4 py-lg-5 mb-4">
   <div class="row g-4 align-items-start">
     <div class="col-lg-8">
@@ -278,9 +282,7 @@
                 <span class="badge rounded-pill text-bg-light border status-badge">Replace existing</span>
               {% endif %}
             </div>
-            {% if active_import_batch.progress_payload.message %}
-              <p class="mb-3">{{ active_import_batch.progress_payload.message }}</p>
-            {% endif %}
+            {% include "imports/includes/progress.html" with batch=active_import_batch %}
             <dl class="info-grid mb-0">
               <dt>Started</dt>
               <dd>{{ active_import_batch.started_at|date:"Y-m-d H:i:s"|default:"-" }}</dd>

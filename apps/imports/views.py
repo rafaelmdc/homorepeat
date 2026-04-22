@@ -74,9 +74,13 @@ class ImportsHomeView(StaffOnlyMixin, FormView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        recent_batches = list(ImportBatch.objects.select_related("pipeline_run")[:8])
+        has_active_import_batches = _has_active_import_batches(recent_batches)
         context["detected_publish_runs"] = _discover_publish_runs()
         context["runs_root"] = str(_runs_root())
-        context["recent_batches"] = ImportBatch.objects.select_related("pipeline_run")[:8]
+        context["recent_batches"] = recent_batches
+        context["has_active_import_batches"] = has_active_import_batches
+        context["enable_import_auto_refresh"] = has_active_import_batches and self.request.method == "GET"
         context["history_url"] = reverse("imports:history")
         return context
 
@@ -89,6 +93,18 @@ class ImportsHistoryView(StaffOnlyMixin, ListView):
 
     def get_queryset(self):
         return ImportBatch.objects.select_related("pipeline_run")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        has_active_import_batches = _has_active_import_batches(context["import_batches"])
+        context["has_active_import_batches"] = has_active_import_batches
+        context["enable_import_auto_refresh"] = has_active_import_batches
+        return context
+
+
+def _has_active_import_batches(import_batches) -> bool:
+    active_statuses = {ImportBatch.Status.PENDING, ImportBatch.Status.RUNNING}
+    return any(batch.status in active_statuses for batch in import_batches)
 
 
 def _runs_root() -> Path:

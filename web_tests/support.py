@@ -84,7 +84,6 @@ def build_minimal_publish_root(base_dir: Path, *, run_id: str = "run-alpha") -> 
     seq_1_nt = "CAG" * 30
     seq_2_nt = "GCT" * 28
     prot_1_aa = "Q" * 30
-    prot_2_aa = "A" * 28
 
     manifest = {
         "run_id": run_id,
@@ -135,8 +134,7 @@ def build_minimal_publish_root(base_dir: Path, *, run_id: str = "run-alpha") -> 
     )
     (batch_root / "proteins.tsv").write_text(
         "protein_id\tsequence_id\tgenome_id\tprotein_name\tprotein_length\tgene_symbol\ttranslation_method\ttranslation_status\tassembly_accession\ttaxon_id\tgene_group\tprotein_external_id\n"
-        "prot_1\tseq_1\tgenome_1\tNP_000001.1\t30\tGENE1\ttranslated\ttranslated\tGCF_000001405.40\t9606\tGENE1\tNP_000001.1\n"
-        "prot_2\tseq_2\tgenome_1\tNP_000002.1\t28\tGENE2\ttranslated\ttranslated\tGCF_000001405.40\t9606\tGENE2\tNP_000002.1\n",
+        "prot_1\tseq_1\tgenome_1\tNP_000001.1\t30\tGENE1\ttranslated\ttranslated\tGCF_000001405.40\t9606\tGENE1\tNP_000001.1\n",
         encoding="utf-8",
     )
     (batch_root / "cds.fna").write_text(
@@ -144,7 +142,7 @@ def build_minimal_publish_root(base_dir: Path, *, run_id: str = "run-alpha") -> 
         encoding="utf-8",
     )
     (batch_root / "proteins.faa").write_text(
-        f">prot_1\n{prot_1_aa}\n>prot_2\n{prot_2_aa}\n",
+        f">prot_1\n{prot_1_aa}\n",
         encoding="utf-8",
     )
     (batch_root / "download_manifest.tsv").write_text(
@@ -167,7 +165,7 @@ def build_minimal_publish_root(base_dir: Path, *, run_id: str = "run-alpha") -> 
                     "n_downloaded_packages": 1,
                     "n_genomes": 1,
                     "n_sequences": 2,
-                    "n_proteins": 2,
+                    "n_proteins": 1,
                     "n_warning_rows": 0,
                 },
                 "checks": {
@@ -197,7 +195,7 @@ def build_minimal_publish_root(base_dir: Path, *, run_id: str = "run-alpha") -> 
     )
     (publish_root / "status" / "accession_status.tsv").write_text(
         "assembly_accession\tbatch_id\tdownload_status\tnormalize_status\ttranslate_status\tdetect_status\tfinalize_status\tterminal_status\tfailure_stage\tfailure_reason\tn_genomes\tn_proteins\tn_repeat_calls\tnotes\n"
-        "GCF_000001405.40\tbatch_0001\tsuccess\tsuccess\tsuccess\tsuccess\tsuccess\tcompleted\t\t\t1\t2\t1\t\n",
+        "GCF_000001405.40\tbatch_0001\tsuccess\tsuccess\tsuccess\tsuccess\tsuccess\tcompleted\t\t\t1\t1\t1\t\n",
         encoding="utf-8",
     )
     (publish_root / "status" / "accession_call_counts.tsv").write_text(
@@ -296,7 +294,7 @@ def build_multibatch_publish_root(base_dir: Path, *, run_id: str = "run-multi-ba
     )
     (publish_root / "status" / "accession_status.tsv").write_text(
         "assembly_accession\tbatch_id\tdownload_status\tnormalize_status\ttranslate_status\tdetect_status\tfinalize_status\tterminal_status\tfailure_stage\tfailure_reason\tn_genomes\tn_proteins\tn_repeat_calls\tnotes\n"
-        "GCF_000001405.40\tbatch_0001\tsuccess\tsuccess\tsuccess\tsuccess\tsuccess\tcompleted\t\t\t1\t2\t1\t\n"
+        "GCF_000001405.40\tbatch_0001\tsuccess\tsuccess\tsuccess\tsuccess\tsuccess\tcompleted\t\t\t1\t1\t1\t\n"
         "GCF_000001635.27\tbatch_0002\tsuccess\tsuccess\tsuccess\tsuccess\tsuccess\tcompleted\t\t\t1\t1\t1\t\n",
         encoding="utf-8",
     )

@@ -74,6 +74,9 @@ class _ImportBatchStateReporter:
         sql = f"UPDATE {quoted_table} SET {', '.join(assignments)} WHERE {quoted_pk} = %s"
         with self.connection.cursor() as cursor:
             cursor.execute(sql, params)
+            updated_rows = cursor.rowcount
+        if updated_rows == 0:
+            self.batch.save(update_fields=update_fields)
         self.last_flush_at = now
 
     def close(self) -> None:
@@ -120,7 +123,7 @@ def _set_batch_state(
     phase_changed = batch.phase != phase
     batch.phase = phase
     batch.heartbeat_at = timezone.now()
-    batch.progress_payload = progress_payload
+    batch.progress_payload = _normalize_progress_payload(progress_payload)
     if reporter is None:
         batch.save(update_fields=["phase", "heartbeat_at", "progress_payload"])
         return
@@ -136,15 +139,17 @@ def _mark_batch_failed(
     *,
     reporter: _ImportBatchStateReporter | None = None,
 ) -> None:
+    failed_phase = batch.phase
     batch.status = ImportBatch.Status.FAILED
     batch.phase = ImportPhase.FAILED
     batch.finished_at = timezone.now()
     batch.heartbeat_at = batch.finished_at
     batch.error_count = 1
     batch.row_counts = {}
-    batch.progress_payload = {
+    batch.progress_payload = _normalize_progress_payload({
         "message": "Import failed.",
-    }
+        "failed_phase": failed_phase,
+    })
     batch.error_message = str(exc)
     update_fields = [
         "status",
@@ -177,10 +182,14 @@ def _mark_batch_completed(
     batch.heartbeat_at = finished_at
     batch.success_count = sum(counts.values())
     batch.error_count = 0
-    batch.progress_payload = {
+    batch.progress_payload = _normalize_progress_payload({
         "message": "Import completed successfully.",
         "counts": counts,
-    }
+        "current": batch.success_count,
+        "total": batch.success_count,
+        "percent": 100,
+        "unit": "rows",
+    })
     batch.row_counts = counts
     batch.error_message = ""
     update_fields = [
@@ -199,3 +208,22 @@ def _mark_batch_completed(
         batch.save(update_fields=update_fields)
         return
     reporter.save(update_fields, force=True)
+
+
+def _normalize_progress_payload(progress_payload: dict[str, object]) -> dict[str, object]:
+    normalized = dict(progress_payload)
+    if "current" not in normalized and "processed" in normalized:
+        normalized["current"] = normalized["processed"]
+
+    try:
+        current = float(normalized["current"])
+        total = float(normalized["total"])
+    except (KeyError, TypeError, ValueError):
+        return normalized
+
+    if total <= 0:
+        return normalized
+
+    percent = max(0.0, min(100.0, (current / total) * 100.0))
+    normalized["percent"] = round(percent, 1)
+    return normalized

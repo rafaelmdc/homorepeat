@@ -208,9 +208,11 @@ class RunDetailView(DetailView):
         )[:12]
         context["batch_preview_is_truncated"] = pipeline_run.acquisition_batches_count > len(context["batch_preview"])
         context["active_import_batch"] = active_import_batch
+        context["has_active_import_batches"] = active_import_batch is not None
+        context["enable_import_auto_refresh"] = active_import_batch is not None
         context["active_import_progress_items"] = _mapping_items(
             active_import_batch.progress_payload if active_import_batch else {},
-            exclude_keys={"message"},
+            exclude_keys={"message", "current", "total", "percent", "unit", "processed"},
         )
         context["latest_import_batch"] = latest_import_batch
         context["latest_completed_import_batch"] = latest_completed_import_batch

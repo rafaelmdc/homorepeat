@@ -149,6 +149,7 @@ def _rebuild_canonical_codon_composition_summaries_postgresql() -> int:
             residue_codons.codon
     """
     with connection.cursor() as cursor:
+        cursor.execute("SET LOCAL work_mem = '512MB'")
         cursor.execute(f"DELETE FROM {table_name}")
         cursor.execute(sql, list(ALLOWED_STATS_RANKS))
         cursor.execute(f"SELECT COUNT(*) FROM {table_name}")

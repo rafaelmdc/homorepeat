@@ -550,7 +550,7 @@ class PublishedRunImportServiceTests(SimpleTestCase):
             self.assertEqual(len(taxonomy_rows), 3)
             self.assertEqual(len(genome_rows), 2)
             self.assertEqual(len(sequence_rows), 3)
-            self.assertEqual(len(protein_rows), 3)
+            self.assertEqual(len(protein_rows), 2)
             self.assertEqual(len(repeat_call_rows), 2)
             self.assertEqual(len(download_manifest_rows), 2)
             self.assertEqual(len(normalization_warning_rows), 1)
@@ -569,7 +569,7 @@ class PublishedRunImportServiceTests(SimpleTestCase):
             )
             self.assertEqual(
                 Counter(row["batch_id"] for row in protein_rows),
-                Counter({"batch_0001": 2, "batch_0002": 1}),
+                Counter({"batch_0001": 1, "batch_0002": 1}),
             )
             self.assertEqual(inspected.artifact_paths.acquisition_batches[0].batch_id, "batch_0001")
             self.assertEqual(inspected.artifact_paths.acquisition_batches[1].batch_id, "batch_0002")
