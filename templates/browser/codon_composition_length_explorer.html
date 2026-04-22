@@ -6,6 +6,8 @@
 {% block extra_scripts %}
   <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
   <script src="{% static 'js/stats-chart-shell.js' %}"></script>
+  <script src="{% static 'js/taxonomy-gutter.js' %}"></script>
+  <script src="{% static 'js/pairwise-overview.js' %}"></script>
   <script src="{% static 'js/codon-composition-length-explorer.js' %}"></script>
 {% endblock %}
 
@@ -130,6 +132,10 @@
         <strong>Shift:</strong> each cell marks how much codon composition
         changes between adjacent length bins for the same taxon.
       </p>
+      <p class="text-secondary mb-0" data-codon-length-overview-description data-overview-mode="similarity" hidden>
+        <strong>Similarity:</strong> pairwise trajectory divergence between visible taxa across
+        all shared length bins. Lower values indicate more similar codon-length trajectories.
+      </p>
     </div>
     <div class="mode-switch" data-codon-length-overview-mode-switch>
       <span class="mode-switch-label">View</span>
@@ -142,13 +148,20 @@
       <button class="btn btn-outline-secondary" type="button"
               data-codon-length-overview-mode-button data-overview-mode="shift"
               aria-pressed="false">Shift</button>
+      <button class="btn btn-outline-secondary" type="button"
+              data-codon-length-overview-mode-button data-overview-mode="similarity"
+              aria-pressed="false">Similarity</button>
     </div>
   </div>
 
   {{ overview_preference_payload|json_script:overview_preference_payload_id }}
   {{ overview_dominance_payload|json_script:overview_dominance_payload_id }}
   {{ overview_shift_payload|json_script:overview_shift_payload_id }}
+  {{ overview_taxonomy_gutter_payload|json_script:overview_taxonomy_gutter_payload_id }}
+  {{ overview_pairwise_payload|json_script:overview_pairwise_payload_id }}
+  {{ overview_pairwise_taxonomy_gutter_payload|json_script:overview_pairwise_taxonomy_gutter_payload_id }}
   <div class="length-chart-shell" id="{{ overview_container_id }}" data-default-overview-mode="{{ overview_default_mode }}"></div>
+  <div class="length-chart-shell" id="{{ overview_pairwise_container_id }}" hidden></div>
   <p class="empty-callout mb-0 mt-3" data-codon-length-overview-empty>{{ summary_empty_reason }}</p>
   <noscript>
     <p class="surface-note mb-0 mt-3">JavaScript is disabled, so the grouped fallback table remains the active view.</p>
@@ -180,6 +193,107 @@
   </noscript>
 </section>
 
+{% if inspect_scope_active %}
+<section class="surface-card surface-card-wide mb-4">
+  <div class="section-header">
+    <div>
+      <p class="section-kicker mb-2">Inspect layer</p>
+      <h2>{{ inspect_scope_label }}</h2>
+      <p class="text-secondary mb-0">
+        Codon composition by length bin for the focused branch scope.
+        Codon fractions are averaged across all repeat calls in scope per bin.
+      </p>
+    </div>
+  </div>
+
+  {% if inspect_observation_count %}
+    {{ inspect_payload|json_script:inspect_payload_id }}
+    <div class="length-chart-shell mb-4" id="{{ inspect_chart_container_id }}"></div>
+    <div class="table-responsive mb-4">
+      <table class="table align-middle mb-0 data-table">
+        <thead>
+          <tr>
+            <th>Length bin</th>
+            <th>Observations</th>
+            <th>Species</th>
+            <th>Dominant codon</th>
+            <th>Dominance margin</th>
+            <th>Codon shares</th>
+            <th>Shift from previous</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for bin_row in inspect_bin_rows %}
+            <tr>
+              <td>{{ bin_row.binLabel }}</td>
+              <td>{{ bin_row.observationCount }}</td>
+              <td>{{ bin_row.speciesCount }}</td>
+              <td>{{ bin_row.dominantCodon }}</td>
+              <td>{{ bin_row.dominanceMargin|floatformat:"-3" }}</td>
+              <td>
+                {% for cs in bin_row.codonShares %}
+                  <span>{{ cs.codon }} {{ cs.share|floatformat:"-3" }}</span>{% if not forloop.last %}, {% endif %}
+                {% endfor %}
+              </td>
+              <td>{% if bin_row.delta != None %}{{ bin_row.delta|floatformat:"-3" }}{% else %}—{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7" class="empty-cell">{{ inspect_empty_reason }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if inspect_has_comparison %}
+    <div class="section-header mt-4">
+      <div>
+        <p class="section-kicker mb-1">Comparison</p>
+        <h3 class="mb-0">{{ inspect_comparison_scope_label }}</h3>
+      </div>
+    </div>
+    <div class="table-responsive mb-4">
+      <table class="table align-middle mb-0 data-table">
+        <thead>
+          <tr>
+            <th>Length bin</th>
+            <th>Observations</th>
+            <th>Species</th>
+            <th>Dominant codon</th>
+            <th>Dominance margin</th>
+            <th>Codon shares</th>
+            <th>Shift from previous</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for bin_row in inspect_comparison_bin_rows %}
+            <tr>
+              <td>{{ bin_row.binLabel }}</td>
+              <td>{{ bin_row.observationCount }}</td>
+              <td>{{ bin_row.speciesCount }}</td>
+              <td>{{ bin_row.dominantCodon }}</td>
+              <td>{{ bin_row.dominanceMargin|floatformat:"-3" }}</td>
+              <td>
+                {% for cs in bin_row.codonShares %}
+                  <span>{{ cs.codon }} {{ cs.share|floatformat:"-3" }}</span>{% if not forloop.last %}, {% endif %}
+                {% endfor %}
+              </td>
+              <td>{% if bin_row.delta != None %}{{ bin_row.delta|floatformat:"-3" }}{% else %}—{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    <noscript>
+      <p class="surface-note mb-0 mt-3">JavaScript is disabled, so the inspect table remains the active detail view.</p>
+    </noscript>
+  {% else %}
+    <p class="empty-callout mb-0">{{ inspect_empty_reason }}</p>
+  {% endif %}
+</section>
+{% endif %}
+
 <section class="surface-card surface-card-wide mb-4">
   <div class="section-header">
     <div>
@@ -209,14 +323,15 @@
   </div>
 </section>
 
-<section class="surface-card surface-card-wide">
+<section class="surface-card surface-card-wide" data-summary-section data-summary-page-size="25">
   <div class="section-header">
     <div>
       <p class="section-kicker mb-2">Grouped taxa</p>
       <h2>{{ visible_taxa_count }} visible taxon{{ visible_taxa_count|pluralize }} at rank {{ current_rank }}</h2>
       <p class="text-secondary mb-0">
-        Server-rendered fallback rows show the grouped taxon-length states that
-        the overview uses and future browse and inspect layers will reuse.
+        Per-taxon length-bin rows with codon shares, dominant codon, and support.
+        No-JS fallback for the overview and browse layers; inspect layer is not
+        yet available.
       </p>
     </div>
   </div>
@@ -234,9 +349,9 @@
           <th>Codon shares</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody data-summary-table-body>
         {% for row in summary_rows %}
-          <tr>
+          <tr data-summary-row>
             <td><a href="{{ row.taxon_detail_url }}">{{ row.taxon_name }}</a></td>
             <td>{{ row.rank }}</td>
             <td>{{ row.bin.label }}</td>
@@ -260,5 +375,10 @@
       </tbody>
     </table>
   </div>
+  <nav class="pagination-bar" aria-label="Grouped taxa pagination" data-summary-pagination hidden>
+    <button class="btn btn-outline-secondary" type="button" data-summary-pagination-previous>Previous</button>
+    <span class="pagination-status" aria-live="polite" data-summary-pagination-status></span>
+    <button class="btn btn-outline-secondary" type="button" data-summary-pagination-next>Next</button>
+  </nav>
 </section>
 {% endblock %}

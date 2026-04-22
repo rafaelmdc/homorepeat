@@ -258,6 +258,93 @@ def build_two_codon_preference_map_payload(summary_rows, *, visible_codons):
     )
 
 
+def build_codon_length_inspect_payload(
+    bundle,
+    *,
+    scope_label: str,
+    comparison_bundle=None,
+    comparison_scope_label: str = "",
+) -> dict:
+    observation_count = bundle.get("observation_count", 0) if bundle else 0
+    visible_codons = list(bundle.get("visible_codons", [])) if bundle else []
+    bin_rows = list(bundle.get("bin_rows", [])) if bundle else []
+
+    if observation_count == 0 or not bin_rows:
+        return {
+            "scopeLabel": scope_label,
+            "observationCount": observation_count,
+            "available": False,
+            "visibleCodons": visible_codons,
+            "visibleBins": list(bundle.get("visible_bins", [])) if bundle else [],
+            "binRows": [],
+        }
+
+    payload_bin_rows = _build_inspect_bin_rows(bin_rows, visible_codons)
+
+    result = {
+        "scopeLabel": scope_label,
+        "observationCount": observation_count,
+        "available": True,
+        "visibleCodons": visible_codons,
+        "visibleBins": list(bundle.get("visible_bins", [])),
+        "binRows": payload_bin_rows,
+        "maxObservationCount": max((row["observation_count"] for row in bin_rows), default=0),
+    }
+
+    if comparison_bundle and comparison_bundle.get("bin_rows"):
+        comparison_bin_rows = _build_inspect_bin_rows(
+            comparison_bundle["bin_rows"],
+            visible_codons,
+        )
+        if comparison_bin_rows:
+            result["comparisonBinRows"] = comparison_bin_rows
+            result["comparisonScopeLabel"] = comparison_scope_label
+            result["comparisonObservationCount"] = comparison_bundle.get("observation_count", 0)
+
+    return result
+
+
+def _build_inspect_bin_rows(bin_rows: list, visible_codons: list) -> list:
+    payload_bin_rows = []
+    previous_shares: dict[str, float] | None = None
+    for bin_row in bin_rows:
+        current_shares = {s["codon"]: s["share"] for s in bin_row["codon_shares"]}
+        delta = None
+        if previous_shares is not None:
+            if len(visible_codons) == 2:
+                codon_a = visible_codons[0]
+                delta = round(abs(current_shares.get(codon_a, 0) - previous_shares.get(codon_a, 0)), 6)
+            else:
+                delta = round(
+                    sum(
+                        abs(current_shares.get(c, 0) - previous_shares.get(c, 0))
+                        for c in visible_codons
+                    ),
+                    6,
+                )
+        payload_bin_rows.append(
+            {
+                "binLabel": bin_row["bin"]["label"],
+                "binStart": bin_row["bin"]["start"],
+                "observationCount": bin_row["observation_count"],
+                "speciesCount": bin_row["species_count"],
+                "dominantCodon": bin_row["dominant_codon"],
+                "dominanceMargin": round(bin_row["dominance_margin"], 6),
+                "codonShares": [
+                    {
+                        "codon": s["codon"],
+                        "share": s["share"],
+                        "codonCount": s.get("codon_count", 0),
+                    }
+                    for s in bin_row["codon_shares"]
+                ],
+                "delta": delta,
+            }
+        )
+        previous_shares = current_shares
+    return payload_bin_rows
+
+
 def build_codon_length_preference_overview_payload(bundle):
     visible_codons = list(bundle.get("visible_codons", [])) if bundle else []
     matrix_rows = list(bundle.get("matrix_rows", [])) if bundle else []
@@ -422,6 +509,90 @@ def build_codon_length_shift_overview_payload(bundle):
             "transitions": transitions,
         },
     )
+
+
+def build_codon_length_pairwise_overview_payload(bundle):
+    visible_codons = list(bundle.get("visible_codons", [])) if bundle else []
+    matrix_rows = list(bundle.get("matrix_rows", [])) if bundle else []
+    visible_bins = list(bundle.get("visible_bins", [])) if bundle else []
+
+    if len(visible_codons) < 2 or len(matrix_rows) < 2:
+        payload = _build_pairwise_overview_payload(
+            [],
+            mode="pairwise_similarity_matrix",
+            divergence_matrix=[],
+            value_min=0,
+            value_max=1,
+            visible_codons=visible_codons,
+            display_metric="divergence",
+            include_display_metric_when_empty=True,
+        )
+        payload["available"] = False
+        return payload
+
+    taxon_rows = [
+        {
+            "taxon_id": row["taxon_id"],
+            "taxon_name": row["taxon_name"],
+            "rank": row["rank"],
+            "observation_count": row["observation_count"],
+            "species_count": row.get("species_count", row["observation_count"]),
+        }
+        for row in matrix_rows
+    ]
+
+    bin_vectors_per_taxon = []
+    for row in matrix_rows:
+        shares_by_bin = {}
+        for bin_row in row["bin_rows"]:
+            codon_lookup = _codon_share_lookup(bin_row)
+            shares_by_bin[bin_row["bin"]["start"]] = [
+                codon_lookup.get(codon, 0) for codon in visible_codons
+            ]
+        bin_vectors_per_taxon.append(shares_by_bin)
+
+    divergence_matrix = _build_trajectory_divergence_matrix(bin_vectors_per_taxon, visible_bins)
+    value_min, value_max = _matrix_value_range(divergence_matrix, default_min=0, default_max=1)
+
+    payload = _build_pairwise_overview_payload(
+        taxon_rows,
+        mode="pairwise_similarity_matrix",
+        divergence_matrix=divergence_matrix,
+        value_min=value_min,
+        value_max=value_max,
+        visible_codons=visible_codons,
+        display_metric="divergence",
+        extra_taxon_fields=("columnIndex",),
+    )
+    payload["available"] = True
+    return payload
+
+
+def _build_trajectory_divergence_matrix(bin_vectors_per_taxon, visible_bins):
+    n = len(bin_vectors_per_taxon)
+    matrix = [[0.0] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(i + 1, n):
+            d = _trajectory_divergence(bin_vectors_per_taxon[i], bin_vectors_per_taxon[j], visible_bins)
+            matrix[i][j] = d
+            matrix[j][i] = d
+    return matrix
+
+
+def _trajectory_divergence(vectors_i, vectors_j, visible_bins):
+    total = 0.0
+    shared = 0
+    for visible_bin in visible_bins:
+        bin_start = visible_bin["start"]
+        v_i = vectors_i.get(bin_start)
+        v_j = vectors_j.get(bin_start)
+        if v_i is None or v_j is None:
+            continue
+        total += _jensen_shannon_divergence(v_i, v_j)
+        shared += 1
+    if shared == 0:
+        return 1.0
+    return round(total / shared, 6)
 
 
 def build_codon_length_browse_payload(bundle, *, window_size=12):

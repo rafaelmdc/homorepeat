@@ -50,7 +50,7 @@ def _rebuild_canonical_codon_composition_length_summaries_postgresql() -> int:
                 scope.display_taxon_name,
                 (FLOOR(scope.repeat_length / 5.0)::int * 5) AS length_bin_start,
                 scope.species_taxon_id,
-                COUNT(*)::bigint AS call_count
+                COUNT(DISTINCT scope.repeat_call_id)::bigint AS call_count
             FROM call_scope scope
             INNER JOIN browser_canonicalrepeatcallcodonusage codon_usage
                 ON codon_usage.repeat_call_id = scope.repeat_call_id

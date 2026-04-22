@@ -3,14 +3,19 @@ from django.views.generic import TemplateView
 
 from apps.browser.stats import (
     apply_stats_filter_context,
-    build_codon_length_composition_bundle,
     build_codon_length_browse_payload,
+    build_codon_length_composition_bundle,
     build_codon_length_dominance_overview_payload,
+    build_codon_length_inspect_bundle,
+    build_codon_length_inspect_payload,
+    build_codon_length_pairwise_overview_payload,
+    build_codon_length_parent_comparison_bundle,
     build_codon_length_preference_overview_payload,
     build_codon_length_shift_overview_payload,
     build_filtered_repeat_call_queryset,
     build_matching_repeat_calls_with_codon_usage_count,
     build_stats_filter_state,
+    build_taxonomy_gutter_payload,
 )
 from apps.browser.stats.params import ALLOWED_STATS_RANKS
 
@@ -155,6 +160,54 @@ class CodonCompositionLengthExplorerView(TemplateView):
             ),
         }
 
+    def _inspect_scope_active(self) -> bool:
+        return self._get_filter_state().branch_scope_active
+
+    def _inspect_scope_label(self) -> str:
+        filter_state = self._get_filter_state()
+        if filter_state.selected_branch_taxon is not None:
+            branch_rank = filter_state.selected_branch_taxon.rank or filter_state.branch_scope_noun
+            return f"{branch_rank.title()} {filter_state.selected_branch_taxon.taxon_name}"
+        if filter_state.branch_scope_active:
+            return f"{filter_state.branch_scope_noun.title()} {filter_state.branch_scope_label}"
+        return "Current filtered scope"
+
+    def _get_inspect_bundle(self) -> dict[str, object] | None:
+        if not self._inspect_scope_active():
+            return None
+        if not hasattr(self, "_inspect_bundle"):
+            self._inspect_bundle = build_codon_length_inspect_bundle(self._get_filter_state())
+        return self._inspect_bundle
+
+    def _get_comparison_taxon(self):
+        filter_state = self._get_filter_state()
+        if filter_state.selected_branch_taxon is not None:
+            return filter_state.selected_branch_taxon.parent_taxon
+        if filter_state.current_branch_q:
+            from apps.browser.views.filters import _match_branch_taxa
+            matched = list(_match_branch_taxa(filter_state.current_branch_q)[:2])
+            if len(matched) == 1:
+                return matched[0].parent_taxon
+        return None
+
+    def _get_comparison_bundle(self) -> dict[str, object] | None:
+        comparison_taxon = self._get_comparison_taxon()
+        if comparison_taxon is None:
+            return None
+        if not hasattr(self, "_comparison_bundle"):
+            self._comparison_bundle = build_codon_length_parent_comparison_bundle(
+                self._get_filter_state(),
+                parent_taxon=comparison_taxon,
+            )
+        return self._comparison_bundle
+
+    def _comparison_scope_label(self) -> str:
+        taxon = self._get_comparison_taxon()
+        if taxon is None:
+            return ""
+        rank = taxon.rank.title() if taxon.rank else "Parent"
+        return f"{rank} {taxon.taxon_name}"
+
     def _default_overview_mode(self, summary_bundle: dict[str, object]) -> str:
         visible_codon_count = len(summary_bundle["visible_codons"])
         if visible_codon_count == 2:
@@ -186,6 +239,15 @@ class CodonCompositionLengthExplorerView(TemplateView):
             summary_bundle
         )
         context["overview_shift_payload"] = build_codon_length_shift_overview_payload(summary_bundle)
+        pairwise_payload = build_codon_length_pairwise_overview_payload(summary_bundle)
+        overview_taxonomy_gutter_payload = build_taxonomy_gutter_payload(
+            summary_bundle.get("matrix_rows", []),
+            filter_state=filter_state,
+            collapse_rank=filter_state.rank,
+        )
+        context["overview_taxonomy_gutter_payload"] = overview_taxonomy_gutter_payload
+        context["overview_pairwise_payload"] = pairwise_payload
+        context["overview_pairwise_taxonomy_gutter_payload"] = overview_taxonomy_gutter_payload
         context["browse_payload"] = build_codon_length_browse_payload(summary_bundle)
         context["overview_preference_payload_id"] = (
             "codon-composition-length-preference-overview-payload"
@@ -194,7 +256,15 @@ class CodonCompositionLengthExplorerView(TemplateView):
             "codon-composition-length-dominance-overview-payload"
         )
         context["overview_shift_payload_id"] = "codon-composition-length-shift-overview-payload"
+        context["overview_pairwise_payload_id"] = "codon-composition-length-pairwise-overview-payload"
+        context["overview_pairwise_taxonomy_gutter_payload_id"] = (
+            "codon-composition-length-pairwise-taxonomy-gutter-payload"
+        )
+        context["overview_taxonomy_gutter_payload_id"] = (
+            "codon-composition-length-overview-taxonomy-gutter-payload"
+        )
         context["overview_container_id"] = "codon-composition-length-overview-chart"
+        context["overview_pairwise_container_id"] = "codon-composition-length-pairwise-chart"
         context["browse_payload_id"] = "codon-composition-length-browse-payload"
         context["browse_container_id"] = "codon-composition-length-browse"
         context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
@@ -207,4 +277,29 @@ class CodonCompositionLengthExplorerView(TemplateView):
         context["scope_items"] = self._scope_items()
         context["reset_url"] = reverse("browser:codon-composition-length")
         context["summary_empty_reason"] = self._summary_empty_reason()
+        context["inspect_scope_active"] = self._inspect_scope_active()
+        inspect_bundle = self._get_inspect_bundle()
+        if inspect_bundle is not None:
+            comparison_bundle = self._get_comparison_bundle()
+            comparison_scope_label = self._comparison_scope_label()
+            inspect_payload = build_codon_length_inspect_payload(
+                inspect_bundle,
+                scope_label=self._inspect_scope_label(),
+                comparison_bundle=comparison_bundle,
+                comparison_scope_label=comparison_scope_label,
+            )
+            context["inspect_payload"] = inspect_payload
+            context["inspect_payload_id"] = "codon-composition-length-inspect-payload"
+            context["inspect_chart_container_id"] = "codon-composition-length-inspect-chart"
+            context["inspect_observation_count"] = inspect_bundle["observation_count"]
+            context["inspect_scope_label"] = self._inspect_scope_label()
+            context["inspect_bin_rows"] = inspect_payload["binRows"]
+            context["inspect_has_comparison"] = bool(inspect_payload.get("comparisonBinRows"))
+            context["inspect_comparison_scope_label"] = comparison_scope_label
+            context["inspect_comparison_bin_rows"] = inspect_payload.get("comparisonBinRows", [])
+            context["inspect_empty_reason"] = (
+                "No canonical repeat calls with codon-usage rows matched the current branch scope."
+                if not inspect_payload["available"]
+                else ""
+            )
         return context

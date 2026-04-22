@@ -8,14 +8,22 @@
   const normalizeZoomState = chartShell.normalizeZoomState;
   const buildXAxisZoom = chartShell.buildXAxisZoom;
   const buildYAxisZoom = chartShell.buildYAxisZoom;
+  const attachTaxonomyGutter = chartShell.attachTaxonomyGutter;
+  const hasTaxonomyGutterPayload = chartShell.hasTaxonomyGutterPayload;
   const installWheelHandler = chartShell.installWheelHandler;
   const resolveZoomState = chartShell.resolveZoomState;
+  const taxonomyGutterReservedWidth = chartShell.taxonomyGutterReservedWidth;
+  const visibleRowCountForZoom = chartShell.visibleRowCountForZoom;
 
   const PAYLOAD_IDS = {
     preference: "codon-composition-length-preference-overview-payload",
     dominance: "codon-composition-length-dominance-overview-payload",
     shift: "codon-composition-length-shift-overview-payload",
+    taxonomyGutter: "codon-composition-length-overview-taxonomy-gutter-payload",
+    pairwise: "codon-composition-length-pairwise-overview-payload",
+    pairwiseTaxonomyGutter: "codon-composition-length-pairwise-taxonomy-gutter-payload",
     browse: "codon-composition-length-browse-payload",
+    inspect: "codon-composition-length-inspect-payload",
   };
   const CODON_COLORS = [
     "#0f5964",
@@ -26,6 +34,7 @@
     "#9a7b2f",
   ];
   const DEFAULT_VISIBLE_COLUMNS = 16;
+  const MAX_VISIBLE_ROWS_WITH_TAXON_LABELS = 24;
   const DEFAULT_BROWSE_WINDOW_SIZE = 12;
   const BROWSE_PANEL_HEIGHT = 250;
   const BROWSE_ROW_GAP = 16;
@@ -56,8 +65,12 @@
     return (payload.visibleBins || []).map((bin) => bin.label);
   }
 
-  function yLabels(payload) {
-    return (payload.taxa || []).map((taxon) => taxon.taxonName);
+  function yAxisValues(payload) {
+    return (payload.taxa || []).map((taxon) => String(taxon.taxonId));
+  }
+
+  function taxonLabelByAxisValue(payload) {
+    return new Map((payload.taxa || []).map((taxon) => [String(taxon.taxonId), taxon.taxonName]));
   }
 
   function cellXIndex(cell, payload) {
@@ -87,8 +100,11 @@
   function columnZoomStateFromParams(params, columnCount) {
     if (!params) return null;
     const events = Array.isArray(params.batch) && params.batch.length > 0 ? params.batch : [params];
-    const payload = events.find((entry) => entry && entry.dataZoomId === "codon-length-x-slider");
-    if (!payload || payload.dataZoomId !== "codon-length-x-slider") return null;
+    const payload = events.find((entry) => (
+      entry
+      && (entry.dataZoomId === "codon-length-x-slider" || entry.dataZoomId === "codon-length-x-inside")
+    ));
+    if (!payload) return null;
     if (payload.startValue != null || payload.endValue != null) {
       return normalizeColumnZoomState(columnCount, {
         startValue: payload.startValue,
@@ -103,6 +119,10 @@
     if (columnCount <= 96) return 4;
     if (columnCount <= 180) return 9;
     return 19;
+  }
+
+  function shouldShowTaxonLabels(visibleRowCount) {
+    return visibleRowCount <= MAX_VISIBLE_ROWS_WITH_TAXON_LABELS;
   }
 
   function seriesData(payload) {
@@ -208,8 +228,13 @@
     ];
   }
 
-  function chartOption(payload, rowZoomState, columnZoomState) {
+  function chartOption(payload, rowZoomState, columnZoomState, {
+    hasTaxonomyGutter = false,
+    gutterWidth = 0,
+    showTaxonLabels = true,
+  } = {}) {
     const labels = xLabels(payload);
+    const yLabelByValue = taxonLabelByAxisValue(payload);
     const xZoom = buildXAxisZoom(labels.length, columnZoomState, {
       insideId: "codon-length-x-inside",
       sliderId: "codon-length-x-slider",
@@ -221,7 +246,7 @@
     return {
       animation: false,
       grid: {
-        left: 172,
+        left: hasTaxonomyGutter ? gutterWidth + 20 : 172,
         right: payload.mode === "dominance" ? 28 : 96,
         top: 36,
         bottom: columnZoomState ? 112 : 76,
@@ -247,11 +272,14 @@
       yAxis: {
         type: "category",
         inverse: true,
-        data: yLabels(payload),
+        data: yAxisValues(payload),
         axisLabel: {
+          show: !hasTaxonomyGutter && showTaxonLabels,
+          interval: 0,
           color: "#17242c",
           width: 156,
           overflow: "truncate",
+          formatter: (value) => yLabelByValue.get(String(value)) || String(value),
         },
       },
       dataZoom: [
@@ -282,8 +310,10 @@
     buttons.forEach((button) => {
       const mode = button.dataset.overviewMode;
       const payload = modePayload(payloads, mode);
+      const isAvailable = Boolean(payload && payload.available);
       const isActive = mode === activeMode;
-      button.disabled = !payload || !payload.available;
+      button.hidden = !isAvailable;
+      button.disabled = !isAvailable;
       button.classList.toggle("btn-brand", isActive);
       button.classList.toggle("btn-outline-secondary", !isActive);
       button.setAttribute("aria-pressed", isActive ? "true" : "false");
@@ -298,12 +328,15 @@
 
   function mountOverview() {
     const container = document.getElementById("codon-composition-length-overview-chart");
+    const pairwiseContainer = document.getElementById("codon-composition-length-pairwise-chart");
     if (!container || typeof window.echarts === "undefined") return;
 
+    const pairwisePayload = parsePayload(PAYLOAD_IDS.pairwise) || {};
     const payloads = {
       preference: parsePayload(PAYLOAD_IDS.preference) || {},
       dominance: parsePayload(PAYLOAD_IDS.dominance) || {},
       shift: parsePayload(PAYLOAD_IDS.shift) || {},
+      similarity: pairwisePayload,
     };
     let payload = activePayload(payloads, container.dataset.defaultOverviewMode || "preference");
     const emptyMessage = document.querySelector("[data-codon-length-overview-empty]");
@@ -316,6 +349,8 @@
       return;
     }
 
+    const taxonomyGutterPayload = parsePayload(PAYLOAD_IDS.taxonomyGutter) || null;
+    const hasTaxonomyGutter = hasTaxonomyGutterPayload(taxonomyGutterPayload);
     let currentMode = payload.mode;
     let currentRowZoomState = normalizeZoomState(
       payload.visibleTaxaCount || 0,
@@ -327,9 +362,66 @@
     );
     container.style.height = `${chartHeightForRowCount(payload.visibleTaxaCount || 0, { minimumHeight: 360 })}px`;
     const chart = window.echarts.init(container);
+    const gutterOverlay = hasTaxonomyGutter ? attachTaxonomyGutter(chart, taxonomyGutterPayload) : null;
     installWheelHandler(chart, payload.visibleTaxaCount || 0, () => currentRowZoomState);
 
+    if (pairwiseContainer && pairwisePayload?.available && window.HomorepeatPairwiseOverview) {
+      const pairwiseTaxonomyGutterPayload = parsePayload(PAYLOAD_IDS.pairwiseTaxonomyGutter) || null;
+      window.HomorepeatPairwiseOverview.renderPairwiseOverview({
+        container: pairwiseContainer,
+        payload: pairwisePayload,
+        taxonomyGutterPayload: pairwiseTaxonomyGutterPayload,
+        distanceScaleStorageKey: "codon-length-pairwise-distance-scale",
+      });
+      pairwiseContainer.hidden = true;
+    }
+
+    function overviewGutterWidth(visibleRowCount) {
+      if (!hasTaxonomyGutter) return 0;
+      return taxonomyGutterReservedWidth(taxonomyGutterPayload, {
+        showLabels: shouldShowTaxonLabels(visibleRowCount),
+        visibleLeafCount: visibleRowCount,
+      });
+    }
+
+    function currentLayout() {
+      const visibleRowCount = visibleRowCountForZoom(payload.visibleTaxaCount || 0, currentRowZoomState);
+      const showTaxonLabels = shouldShowTaxonLabels(visibleRowCount);
+      return {
+        visibleRowCount,
+        showTaxonLabels,
+        gutterWidth: overviewGutterWidth(visibleRowCount),
+        top: 36,
+        bottom: currentColumnZoomState ? 112 : 76,
+        right: payload.mode === "dominance" ? 28 : 96,
+      };
+    }
+
+    function refreshOverviewGutter() {
+      if (!gutterOverlay) return;
+      const layout = currentLayout();
+      gutterOverlay.render({
+        showLabels: layout.showTaxonLabels,
+        zoomState: currentRowZoomState,
+        gutterWidth: layout.gutterWidth,
+        top: layout.top,
+        bottom: layout.bottom,
+        left: hasTaxonomyGutter ? layout.gutterWidth + 20 : 172,
+        right: layout.right,
+      });
+    }
+
     function render() {
+      const isPairwise = currentMode === "similarity";
+      if (isPairwise) {
+        container.hidden = true;
+        if (pairwiseContainer) pairwiseContainer.hidden = false;
+        if (emptyMessage) emptyMessage.hidden = true;
+        syncButtons(buttons, currentMode, payloads);
+        syncDescriptions(descriptions, currentMode);
+        return;
+      }
+      if (pairwiseContainer) pairwiseContainer.hidden = true;
       payload = modePayload(payloads, currentMode);
       currentRowZoomState = normalizeZoomState(payload.visibleTaxaCount || 0, currentRowZoomState);
       currentColumnZoomState = normalizeColumnZoomState(xLabels(payload).length, currentColumnZoomState);
@@ -338,14 +430,43 @@
       syncButtons(buttons, currentMode, payloads);
       syncDescriptions(descriptions, currentMode);
       container.style.height = `${chartHeightForRowCount(payload.visibleTaxaCount || 0, { minimumHeight: 360 })}px`;
-      chart.setOption(chartOption(payload, currentRowZoomState, currentColumnZoomState), { notMerge: true });
+      const layout = currentLayout();
+      chart.setOption(chartOption(payload, currentRowZoomState, currentColumnZoomState, {
+        hasTaxonomyGutter,
+        gutterWidth: layout.gutterWidth,
+        showTaxonLabels: layout.showTaxonLabels,
+      }), { notMerge: true });
       chart.resize();
+      refreshOverviewGutter();
     }
 
     chart.on("datazoom", (params) => {
+      if (currentMode === "similarity") return;
+      const nextColumnZoomState = columnZoomStateFromParams(params, xLabels(payload).length);
+      if (nextColumnZoomState) {
+        currentColumnZoomState = nextColumnZoomState;
+        refreshOverviewGutter();
+        return;
+      }
+      const previousVisibleRowCount = visibleRowCountForZoom(
+        payload.visibleTaxaCount || 0,
+        currentRowZoomState,
+      );
+      const previousGutterWidth = overviewGutterWidth(previousVisibleRowCount);
       currentRowZoomState = resolveZoomState(chart, payload.visibleTaxaCount || 0, params);
-      currentColumnZoomState = columnZoomStateFromParams(params, xLabels(payload).length)
-        || currentColumnZoomState;
+      const nextVisibleRowCount = visibleRowCountForZoom(
+        payload.visibleTaxaCount || 0,
+        currentRowZoomState,
+      );
+      const nextGutterWidth = overviewGutterWidth(nextVisibleRowCount);
+      if (
+        previousVisibleRowCount !== nextVisibleRowCount
+        || previousGutterWidth !== nextGutterWidth
+      ) {
+        render();
+        return;
+      }
+      refreshOverviewGutter();
     });
 
     buttons.forEach((button) => {
@@ -354,54 +475,92 @@
         const nextPayload = modePayload(payloads, nextMode);
         if (!nextPayload || !nextPayload.available || nextMode === currentMode) return;
         currentMode = nextMode;
-        currentRowZoomState = normalizeZoomState(
-          nextPayload.visibleTaxaCount || 0,
-          defaultZoomState(nextPayload.visibleTaxaCount || 0),
-        );
-        currentColumnZoomState = normalizeColumnZoomState(
-          xLabels(nextPayload).length,
-          defaultColumnZoomState(xLabels(nextPayload).length),
-        );
+        if (nextMode !== "similarity") {
+          currentRowZoomState = normalizeZoomState(
+            nextPayload.visibleTaxaCount || 0,
+            defaultZoomState(nextPayload.visibleTaxaCount || 0),
+          );
+          currentColumnZoomState = normalizeColumnZoomState(
+            xLabels(nextPayload).length,
+            defaultColumnZoomState(xLabels(nextPayload).length),
+          );
+        }
         render();
       });
     });
 
-    window.addEventListener("resize", () => chart.resize());
+    window.addEventListener("resize", () => {
+      chart.resize();
+      refreshOverviewGutter();
+    });
     render();
   }
 
   function browseSeries(payload, panel) {
     const codons = payload.visibleCodons || [];
+    const totalObservations = Math.max(0, panel.observationCount || 0);
+    const supportSeries = {
+      name: "Support",
+      type: "line",
+      smooth: false,
+      showSymbol: false,
+      connectNulls: false,
+      silent: true,
+      tooltip: { show: false },
+      emphasis: { disabled: true },
+      z: 3,
+      lineStyle: {
+        color: "#17242c",
+        width: 2,
+        opacity: 0.22,
+      },
+      areaStyle: {
+        color: "#17242c",
+        opacity: 0.05,
+      },
+      data: panel.bins.map((bin) => {
+        if (!bin.occupied || totalObservations <= 0) return null;
+        return (bin.observationCount || 0) / totalObservations;
+      }),
+    };
     if (codons.length === 2) {
-      return codons.map((codon, codonIndex) => ({
+      return [
+        supportSeries,
+        ...codons.map((codon, codonIndex) => ({
+          name: codon,
+          type: "line",
+          smooth: false,
+          showSymbol: true,
+          symbolSize: 4,
+          connectNulls: false,
+          z: 2,
+          areaStyle: { opacity: codonIndex === 0 ? 0.22 : 0 },
+          lineStyle: { width: 2 },
+          itemStyle: { color: CODON_COLORS[codonIndex % CODON_COLORS.length] },
+          data: panel.bins.map((bin) => {
+            const shareRow = (bin.codonShares || []).find((row) => row.codon === codon);
+            return bin.occupied && shareRow ? shareRow.share : null;
+          }),
+        })),
+      ];
+    }
+    return [
+      ...codons.map((codon, codonIndex) => ({
         name: codon,
-        type: "line",
-        smooth: false,
-        showSymbol: true,
-        symbolSize: 4,
-        connectNulls: false,
-        areaStyle: { opacity: codonIndex === 0 ? 0.22 : 0 },
-        lineStyle: { width: 2 },
-        itemStyle: { color: CODON_COLORS[codonIndex % CODON_COLORS.length] },
+        type: "bar",
+        stack: "composition",
+        barWidth: "72%",
+        z: 2,
+        itemStyle: {
+          color: CODON_COLORS[codonIndex % CODON_COLORS.length],
+        },
         data: panel.bins.map((bin) => {
           const shareRow = (bin.codonShares || []).find((row) => row.codon === codon);
           return bin.occupied && shareRow ? shareRow.share : null;
         }),
-      }));
-    }
-    return codons.map((codon, codonIndex) => ({
-      name: codon,
-      type: "bar",
-      stack: "composition",
-      barWidth: "72%",
-      itemStyle: {
-        color: CODON_COLORS[codonIndex % CODON_COLORS.length],
-      },
-      data: panel.bins.map((bin) => {
-        const shareRow = (bin.codonShares || []).find((row) => row.codon === codon);
-        return bin.occupied && shareRow ? shareRow.share : null;
-      }),
-    }));
+      })),
+      supportSeries,
+    ];
   }
 
   function browseTooltip(panel, dataIndex) {
@@ -436,6 +595,7 @@
         show: true,
         top: 10,
         type: "scroll",
+        data: payload.visibleCodons || [],
         textStyle: { color: "#63727a" },
       },
       tooltip: {
@@ -624,8 +784,175 @@
     renderVirtualWindow();
   }
 
+  function inspectChartOption(payload) {
+    const codons = payload.visibleCodons || [];
+    const binRows = payload.binRows || [];
+    const labels = binRows.map((row) => row.binLabel);
+    const isTwoCodon = codons.length === 2;
+    const compRows = payload.comparisonBinRows || [];
+    const hasComparison = compRows.length > 0;
+    const compLabel = payload.comparisonScopeLabel || "Parent";
+    const compRowByBinStart = new Map(compRows.map((r) => [r.binStart, r]));
+
+    function inspectTooltip(dataIndex) {
+      const row = binRows[dataIndex];
+      if (!row) return "";
+      const lines = [
+        `<strong>${payload.scopeLabel}</strong>`,
+        row.binLabel,
+        supportLine("Support", row.observationCount, row.speciesCount, payload.observationCount),
+        `Dominant codon: ${row.dominantCodon}`,
+        `Dominance margin: ${row.dominanceMargin.toFixed(3)}`,
+      ];
+      if (row.delta !== null && row.delta !== undefined) {
+        lines.push(`Shift from previous: ${row.delta.toFixed(3)}`);
+      }
+      lines.push(...(row.codonShares || []).map((cs) => `${cs.codon}: ${formatShare(cs.share)}`));
+      if (hasComparison) {
+        const compRow = compRowByBinStart.get(row.binStart);
+        if (compRow) {
+          lines.push(`<hr><strong>${compLabel}</strong>`);
+          lines.push(supportLine("Support", compRow.observationCount, compRow.speciesCount, payload.comparisonObservationCount));
+          lines.push(...(compRow.codonShares || []).map((cs) => `${cs.codon}: ${formatShare(cs.share)}`));
+        }
+      }
+      return lines.join("<br>");
+    }
+
+    function makeSeries() {
+      if (isTwoCodon) {
+        const focused = codons.map((codon, i) => ({
+          name: codon,
+          type: "line",
+          smooth: false,
+          showSymbol: true,
+          symbolSize: 5,
+          connectNulls: false,
+          areaStyle: { opacity: i === 0 ? 0.22 : 0 },
+          lineStyle: { width: 2.5 },
+          itemStyle: { color: CODON_COLORS[i % CODON_COLORS.length] },
+          data: binRows.map((row) => {
+            const cs = (row.codonShares || []).find((s) => s.codon === codon);
+            return cs ? cs.share : null;
+          }),
+        }));
+        if (!hasComparison) return focused;
+        const comparison = codons.map((codon, i) => ({
+          name: `${codon} (${compLabel})`,
+          type: "line",
+          smooth: false,
+          showSymbol: false,
+          connectNulls: false,
+          lineStyle: { width: 1.5, type: "dashed", color: CODON_COLORS[i % CODON_COLORS.length] },
+          itemStyle: { color: CODON_COLORS[i % CODON_COLORS.length] },
+          tooltip: { show: false },
+          data: binRows.map((row) => {
+            const compRow = compRowByBinStart.get(row.binStart);
+            const cs = compRow && (compRow.codonShares || []).find((s) => s.codon === codon);
+            return cs ? cs.share : null;
+          }),
+        }));
+        return [...focused, ...comparison];
+      }
+      const focused = codons.map((codon, i) => ({
+        name: codon,
+        type: "bar",
+        stack: "composition",
+        barWidth: hasComparison ? "42%" : "72%",
+        itemStyle: { color: CODON_COLORS[i % CODON_COLORS.length] },
+        data: binRows.map((row) => {
+          const cs = (row.codonShares || []).find((s) => s.codon === codon);
+          return cs ? cs.share : null;
+        }),
+      }));
+      if (!hasComparison) return focused;
+      const comparison = codons.map((codon, i) => ({
+        name: `${codon} (${compLabel})`,
+        type: "bar",
+        stack: "composition-parent",
+        barWidth: "42%",
+        itemStyle: { color: CODON_COLORS[i % CODON_COLORS.length], opacity: 0.4 },
+        data: binRows.map((row) => {
+          const compRow = compRowByBinStart.get(row.binStart);
+          const cs = compRow && (compRow.codonShares || []).find((s) => s.codon === codon);
+          return cs ? cs.share : null;
+        }),
+      }));
+      return [...focused, ...comparison];
+    }
+
+    return {
+      animation: false,
+      color: CODON_COLORS,
+      grid: {
+        left: 60,
+        right: 24,
+        top: isTwoCodon ? 42 : 50,
+        bottom: 52,
+      },
+      legend: {
+        show: true,
+        top: 10,
+        type: "scroll",
+        data: codons,
+        textStyle: { color: "#63727a" },
+      },
+      tooltip: {
+        trigger: "axis",
+        confine: true,
+        formatter(params) {
+          const firstParam = Array.isArray(params) ? params[0] : params;
+          return inspectTooltip(firstParam?.dataIndex ?? 0);
+        },
+      },
+      xAxis: {
+        type: "category",
+        data: labels,
+        axisLabel: {
+          color: "#63727a",
+          interval: labelInterval(labels.length),
+          hideOverlap: true,
+          width: 52,
+          overflow: "truncate",
+        },
+        axisTick: { alignWithLabel: true },
+      },
+      yAxis: {
+        type: "value",
+        min: 0,
+        max: 1,
+        axisLabel: {
+          color: "#63727a",
+          formatter: (value) => `${Math.round(value * 100)}%`,
+        },
+        splitLine: {
+          lineStyle: { color: "rgba(23, 36, 44, 0.08)" },
+        },
+      },
+      series: makeSeries(),
+    };
+  }
+
+  function mountInspect() {
+    const container = document.getElementById("codon-composition-length-inspect-chart");
+    if (!container || typeof window.echarts === "undefined") return;
+
+    const payload = parsePayload(PAYLOAD_IDS.inspect) || {};
+    if (!payload.available || !Array.isArray(payload.binRows) || payload.binRows.length === 0) {
+      container.hidden = true;
+      return;
+    }
+
+    container.hidden = false;
+    container.style.height = "300px";
+    const chart = window.echarts.init(container);
+    chart.setOption(inspectChartOption(payload), { notMerge: true });
+    window.addEventListener("resize", () => chart.resize());
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     mountOverview();
     mountBrowse();
+    mountInspect();
   });
 })();
