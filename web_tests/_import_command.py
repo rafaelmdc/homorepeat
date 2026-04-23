@@ -28,7 +28,7 @@ from apps.browser.models import (
     Taxon,
     TaxonClosure,
 )
-from apps.imports.models import ImportBatch
+from apps.imports.models import CatalogVersion, ImportBatch
 
 from .support import add_finalized_codon_usage_artifact, build_minimal_publish_root, build_multibatch_publish_root
 
@@ -114,6 +114,7 @@ class ImportRunCommandTests(TestCase):
             self.assertEqual(ImportBatch.objects.get().status, ImportBatch.Status.COMPLETED)
             self.assertEqual(ImportBatch.objects.get().phase, "completed")
             self.assertIsNotNone(ImportBatch.objects.get().heartbeat_at)
+            self.assertEqual(CatalogVersion.current(), 1)
 
     def test_import_run_parses_numeric_codon_ratio_value_for_raw_and_canonical_repeat_calls(self):
         with TemporaryDirectory() as tempdir:

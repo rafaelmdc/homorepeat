@@ -3,6 +3,7 @@ from django.views.generic import TemplateView
 
 from apps.browser.stats import (
     apply_stats_filter_context,
+    build_stats_payload,
     build_codon_length_browse_payload,
     build_codon_length_composition_bundle,
     build_codon_length_dominance_overview_payload,
@@ -17,6 +18,7 @@ from apps.browser.stats import (
     build_stats_filter_state,
     build_taxonomy_gutter_payload,
 )
+from apps.browser.stats.policy import StatsPayloadType
 from apps.browser.stats.params import ALLOWED_STATS_RANKS
 
 from ...metadata import resolve_browser_facets
@@ -116,7 +118,10 @@ class CodonCompositionLengthExplorerView(StatsTSVExportMixin, TemplateView):
         yield from self._iter_long_form_summary_rows()
 
     def iter_preference_tsv_rows(self):
-        payload = build_codon_length_preference_overview_payload(self._get_summary_bundle())
+        payload = self._build_payload(
+            StatsPayloadType.CODON_LENGTH_OVERVIEW_PREFERENCE,
+            lambda: build_codon_length_preference_overview_payload(self._get_summary_bundle()),
+        )
         taxa = payload["taxa"]
         for cell in payload["cells"]:
             taxon = taxa[cell["rowIndex"]]
@@ -130,7 +135,10 @@ class CodonCompositionLengthExplorerView(StatsTSVExportMixin, TemplateView):
             )
 
     def iter_dominance_tsv_rows(self):
-        payload = build_codon_length_dominance_overview_payload(self._get_summary_bundle())
+        payload = self._build_payload(
+            StatsPayloadType.CODON_LENGTH_OVERVIEW_DOMINANCE,
+            lambda: build_codon_length_dominance_overview_payload(self._get_summary_bundle()),
+        )
         taxa = payload["taxa"]
         for cell in payload["cells"]:
             taxon = taxa[cell["rowIndex"]]
@@ -152,7 +160,10 @@ class CodonCompositionLengthExplorerView(StatsTSVExportMixin, TemplateView):
             )
 
     def iter_shift_tsv_rows(self):
-        payload = build_codon_length_shift_overview_payload(self._get_summary_bundle())
+        payload = self._build_payload(
+            StatsPayloadType.CODON_LENGTH_OVERVIEW_SHIFT,
+            lambda: build_codon_length_shift_overview_payload(self._get_summary_bundle()),
+        )
         taxa = payload["taxa"]
         for cell in payload["cells"]:
             taxon = taxa[cell["rowIndex"]]
@@ -167,7 +178,10 @@ class CodonCompositionLengthExplorerView(StatsTSVExportMixin, TemplateView):
 
     def iter_similarity_tsv_rows(self):
         yield from self._iter_pairwise_similarity_rows(
-            build_codon_length_pairwise_overview_payload(self._get_summary_bundle())
+            self._build_payload(
+                StatsPayloadType.CODON_LENGTH_OVERVIEW_SIMILARITY,
+                lambda: build_codon_length_pairwise_overview_payload(self._get_summary_bundle()),
+            )
         )
 
     def iter_browse_tsv_rows(self):
@@ -211,11 +225,14 @@ class CodonCompositionLengthExplorerView(StatsTSVExportMixin, TemplateView):
         inspect_bundle = self._get_inspect_bundle()
         if inspect_bundle is None:
             return
-        payload = build_codon_length_inspect_payload(
-            inspect_bundle,
-            scope_label=self._inspect_scope_label(),
-            comparison_bundle=self._get_comparison_bundle(),
-            comparison_scope_label=self._comparison_scope_label(),
+        payload = self._build_payload(
+            StatsPayloadType.CODON_LENGTH_INSPECT,
+            lambda: build_codon_length_inspect_payload(
+                inspect_bundle,
+                scope_label=self._inspect_scope_label(),
+                comparison_bundle=self._get_comparison_bundle(),
+                comparison_scope_label=self._comparison_scope_label(),
+            ),
         )
         scope_label = (
             payload.get("comparisonScopeLabel", "")
@@ -239,6 +256,9 @@ class CodonCompositionLengthExplorerView(StatsTSVExportMixin, TemplateView):
             self._filter_state = build_stats_filter_state(self.request)
         return self._filter_state
 
+    def _build_payload(self, payload_type: StatsPayloadType, build_fn):
+        return build_stats_payload(self._get_filter_state(), payload_type, build_fn)
+
     def _get_matching_repeat_calls_count(self) -> int:
         if not hasattr(self, "_matching_repeat_calls_count"):
             filter_state = self._get_filter_state()
@@ -258,14 +278,18 @@ class CodonCompositionLengthExplorerView(StatsTSVExportMixin, TemplateView):
             if not filter_state.residue:
                 self._matching_repeat_calls_with_codon_usage_count = 0
             else:
-                self._matching_repeat_calls_with_codon_usage_count = (
-                    build_matching_repeat_calls_with_codon_usage_count(filter_state)
+                self._matching_repeat_calls_with_codon_usage_count = self._build_payload(
+                    StatsPayloadType.CODON_USAGE_COUNT,
+                    lambda: build_matching_repeat_calls_with_codon_usage_count(filter_state),
                 )
         return self._matching_repeat_calls_with_codon_usage_count
 
     def _get_summary_bundle(self) -> dict[str, object]:
         if not hasattr(self, "_summary_bundle"):
-            bundle = build_codon_length_composition_bundle(self._get_filter_state())
+            bundle = self._build_payload(
+                StatsPayloadType.CODON_LENGTH_SUMMARY,
+                lambda: build_codon_length_composition_bundle(self._get_filter_state()),
+            )
             self._summary_bundle = {
                 **bundle,
                 "summary_rows": [self._with_row_links(row) for row in self._flatten_summary_rows(bundle)],
@@ -383,7 +407,10 @@ class CodonCompositionLengthExplorerView(StatsTSVExportMixin, TemplateView):
         if not self._inspect_scope_active():
             return None
         if not hasattr(self, "_inspect_bundle"):
-            self._inspect_bundle = build_codon_length_inspect_bundle(self._get_filter_state())
+            self._inspect_bundle = self._build_payload(
+                StatsPayloadType.CODON_LENGTH_INSPECT,
+                lambda: build_codon_length_inspect_bundle(self._get_filter_state()),
+            )
         return self._inspect_bundle
 
     def _get_comparison_taxon(self):
@@ -402,9 +429,12 @@ class CodonCompositionLengthExplorerView(StatsTSVExportMixin, TemplateView):
         if comparison_taxon is None:
             return None
         if not hasattr(self, "_comparison_bundle"):
-            self._comparison_bundle = build_codon_length_parent_comparison_bundle(
-                self._get_filter_state(),
-                parent_taxon=comparison_taxon,
+            self._comparison_bundle = self._build_payload(
+                StatsPayloadType.CODON_LENGTH_COMPARISON,
+                lambda: build_codon_length_parent_comparison_bundle(
+                    self._get_filter_state(),
+                    parent_taxon=comparison_taxon,
+                ),
             )
         return self._comparison_bundle
 
@@ -439,23 +469,37 @@ class CodonCompositionLengthExplorerView(StatsTSVExportMixin, TemplateView):
         context["summary_rows"] = summary_bundle["summary_rows"]
         context["visible_codons"] = summary_bundle["visible_codons"]
         context["overview_default_mode"] = self._default_overview_mode(summary_bundle)
-        context["overview_preference_payload"] = build_codon_length_preference_overview_payload(
-            summary_bundle
+        context["overview_preference_payload"] = self._build_payload(
+            StatsPayloadType.CODON_LENGTH_OVERVIEW_PREFERENCE,
+            lambda: build_codon_length_preference_overview_payload(summary_bundle),
         )
-        context["overview_dominance_payload"] = build_codon_length_dominance_overview_payload(
-            summary_bundle
+        context["overview_dominance_payload"] = self._build_payload(
+            StatsPayloadType.CODON_LENGTH_OVERVIEW_DOMINANCE,
+            lambda: build_codon_length_dominance_overview_payload(summary_bundle),
         )
-        context["overview_shift_payload"] = build_codon_length_shift_overview_payload(summary_bundle)
-        pairwise_payload = build_codon_length_pairwise_overview_payload(summary_bundle)
-        overview_taxonomy_gutter_payload = build_taxonomy_gutter_payload(
-            summary_bundle.get("matrix_rows", []),
-            filter_state=filter_state,
-            collapse_rank=filter_state.rank,
+        context["overview_shift_payload"] = self._build_payload(
+            StatsPayloadType.CODON_LENGTH_OVERVIEW_SHIFT,
+            lambda: build_codon_length_shift_overview_payload(summary_bundle),
+        )
+        pairwise_payload = self._build_payload(
+            StatsPayloadType.CODON_LENGTH_OVERVIEW_SIMILARITY,
+            lambda: build_codon_length_pairwise_overview_payload(summary_bundle),
+        )
+        overview_taxonomy_gutter_payload = self._build_payload(
+            StatsPayloadType.TAXONOMY_GUTTER,
+            lambda: build_taxonomy_gutter_payload(
+                summary_bundle.get("matrix_rows", []),
+                filter_state=filter_state,
+                collapse_rank=filter_state.rank,
+            ),
         )
         context["overview_taxonomy_gutter_payload"] = overview_taxonomy_gutter_payload
         context["overview_pairwise_payload"] = pairwise_payload
         context["overview_pairwise_taxonomy_gutter_payload"] = overview_taxonomy_gutter_payload
-        context["browse_payload"] = build_codon_length_browse_payload(summary_bundle)
+        context["browse_payload"] = self._build_payload(
+            StatsPayloadType.CODON_LENGTH_BROWSE,
+            lambda: build_codon_length_browse_payload(summary_bundle),
+        )
         context["overview_preference_payload_id"] = (
             "codon-composition-length-preference-overview-payload"
         )
@@ -530,11 +574,14 @@ class CodonCompositionLengthExplorerView(StatsTSVExportMixin, TemplateView):
                     "label": "Download Inspect TSV",
                 }
             )
-            inspect_payload = build_codon_length_inspect_payload(
-                inspect_bundle,
-                scope_label=self._inspect_scope_label(),
-                comparison_bundle=comparison_bundle,
-                comparison_scope_label=comparison_scope_label,
+            inspect_payload = self._build_payload(
+                StatsPayloadType.CODON_LENGTH_INSPECT,
+                lambda: build_codon_length_inspect_payload(
+                    inspect_bundle,
+                    scope_label=self._inspect_scope_label(),
+                    comparison_bundle=comparison_bundle,
+                    comparison_scope_label=comparison_scope_label,
+                ),
             )
             context["inspect_payload"] = inspect_payload
             context["inspect_payload_id"] = "codon-composition-length-inspect-payload"

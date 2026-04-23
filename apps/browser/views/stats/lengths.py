@@ -3,6 +3,7 @@ from django.views.generic import TemplateView
 
 from apps.browser.stats import (
     apply_stats_filter_context,
+    build_stats_payload,
     build_length_inspect_bundle,
     build_length_inspect_payload,
     build_length_profile_vector_bundle,
@@ -13,6 +14,7 @@ from apps.browser.stats import (
     build_taxonomy_gutter_payload,
     build_typical_length_overview_payload,
 )
+from apps.browser.stats.policy import StatsPayloadType
 from apps.browser.stats.params import ALLOWED_STATS_RANKS, next_lower_rank
 
 from ...metadata import resolve_browser_facets
@@ -78,18 +80,27 @@ class RepeatLengthExplorerView(StatsTSVExportMixin, TemplateView):
 
     def iter_overview_typical_tsv_rows(self):
         yield from self._iter_pairwise_overview_tsv_rows(
-            build_typical_length_overview_payload(self._get_overview_bundle()["profile_rows"])
+            self._build_payload(
+                StatsPayloadType.REPEAT_LENGTH_OVERVIEW_TYPICAL,
+                lambda: build_typical_length_overview_payload(self._get_overview_bundle()["profile_rows"]),
+            )
         )
 
     def iter_overview_tail_tsv_rows(self):
         yield from self._iter_pairwise_overview_tsv_rows(
-            build_tail_burden_overview_payload(self._get_overview_bundle()["profile_rows"])
+            self._build_payload(
+                StatsPayloadType.REPEAT_LENGTH_OVERVIEW_TAIL,
+                lambda: build_tail_burden_overview_payload(self._get_overview_bundle()["profile_rows"]),
+            )
         )
 
     def iter_inspect_tsv_rows(self):
-        payload = build_length_inspect_payload(
-            self._get_inspect_bundle(),
-            scope_label=self._inspect_scope_label(),
+        payload = self._build_payload(
+            StatsPayloadType.REPEAT_LENGTH_INSPECT,
+            lambda: build_length_inspect_payload(
+                self._get_inspect_bundle(),
+                scope_label=self._inspect_scope_label(),
+            ),
         )
         for point in payload["ccdfPoints"]:
             yield (
@@ -119,6 +130,9 @@ class RepeatLengthExplorerView(StatsTSVExportMixin, TemplateView):
             self._filter_state = build_stats_filter_state(self.request)
         return self._filter_state
 
+    def _build_payload(self, payload_type: StatsPayloadType, build_fn):
+        return build_stats_payload(self._get_filter_state(), payload_type, build_fn)
+
     def _inspect_scope_active(self) -> bool:
         return self._get_filter_state().branch_scope_active
 
@@ -126,7 +140,10 @@ class RepeatLengthExplorerView(StatsTSVExportMixin, TemplateView):
         if not self._inspect_scope_active():
             return None
         if not hasattr(self, "_inspect_bundle"):
-            self._inspect_bundle = build_length_inspect_bundle(self._get_filter_state())
+            self._inspect_bundle = self._build_payload(
+                StatsPayloadType.REPEAT_LENGTH_INSPECT,
+                lambda: build_length_inspect_bundle(self._get_filter_state()),
+            )
         return self._inspect_bundle
 
     def _inspect_scope_label(self) -> str:
@@ -140,12 +157,18 @@ class RepeatLengthExplorerView(StatsTSVExportMixin, TemplateView):
 
     def _get_overview_bundle(self) -> dict[str, object]:
         if not hasattr(self, "_overview_bundle"):
-            self._overview_bundle = build_length_profile_vector_bundle(self._get_filter_state())
+            self._overview_bundle = self._build_payload(
+                StatsPayloadType.REPEAT_LENGTH_OVERVIEW_TYPICAL,
+                lambda: build_length_profile_vector_bundle(self._get_filter_state()),
+            )
         return self._overview_bundle
 
     def _get_summary_bundle(self) -> dict[str, object]:
         if not hasattr(self, "_summary_bundle"):
-            summary_bundle = build_ranked_length_summary_bundle(self._get_filter_state())
+            summary_bundle = self._build_payload(
+                StatsPayloadType.REPEAT_LENGTH_SUMMARY,
+                lambda: build_ranked_length_summary_bundle(self._get_filter_state()),
+            )
             self._summary_bundle = {
                 **summary_bundle,
                 "summary_rows": [self._with_row_links(row) for row in summary_bundle["summary_rows"]],
@@ -240,18 +263,30 @@ class RepeatLengthExplorerView(StatsTSVExportMixin, TemplateView):
         context["total_taxa_count"] = summary_bundle["total_taxa_count"]
         context["visible_taxa_count"] = summary_bundle["visible_taxa_count"]
         context["overview_visible_taxa_count"] = len(overview_rows)
-        context["overview_typical_payload"] = build_typical_length_overview_payload(overview_rows)
+        context["overview_typical_payload"] = self._build_payload(
+            StatsPayloadType.REPEAT_LENGTH_OVERVIEW_TYPICAL,
+            lambda: build_typical_length_overview_payload(overview_rows),
+        )
         context["overview_typical_payload_id"] = "length-overview-typical-payload"
-        context["overview_tail_payload"] = build_tail_burden_overview_payload(overview_rows)
+        context["overview_tail_payload"] = self._build_payload(
+            StatsPayloadType.REPEAT_LENGTH_OVERVIEW_TAIL,
+            lambda: build_tail_burden_overview_payload(overview_rows),
+        )
         context["overview_tail_payload_id"] = "length-overview-tail-payload"
         context["overview_container_id"] = "length-overview"
-        context["overview_taxonomy_gutter_payload"] = build_taxonomy_gutter_payload(
-            overview_rows,
-            filter_state=filter_state,
-            collapse_rank=filter_state.rank,
+        context["overview_taxonomy_gutter_payload"] = self._build_payload(
+            StatsPayloadType.TAXONOMY_GUTTER,
+            lambda: build_taxonomy_gutter_payload(
+                overview_rows,
+                filter_state=filter_state,
+                collapse_rank=filter_state.rank,
+            ),
         )
         context["overview_taxonomy_gutter_payload_id"] = "length-overview-taxonomy-gutter-payload"
-        context["chart_payload"] = build_ranked_length_chart_payload(summary_rows)
+        context["chart_payload"] = self._build_payload(
+            StatsPayloadType.REPEAT_LENGTH_SUMMARY,
+            lambda: build_ranked_length_chart_payload(summary_rows),
+        )
         context["chart_payload_id"] = "repeat-length-chart-payload"
         context["chart_container_id"] = "repeat-length-chart"
         context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
@@ -296,9 +331,12 @@ class RepeatLengthExplorerView(StatsTSVExportMixin, TemplateView):
                     "label": "Download Inspect TSV",
                 }
             )
-            context["inspect_payload"] = build_length_inspect_payload(
-                inspect_bundle,
-                scope_label=self._inspect_scope_label(),
+            context["inspect_payload"] = self._build_payload(
+                StatsPayloadType.REPEAT_LENGTH_INSPECT,
+                lambda: build_length_inspect_payload(
+                    inspect_bundle,
+                    scope_label=self._inspect_scope_label(),
+                ),
             )
             context["inspect_payload_id"] = "length-inspect-payload"
             context["inspect_chart_container_id"] = "length-inspect-chart"

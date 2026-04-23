@@ -1,4 +1,44 @@
+from django.core.cache import cache
 from django.db import models
+from django.db.models import F, Q
+
+
+CATALOG_VERSION_CACHE_KEY = "browser:stats:catalog_version"
+CATALOG_VERSION_CACHE_TTL_SECONDS = 10
+
+
+class CatalogVersion(models.Model):
+    version = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(pk=1),
+                name="imports_catalog_version_singleton",
+            )
+        ]
+
+    @classmethod
+    def current(cls) -> int:
+        obj, _created = cls.objects.get_or_create(pk=1, defaults={"version": 0})
+        return int(obj.version)
+
+    @classmethod
+    def cached_current(cls) -> int:
+        cached = cache.get(CATALOG_VERSION_CACHE_KEY)
+        if cached is not None:
+            return int(cached)
+        version = cls.current()
+        cache.set(CATALOG_VERSION_CACHE_KEY, version, timeout=CATALOG_VERSION_CACHE_TTL_SECONDS)
+        return version
+
+    @classmethod
+    def increment(cls) -> int:
+        cls.objects.get_or_create(pk=1, defaults={"version": 0})
+        cls.objects.filter(pk=1).update(version=F("version") + 1)
+        cache.delete(CATALOG_VERSION_CACHE_KEY)
+        return cls.current()
 
 
 class ImportBatch(models.Model):

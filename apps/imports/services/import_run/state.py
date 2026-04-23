@@ -7,7 +7,7 @@ from django.db import DEFAULT_DB_ALIAS, connections, transaction
 from django.utils import timezone
 
 from apps.browser.models.runs import PipelineRun
-from apps.imports.models import ImportBatch
+from apps.imports.models import CatalogVersion, ImportBatch
 from apps.imports.services.published_run import ImportContractError
 
 
@@ -242,8 +242,9 @@ def _mark_batch_completed(
     ]
     if reporter is None:
         batch.save(update_fields=update_fields)
-        return
-    reporter.save(update_fields, force=True)
+    else:
+        reporter.save(update_fields, force=True)
+    CatalogVersion.increment()
 
 
 def _reset_batch_to_pending(

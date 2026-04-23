@@ -55,6 +55,7 @@ from apps.browser.models import (
     RepeatCall,
     RepeatCallCodonUsage,
 )
+from apps.imports.models import CatalogVersion
 
 from .support import build_test_repeat_call_values, create_imported_run_fixture
 
@@ -2451,6 +2452,73 @@ class BrowserStatsTests(TestCase):
             )
 
         self.assertEqual(second_payload, first_payload)
+
+    def test_ranked_codon_composition_summary_bundle_cache_key_tracks_catalog_version(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 2, "codon_fraction": 1.0},
+            ],
+        )
+
+        filter_state = build_stats_filter_state(
+            self.factory.get(
+                "/browser/codon-ratios/",
+                {
+                    "rank": "class",
+                    "min_count": "1",
+                    "top_n": "10",
+                    "residue": "q",
+                },
+            )
+        )
+        build_ranked_codon_composition_summary_bundle(filter_state)
+        CatalogVersion.increment()
+
+        with patch(
+            "apps.browser.stats.queries.build_filtered_repeat_call_queryset",
+            side_effect=AssertionError("expected versioned cache miss"),
+        ):
+            with self.assertRaises(AssertionError):
+                build_ranked_codon_composition_summary_bundle(filter_state)
+
+    def test_taxonomy_gutter_payload_cache_key_tracks_catalog_version(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 2, "codon_fraction": 1.0},
+            ],
+        )
+
+        filter_state = build_stats_filter_state(
+            self.factory.get(
+                "/browser/codon-ratios/",
+                {
+                    "rank": "class",
+                    "min_count": "1",
+                    "top_n": "10",
+                    "residue": "q",
+                },
+            )
+        )
+        summary_rows = build_ranked_codon_composition_summary_bundle(filter_state)["summary_rows"]
+        build_taxonomy_gutter_payload(
+            summary_rows,
+            filter_state=filter_state,
+            collapse_rank=filter_state.rank,
+        )
+        CatalogVersion.increment()
+
+        with patch(
+            "apps.browser.stats.taxonomy_gutter._build_scope_descendant_counts_by_taxon",
+            side_effect=AssertionError("expected versioned taxonomy gutter cache miss"),
+        ):
+            with self.assertRaises(AssertionError):
+                build_taxonomy_gutter_payload(
+                    summary_rows,
+                    filter_state=filter_state,
+                    collapse_rank=filter_state.rank,
+                )
 
     def test_ranked_codon_composition_summary_bundle_respects_run_branch_method_and_residue_filters(self):
         alpha_alanine = self._create_repeat_call(

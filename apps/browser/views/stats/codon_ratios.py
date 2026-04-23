@@ -3,6 +3,7 @@ from django.views.generic import TemplateView
 
 from apps.browser.stats import (
     apply_stats_filter_context,
+    build_stats_payload,
     build_codon_composition_inspect_bundle,
     build_codon_composition_inspect_payload,
     build_codon_overview_payload,
@@ -13,6 +14,7 @@ from apps.browser.stats import (
     build_stats_filter_state,
     build_taxonomy_gutter_payload,
 )
+from apps.browser.stats.policy import StatsPayloadType
 from apps.browser.stats.params import ALLOWED_STATS_RANKS, next_lower_rank
 
 from ...metadata import resolve_browser_facets
@@ -61,9 +63,12 @@ class CodonRatioExplorerView(StatsTSVExportMixin, TemplateView):
 
     def iter_overview_tsv_rows(self):
         summary_bundle = self._get_summary_bundle()
-        payload = build_codon_overview_payload(
-            summary_bundle["summary_rows"],
-            visible_codons=summary_bundle["visible_codons"],
+        payload = self._build_payload(
+            StatsPayloadType.CODON_COMPOSITION_OVERVIEW,
+            lambda: build_codon_overview_payload(
+                summary_bundle["summary_rows"],
+                visible_codons=summary_bundle["visible_codons"],
+            ),
         )
         metric = payload.get("displayMetric", payload["mode"])
         taxa = payload["taxa"]
@@ -83,9 +88,12 @@ class CodonRatioExplorerView(StatsTSVExportMixin, TemplateView):
         yield from self._iter_codon_share_tsv_rows()
 
     def iter_inspect_tsv_rows(self):
-        payload = build_codon_composition_inspect_payload(
-            self._get_inspect_bundle(),
-            scope_label=self._inspect_scope_label(),
+        payload = self._build_payload(
+            StatsPayloadType.CODON_COMPOSITION_INSPECT,
+            lambda: build_codon_composition_inspect_payload(
+                self._get_inspect_bundle(),
+                scope_label=self._inspect_scope_label(),
+            ),
         )
         for row in payload["codonShares"]:
             yield (
@@ -117,9 +125,15 @@ class CodonRatioExplorerView(StatsTSVExportMixin, TemplateView):
             self._filter_state = build_stats_filter_state(self.request)
         return self._filter_state
 
+    def _build_payload(self, payload_type: StatsPayloadType, build_fn):
+        return build_stats_payload(self._get_filter_state(), payload_type, build_fn)
+
     def _get_summary_bundle(self) -> dict[str, object]:
         if not hasattr(self, "_summary_bundle"):
-            summary_bundle = build_ranked_codon_composition_summary_bundle(self._get_filter_state())
+            summary_bundle = self._build_payload(
+                StatsPayloadType.CODON_COMPOSITION_SUMMARY,
+                lambda: build_ranked_codon_composition_summary_bundle(self._get_filter_state()),
+            )
             self._summary_bundle = {
                 **summary_bundle,
                 "summary_rows": [self._with_row_links(row) for row in summary_bundle["summary_rows"]],
@@ -132,10 +146,11 @@ class CodonRatioExplorerView(StatsTSVExportMixin, TemplateView):
             if summary_bundle["matching_repeat_calls_count"] <= 0:
                 self._matching_repeat_calls_with_codon_usage_count = 0
             else:
-                self._matching_repeat_calls_with_codon_usage_count = (
-                    build_matching_repeat_calls_with_codon_usage_count(
+                self._matching_repeat_calls_with_codon_usage_count = self._build_payload(
+                    StatsPayloadType.CODON_USAGE_COUNT,
+                    lambda: build_matching_repeat_calls_with_codon_usage_count(
                         self._get_filter_state()
-                    )
+                    ),
                 )
         return self._matching_repeat_calls_with_codon_usage_count
 
@@ -159,7 +174,10 @@ class CodonRatioExplorerView(StatsTSVExportMixin, TemplateView):
         if not self._inspect_scope_active():
             return None
         if not hasattr(self, "_inspect_bundle"):
-            self._inspect_bundle = build_codon_composition_inspect_bundle(self._get_filter_state())
+            self._inspect_bundle = self._build_payload(
+                StatsPayloadType.CODON_COMPOSITION_INSPECT,
+                lambda: build_codon_composition_inspect_bundle(self._get_filter_state()),
+            )
         return self._inspect_bundle
 
     def _inspect_scope_label(self) -> str:
@@ -270,28 +288,40 @@ class CodonRatioExplorerView(StatsTSVExportMixin, TemplateView):
         context["total_taxa_count"] = summary_bundle["total_taxa_count"]
         context["visible_taxa_count"] = summary_bundle["visible_taxa_count"]
         context["overview_visible_taxa_count"] = len(overview_rows)
-        context["overview_payload"] = build_codon_overview_payload(
-            overview_rows,
-            visible_codons=visible_codons,
+        context["overview_payload"] = self._build_payload(
+            StatsPayloadType.CODON_COMPOSITION_OVERVIEW,
+            lambda: build_codon_overview_payload(
+                overview_rows,
+                visible_codons=visible_codons,
+            ),
         )
         context["overview_payload_id"] = "codon-composition-overview-payload"
         context["overview_container_id"] = "codon-composition-overview"
-        context["overview_taxonomy_gutter_payload"] = build_taxonomy_gutter_payload(
-            overview_rows,
-            filter_state=filter_state,
-            collapse_rank=filter_state.rank,
+        context["overview_taxonomy_gutter_payload"] = self._build_payload(
+            StatsPayloadType.TAXONOMY_GUTTER,
+            lambda: build_taxonomy_gutter_payload(
+                overview_rows,
+                filter_state=filter_state,
+                collapse_rank=filter_state.rank,
+            ),
         )
         context["overview_taxonomy_gutter_payload_id"] = "codon-composition-overview-taxonomy-gutter-payload"
-        context["chart_payload"] = build_ranked_codon_composition_chart_payload(
-            summary_rows,
-            visible_codons=visible_codons,
+        context["chart_payload"] = self._build_payload(
+            StatsPayloadType.CODON_COMPOSITION_CHART,
+            lambda: build_ranked_codon_composition_chart_payload(
+                summary_rows,
+                visible_codons=visible_codons,
+            ),
         )
         context["chart_payload_id"] = "codon-composition-chart-payload"
         context["chart_container_id"] = "codon-composition-chart"
-        context["chart_taxonomy_gutter_payload"] = build_taxonomy_gutter_payload(
-            summary_rows,
-            filter_state=filter_state,
-            collapse_rank=filter_state.rank,
+        context["chart_taxonomy_gutter_payload"] = self._build_payload(
+            StatsPayloadType.TAXONOMY_GUTTER,
+            lambda: build_taxonomy_gutter_payload(
+                summary_rows,
+                filter_state=filter_state,
+                collapse_rank=filter_state.rank,
+            ),
         )
         context["chart_taxonomy_gutter_payload_id"] = "codon-composition-chart-taxonomy-gutter-payload"
         context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
@@ -332,9 +362,12 @@ class CodonRatioExplorerView(StatsTSVExportMixin, TemplateView):
                     "label": "Download Inspect TSV",
                 }
             )
-            context["inspect_payload"] = build_codon_composition_inspect_payload(
-                inspect_bundle,
-                scope_label=self._inspect_scope_label(),
+            context["inspect_payload"] = self._build_payload(
+                StatsPayloadType.CODON_COMPOSITION_INSPECT,
+                lambda: build_codon_composition_inspect_payload(
+                    inspect_bundle,
+                    scope_label=self._inspect_scope_label(),
+                ),
             )
             context["inspect_visible_codons"] = inspect_bundle["visible_codons"]
             context["inspect_codon_shares"] = inspect_bundle["codon_shares"]

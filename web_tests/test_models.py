@@ -1,3 +1,4 @@
+from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
@@ -19,7 +20,7 @@ from apps.browser.models import (
     Taxon,
     TaxonClosure,
 )
-from apps.imports.models import ImportBatch
+from apps.imports.models import CATALOG_VERSION_CACHE_KEY, CatalogVersion, ImportBatch
 from apps.imports.services.import_run.state import _normalize_progress_payload
 
 
@@ -148,6 +149,26 @@ class ImportBatchModelTests(TestCase):
         self.assertEqual(states["preparing_import"], "complete")
         self.assertEqual(states["importing_rows"], "failed")
         self.assertEqual(states["syncing_canonical_catalog"], "pending")
+
+
+class CatalogVersionModelTests(TestCase):
+    def setUp(self):
+        cache.clear()
+
+    def test_current_creates_singleton_at_zero(self):
+        self.assertEqual(CatalogVersion.current(), 0)
+        self.assertEqual(CatalogVersion.objects.count(), 1)
+        self.assertEqual(CatalogVersion.objects.get(pk=1).version, 0)
+
+    def test_cached_current_uses_cache_and_increment_invalidates_it(self):
+        self.assertEqual(CatalogVersion.cached_current(), 0)
+        self.assertEqual(cache.get(CATALOG_VERSION_CACHE_KEY), 0)
+
+        CatalogVersion.increment()
+
+        self.assertIsNone(cache.get(CATALOG_VERSION_CACHE_KEY))
+        self.assertEqual(CatalogVersion.current(), 1)
+        self.assertEqual(CatalogVersion.cached_current(), 1)
 
 
 class RawProvenanceModelTests(TestCase):

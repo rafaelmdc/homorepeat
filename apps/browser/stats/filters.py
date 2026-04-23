@@ -4,6 +4,8 @@ import hashlib
 import json
 from dataclasses import dataclass
 
+from apps.imports.models import CatalogVersion
+
 from ..models import PipelineRun, Taxon
 from .params import (
     normalize_min_count,
@@ -42,6 +44,7 @@ class StatsFilterState:
 
     def cache_key_data(self) -> dict[str, object]:
         return {
+            "catalog_version": CatalogVersion.cached_current(),
             "run": self.current_run_id,
             "branch": self.current_branch,
             "branch_q": self.current_branch_q,
