@@ -1365,6 +1365,92 @@ class BrowserViewTests(TestCase):
         self.assertIn("rows_html", payload)
         self.assertNotIn("count", payload)
 
+    def test_protein_list_tsv_export_uses_full_filtered_queryset(self):
+        matched = self._create_repeat_call(
+            self.alpha,
+            suffix="protein_tsv_match",
+            gene_symbol="MATCHGENE",
+            method=RepeatCall.Method.THRESHOLD,
+            residue="A",
+            length=9,
+            purity=0.75,
+        )
+        split = self._create_repeat_call(
+            self.alpha,
+            suffix="protein_tsv_split_q",
+            gene_symbol="SPLITGENE",
+            method=RepeatCall.Method.THRESHOLD,
+            residue="Q",
+            length=9,
+            purity=0.75,
+        )
+        self._create_repeat_call(
+            self.alpha,
+            suffix="protein_tsv_split_pure_a",
+            gene_symbol="SPLITGENE",
+            method=RepeatCall.Method.PURE,
+            residue="A",
+            length=9,
+            purity=0.75,
+            protein=split["protein"],
+            sequence=split["sequence"],
+        )
+
+        response = self.client.get(
+            reverse("browser:protein-list"),
+            {
+                "run": "run-alpha",
+                "branch": str(self.mammalia.pk),
+                "method": RepeatCall.Method.THRESHOLD,
+                "residue": "A",
+                "length_min": "8",
+                "length_max": "10",
+                "purity_min": "0.70",
+                "purity_max": "0.80",
+                "fragment": "virtual-scroll",
+                "download": "tsv",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Disposition"], 'attachment; filename="homorepeat_proteins.tsv"')
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn(
+            "Protein id\tProtein\tGene\tGenome accession\tTaxon id\tTaxon\tLatest run\tProtein length\tRepeat calls",
+            body,
+        )
+        self.assertIn(matched["protein"].protein_id, body)
+        self.assertIn(matched["protein"].protein_name, body)
+        self.assertNotIn(split["protein"].protein_id, body)
+        self.assertNotIn("prot_beta", body)
+
+    def test_protein_list_renders_tsv_download_link_with_filters(self):
+        url = reverse("browser:protein-list")
+        response = self.client.get(
+            url,
+            {
+                "run": "run-alpha",
+                "genome": "genome_alpha",
+                "method": RepeatCall.Method.THRESHOLD,
+                "residue": "A",
+                "order_by": "gene_symbol",
+                "page": "1",
+                "fragment": "virtual-scroll",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            (
+                f'href="{url}?run=run-alpha&amp;genome=genome_alpha&amp;method=threshold'
+                '&amp;residue=A&amp;order_by=gene_symbol&amp;download=tsv"'
+            ),
+        )
+        self.assertNotContains(response, "page=1&amp;download=tsv")
+        self.assertNotContains(response, "fragment=virtual-scroll&amp;download=tsv")
+
     def test_protein_list_combined_call_filters_match_same_linked_call(self):
         matched = self._create_repeat_call(
             self.alpha,
@@ -1667,6 +1753,91 @@ class BrowserViewTests(TestCase):
         self.assertEqual(payload["row_count"], 1)
         self.assertNotIn("count", payload)
         self.assertEqual(payload["next_query"], "")
+
+    def test_repeatcall_list_tsv_export_uses_full_filtered_queryset(self):
+        matched = self._create_repeat_call(
+            self.alpha,
+            suffix="repeatcall_tsv_match",
+            gene_symbol="FILTERGENE",
+            method=RepeatCall.Method.THRESHOLD,
+            residue="A",
+            length=9,
+            purity=0.78,
+        )
+        self._create_repeat_call(
+            self.alpha,
+            suffix="repeatcall_tsv_low_purity",
+            gene_symbol="FILTERGENE",
+            method=RepeatCall.Method.THRESHOLD,
+            residue="A",
+            length=9,
+            purity=0.40,
+        )
+        self._create_repeat_call(
+            self.beta,
+            suffix="repeatcall_tsv_beta",
+            gene_symbol="FILTERGENE",
+            method=RepeatCall.Method.THRESHOLD,
+            residue="A",
+            length=9,
+            purity=0.78,
+            taxon=self.beta["taxon"],
+        )
+
+        response = self.client.get(
+            reverse("browser:repeatcall-list"),
+            {
+                "run": "run-alpha",
+                "branch": str(self.mammalia.pk),
+                "method": RepeatCall.Method.THRESHOLD,
+                "residue": "A",
+                "gene_symbol": "FILTERGENE",
+                "length_min": "8",
+                "length_max": "10",
+                "purity_min": "0.70",
+                "purity_max": "0.80",
+                "fragment": "virtual-scroll",
+                "download": "tsv",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Disposition"], 'attachment; filename="homorepeat_repeat_calls.tsv"')
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn(
+            "Call\tAccession\tProtein\tGene\tTaxon id\tTaxon\tMethod\tResidue\tStart\tEnd\tLength\tPurity\tLatest run",
+            body,
+        )
+        self.assertIn(matched["repeat_call"].call_id, body)
+        self.assertNotIn("call_repeatcall_tsv_low_purity", body)
+        self.assertNotIn("call_repeatcall_tsv_beta", body)
+
+    def test_repeatcall_list_renders_tsv_download_link_with_filters(self):
+        url = reverse("browser:repeatcall-list")
+        response = self.client.get(
+            url,
+            {
+                "run": "run-alpha",
+                "protein": self.alpha["protein"].protein_id,
+                "method": RepeatCall.Method.PURE,
+                "residue": "Q",
+                "order_by": "length",
+                "page": "1",
+                "fragment": "virtual-scroll",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            (
+                f'href="{url}?run=run-alpha&amp;protein={self.alpha["protein"].protein_id}'
+                '&amp;method=pure&amp;residue=Q&amp;order_by=length&amp;download=tsv"'
+            ),
+        )
+        self.assertNotContains(response, "page=1&amp;download=tsv")
+        self.assertNotContains(response, "fragment=virtual-scroll&amp;download=tsv")
 
     def test_sequence_list_virtual_scroll_fragment_returns_rows_without_count(self):
         response = self.client.get(

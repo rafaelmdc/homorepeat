@@ -132,6 +132,7 @@
       <p class="section-kicker mb-2">Current repeat-call inventory</p>
       <h2>{{ page_obj.paginator.count }} repeat call{{ page_obj.paginator.count|pluralize }}</h2>
     </div>
+    {% include "browser/includes/download_tsv_button.html" %}
   </div>
 
   <div

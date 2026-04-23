@@ -13,6 +13,8 @@ TEST_NAMES = [
     "test_repeatcall_list_renders_virtual_scroll_hooks_for_raw_results",
     "test_repeatcall_list_renders_sort_links_for_all_visible_headers",
     "test_repeatcall_list_virtual_scroll_fragment_returns_rows",
+    "test_repeatcall_list_tsv_export_uses_full_filtered_queryset",
+    "test_repeatcall_list_renders_tsv_download_link_with_filters",
     "test_repeatcall_detail_shows_linked_parents_and_coordinates",
 ]
 

@@ -10,6 +10,7 @@ from apps.browser.explorer.canonical import (
     scoped_canonical_proteins,
 )
 
+from ...exports import BrowserTSVExportMixin, TSVColumn
 from ...models import CanonicalProtein, PipelineRun, Protein
 from ..filters import (
     _resolve_branch_scope,
@@ -30,12 +31,24 @@ def resolve_browser_facets(*, pipeline_run=None, pipeline_runs=None):
     )
 
 
-class ProteinListView(VirtualScrollListView):
+class ProteinListView(BrowserTSVExportMixin, VirtualScrollListView):
     model = CanonicalProtein
     template_name = "browser/protein_list.html"
     context_object_name = "proteins"
     virtual_scroll_row_template_name = "browser/includes/protein_list_rows.html"
     virtual_scroll_colspan = 6
+    tsv_filename_slug = "proteins"
+    tsv_columns = (
+        TSVColumn("Protein id", "protein_id"),
+        TSVColumn("Protein", "protein_name"),
+        TSVColumn("Gene", "gene_symbol"),
+        TSVColumn("Genome accession", "accession"),
+        TSVColumn("Taxon id", "taxon.taxon_id"),
+        TSVColumn("Taxon", "taxon.taxon_name"),
+        TSVColumn("Latest run", "latest_pipeline_run.run_id"),
+        TSVColumn("Protein length", "protein_length"),
+        TSVColumn("Repeat calls", "repeat_call_count"),
+    )
     ordering_map = {
         "protein_name": ("latest_pipeline_run__run_id", "accession", "protein_name", "protein_id"),
         "-protein_name": ("latest_pipeline_run__run_id", "accession", "-protein_name", "protein_id"),

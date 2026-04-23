@@ -124,6 +124,7 @@
       <p class="section-kicker mb-2">Current protein inventory</p>
       <h2>{{ page_obj.paginator.count }} protein{{ page_obj.paginator.count|pluralize }}</h2>
     </div>
+    {% include "browser/includes/download_tsv_button.html" %}
   </div>
 
   <div

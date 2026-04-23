@@ -13,6 +13,8 @@ TEST_NAMES = [
     "test_protein_list_renders_virtual_scroll_hooks_for_raw_results",
     "test_protein_list_virtual_scroll_fragment_returns_rows",
     "test_protein_list_raw_virtual_scroll_fragment_skips_page_chrome_context",
+    "test_protein_list_tsv_export_uses_full_filtered_queryset",
+    "test_protein_list_renders_tsv_download_link_with_filters",
     "test_protein_list_combined_call_filters_match_same_linked_call",
     "test_protein_detail_shows_call_summary_and_navigation",
 ]
