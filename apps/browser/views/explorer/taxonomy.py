@@ -2,6 +2,7 @@ from django.db.models import Q
 from django.urls import reverse
 from django.views.generic import DetailView
 
+from ...exports import BrowserTSVExportMixin, TSVColumn
 from ...models import Genome, PipelineRun, Protein, RepeatCall, Taxon, TaxonClosure
 from ..filters import (
     _apply_branch_scope_filter,
@@ -15,12 +16,20 @@ from ..navigation import _url_with_query
 from ..pagination import VirtualScrollListView
 
 
-class TaxonListView(VirtualScrollListView):
+class TaxonListView(BrowserTSVExportMixin, VirtualScrollListView):
     model = Taxon
     template_name = "browser/taxon_list.html"
     context_object_name = "taxa"
     virtual_scroll_row_template_name = "browser/includes/taxon_list_rows.html"
     virtual_scroll_colspan = 4
+    tsv_filename_slug = "taxa"
+    tsv_columns = (
+        TSVColumn("Taxon id", "taxon_id"),
+        TSVColumn("Taxon", "taxon_name"),
+        TSVColumn("Rank", "rank"),
+        TSVColumn("Parent taxon id", "parent_taxon.taxon_id"),
+        TSVColumn("Parent taxon", "parent_taxon.taxon_name"),
+    )
     search_fields = ("taxon_name",)
     ordering_map = {
         "taxon_name": ("taxon_name", "taxon_id"),

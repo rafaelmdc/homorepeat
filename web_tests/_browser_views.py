@@ -1018,6 +1018,57 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, "Homo sapiens")
         self.assertContains(response, "Mus musculus")
 
+    def test_taxon_list_tsv_export_uses_full_filtered_queryset_and_remains_distinct(self):
+        response = self.client.get(
+            reverse("browser:taxon-list"),
+            {
+                "run": "run-alpha",
+                "order_by": "taxon_id",
+                "page": "2",
+                "fragment": "virtual-scroll",
+                "download": "tsv",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Disposition"], 'attachment; filename="homorepeat_taxa.tsv"')
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn("Taxon id\tTaxon\tRank\tParent taxon id\tParent taxon", body)
+
+        rows = [line.split("\t") for line in body.strip().splitlines()[1:]]
+        exported_ids = [row[0] for row in rows]
+
+        self.assertEqual(set(exported_ids), {"1", "7711", "9443", "9606", "40674"})
+        self.assertEqual(len(exported_ids), 5)
+        self.assertEqual(len(set(exported_ids)), 5)
+
+    def test_taxon_list_renders_tsv_download_link_with_filters(self):
+        url = reverse("browser:taxon-list")
+        response = self.client.get(
+            url,
+            {
+                "q": "Mam",
+                "run": "run-alpha",
+                "branch_q": "Mam",
+                "rank": "class",
+                "order_by": "taxon_id",
+                "page": "1",
+                "fragment": "virtual-scroll",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            (
+                f'href="{url}?q=Mam&amp;run=run-alpha&amp;branch_q=Mam&amp;rank=class'
+                '&amp;order_by=taxon_id&amp;download=tsv"'
+            ),
+        )
+        self.assertNotContains(response, "page=1&amp;download=tsv")
+        self.assertNotContains(response, "fragment=virtual-scroll&amp;download=tsv")
+
     def test_taxon_detail_shows_lineage_and_branch_genomes(self):
         response = self.client.get(
             reverse("browser:taxon-detail", args=[self.alpha["taxon"].pk]),
