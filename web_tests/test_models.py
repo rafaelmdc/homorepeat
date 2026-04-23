@@ -94,6 +94,7 @@ class ImportBatchModelTests(TestCase):
         self.assertEqual(batch.status, ImportBatch.Status.PENDING)
         self.assertEqual(batch.phase, "")
         self.assertIsNone(batch.heartbeat_at)
+        self.assertEqual(batch.celery_task_id, "")
         self.assertEqual(batch.progress_payload, {})
 
     def test_progress_payload_normalizes_percent_from_current_and_total(self):

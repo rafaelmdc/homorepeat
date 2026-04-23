@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from datetime import timedelta
 from pathlib import Path
 
 
@@ -113,6 +114,12 @@ CELERY_TASK_ALWAYS_EAGER = _env_flag("CELERY_TASK_ALWAYS_EAGER", False)
 CELERY_TASK_ROUTES = {
     "apps.imports.tasks.*": {"queue": "imports"},
     "apps.browser.tasks.*": {"queue": "payload_graph"},
+}
+CELERY_BEAT_SCHEDULE = {
+    "reset-stale-import-batches": {
+        "task": "apps.imports.tasks.reset_stale_import_batches",
+        "schedule": timedelta(minutes=5),
+    }
 }
 
 if os.getenv("DATABASE_ENGINE", "").strip():

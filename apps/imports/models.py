@@ -35,6 +35,7 @@ class ImportBatch(models.Model):
     replace_existing = models.BooleanField(default=False)
     started_at = models.DateTimeField(auto_now_add=True, db_index=True)
     finished_at = models.DateTimeField(blank=True, null=True)
+    celery_task_id = models.CharField(max_length=64, blank=True)
     success_count = models.PositiveIntegerField(default=0)
     error_count = models.PositiveIntegerField(default=0)
     phase = models.CharField(max_length=64, blank=True, db_index=True)

@@ -5,6 +5,7 @@ from .published_run import (
     resolve_required_artifacts,
 )
 from .import_run import (
+    dispatch_import_batch,
     ImportPhase,
     ImportRunResult,
     enqueue_published_run,
@@ -18,6 +19,7 @@ __all__ = [
     "ImportPhase",
     "ImportRunResult",
     "RequiredArtifactPaths",
+    "dispatch_import_batch",
     "enqueue_published_run",
     "import_published_run",
     "load_published_run",

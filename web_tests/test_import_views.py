@@ -1,5 +1,7 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -48,7 +50,10 @@ class ImportViewTests(TestCase):
             publish_root = build_minimal_publish_root(runs_root / "run-alpha", run_id="run-alpha")
 
             self.client.force_login(self.staff_user)
-            with override_settings(HOMOREPEAT_RUNS_ROOT=str(runs_root)):
+            with override_settings(HOMOREPEAT_RUNS_ROOT=str(runs_root)), patch(
+                "apps.imports.tasks.run_import_batch.delay",
+                return_value=SimpleNamespace(id="task-123"),
+            ):
                 response = self.client.post(
                     reverse("imports:home"),
                     {
@@ -66,6 +71,7 @@ class ImportViewTests(TestCase):
             batch = ImportBatch.objects.get()
             self.assertEqual(batch.status, ImportBatch.Status.PENDING)
             self.assertEqual(batch.phase, "queued")
+            self.assertEqual(batch.celery_task_id, "task-123")
             self.assertEqual(batch.progress_payload["message"], "Queued for background import.")
 
     def test_imports_home_auto_refreshes_when_recent_batch_is_active(self):

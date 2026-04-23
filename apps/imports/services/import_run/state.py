@@ -167,6 +167,42 @@ def _mark_batch_failed(
     reporter.save(update_fields, force=True)
 
 
+def _mark_batch_stale_failed(
+    batch: ImportBatch,
+    *,
+    message: str,
+    reporter: _ImportBatchStateReporter | None = None,
+) -> None:
+    failed_phase = batch.phase
+    batch.status = ImportBatch.Status.FAILED
+    batch.phase = ImportPhase.FAILED
+    batch.finished_at = timezone.now()
+    batch.heartbeat_at = batch.finished_at
+    batch.error_count = 1
+    batch.row_counts = {}
+    batch.progress_payload = _normalize_progress_payload(
+        {
+            "message": "Import failed after the worker heartbeat went stale.",
+            "failed_phase": failed_phase,
+        }
+    )
+    batch.error_message = message
+    update_fields = [
+        "status",
+        "phase",
+        "finished_at",
+        "heartbeat_at",
+        "error_count",
+        "row_counts",
+        "progress_payload",
+        "error_message",
+    ]
+    if reporter is None:
+        batch.save(update_fields=update_fields)
+        return
+    reporter.save(update_fields, force=True)
+
+
 def _mark_batch_completed(
     batch: ImportBatch,
     pipeline_run: PipelineRun,
@@ -203,6 +239,40 @@ def _mark_batch_completed(
         "progress_payload",
         "row_counts",
         "error_message",
+    ]
+    if reporter is None:
+        batch.save(update_fields=update_fields)
+        return
+    reporter.save(update_fields, force=True)
+
+
+def _reset_batch_to_pending(
+    batch: ImportBatch,
+    *,
+    message: str,
+    reporter: _ImportBatchStateReporter | None = None,
+) -> None:
+    batch.status = ImportBatch.Status.PENDING
+    batch.phase = ImportPhase.QUEUED
+    batch.finished_at = None
+    batch.heartbeat_at = timezone.now()
+    batch.success_count = 0
+    batch.error_count = 0
+    batch.progress_payload = _normalize_progress_payload({"message": message})
+    batch.row_counts = {}
+    batch.error_message = ""
+    batch.celery_task_id = ""
+    update_fields = [
+        "status",
+        "phase",
+        "finished_at",
+        "heartbeat_at",
+        "success_count",
+        "error_count",
+        "progress_payload",
+        "row_counts",
+        "error_message",
+        "celery_task_id",
     ]
     if reporter is None:
         batch.save(update_fields=update_fields)

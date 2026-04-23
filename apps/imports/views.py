@@ -14,7 +14,7 @@ from django.views.generic import FormView, ListView
 
 from .forms import ImportRunForm
 from .models import ImportBatch
-from .services import enqueue_published_run
+from .services import dispatch_import_batch, enqueue_published_run
 
 
 @dataclass(frozen=True)
@@ -64,6 +64,7 @@ class ImportsHomeView(StaffOnlyMixin, FormView):
             publish_root,
             replace_existing=replace_existing,
         )
+        dispatch_import_batch(queued_batch)
         run_id = str(manifest.get("run_id", "")) or Path(publish_root).parent.name
 
         messages.success(

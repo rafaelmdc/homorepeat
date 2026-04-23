@@ -48,6 +48,19 @@ def enqueue_published_run(publish_root: Path | str, *, replace_existing: bool = 
     )
 
 
+def dispatch_import_batch(batch_or_id: ImportBatch | int) -> str:
+    batch = batch_or_id
+    if not isinstance(batch, ImportBatch):
+        batch = ImportBatch.objects.get(pk=int(batch_or_id))
+
+    from apps.imports.tasks import run_import_batch
+
+    result = run_import_batch.delay(batch.pk)
+    batch.celery_task_id = result.id
+    batch.save(update_fields=["celery_task_id"])
+    return result.id
+
+
 def import_published_run(publish_root: Path | str, *, replace_existing: bool = False) -> ImportRunResult:
     batch = enqueue_published_run(
         publish_root,
