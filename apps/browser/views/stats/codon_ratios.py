@@ -303,9 +303,35 @@ class CodonRatioExplorerView(StatsTSVExportMixin, TemplateView):
         context["residue_choices"] = facet_choices["residues"]
         context["scope_items"] = self._scope_items()
         context["reset_url"] = reverse("browser:codon-ratios")
+        context["overview_download_tsv_actions"] = self.get_tsv_download_actions(
+            {
+                "dataset_key": "overview",
+                "label": "Download Overview TSV",
+                "available": bool(summary_rows) and bool(visible_codons),
+            }
+        )
+        context["browse_download_tsv_actions"] = self.get_tsv_download_actions(
+            {
+                "dataset_key": "browse",
+                "label": "Download Browse TSV",
+                "available": bool(summary_rows) and bool(visible_codons),
+            }
+        )
+        context["summary_download_tsv_actions"] = self.get_tsv_download_actions(
+            {
+                "dataset_key": "summary",
+                "label": "Download Summary TSV",
+            }
+        )
         context["inspect_scope_active"] = self._inspect_scope_active()
         inspect_bundle = self._get_inspect_bundle()
         if inspect_bundle is not None:
+            context["inspect_download_tsv_actions"] = self.get_tsv_download_actions(
+                {
+                    "dataset_key": "inspect",
+                    "label": "Download Inspect TSV",
+                }
+            )
             context["inspect_payload"] = build_codon_composition_inspect_payload(
                 inspect_bundle,
                 scope_label=self._inspect_scope_label(),

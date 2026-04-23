@@ -354,6 +354,11 @@
         across {{ visible_codons|length }} synonymous codon{{ visible_codons|length|pluralize }}.
       </p>
     </div>
+    <div class="d-flex flex-wrap gap-2 align-items-start">
+      {% for action in overview_download_tsv_actions %}
+        {% include "browser/includes/download_tsv_button.html" with download_tsv_action=action %}
+      {% endfor %}
+    </div>
   </div>
 
   {{ overview_payload|json_script:overview_payload_id }}
@@ -373,6 +378,11 @@
         Each row shows residue-scoped codon shares for one visible taxon. The
         same bounded taxa and codon set are used by the fallback table below.
       </p>
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-start">
+      {% for action in browse_download_tsv_actions %}
+        {% include "browser/includes/download_tsv_button.html" with download_tsv_action=action %}
+      {% endfor %}
     </div>
   </div>
 
@@ -417,6 +427,11 @@
         Showing {{ visible_taxa_count }} of {{ total_taxa_count }} taxa at rank
         {{ current_rank }}. Shares below stay residue-scoped and equal-species-weighted.
       </p>
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-start">
+      {% for action in summary_download_tsv_actions %}
+        {% include "browser/includes/download_tsv_button.html" with download_tsv_action=action %}
+      {% endfor %}
     </div>
   </div>
 
@@ -474,6 +489,11 @@
           Inspect the current branch-scoped subset through one aggregated
           residue-specific codon mixture.
         </p>
+      </div>
+      <div class="d-flex flex-wrap gap-2 align-items-start">
+        {% for action in inspect_download_tsv_actions %}
+          {% include "browser/includes/download_tsv_button.html" with download_tsv_action=action %}
+        {% endfor %}
       </div>
     </div>
 

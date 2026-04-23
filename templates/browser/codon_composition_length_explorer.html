@@ -137,20 +137,25 @@
         all shared length bins. Lower values indicate more similar codon-length trajectories.
       </p>
     </div>
-    <div class="mode-switch" data-codon-length-overview-mode-switch>
-      <span class="mode-switch-label">View</span>
-      <button class="btn {% if overview_default_mode == "preference" %}btn-brand{% else %}btn-outline-secondary{% endif %}"
-              type="button" data-codon-length-overview-mode-button data-overview-mode="preference"
-              aria-pressed="{% if overview_default_mode == "preference" %}true{% else %}false{% endif %}">Preference</button>
-      <button class="btn {% if overview_default_mode == "dominance" %}btn-brand{% else %}btn-outline-secondary{% endif %}"
-              type="button" data-codon-length-overview-mode-button data-overview-mode="dominance"
-              aria-pressed="{% if overview_default_mode == "dominance" %}true{% else %}false{% endif %}">Dominance</button>
-      <button class="btn btn-outline-secondary" type="button"
-              data-codon-length-overview-mode-button data-overview-mode="shift"
-              aria-pressed="false">Shift</button>
-      <button class="btn btn-outline-secondary" type="button"
-              data-codon-length-overview-mode-button data-overview-mode="similarity"
-              aria-pressed="false">Similarity</button>
+    <div class="d-flex flex-wrap gap-2 align-items-start">
+      {% for action in overview_download_tsv_actions %}
+        {% include "browser/includes/download_tsv_button.html" with download_tsv_action=action %}
+      {% endfor %}
+      <div class="mode-switch" data-codon-length-overview-mode-switch>
+        <span class="mode-switch-label">View</span>
+        <button class="btn {% if overview_default_mode == "preference" %}btn-brand{% else %}btn-outline-secondary{% endif %}"
+                type="button" data-codon-length-overview-mode-button data-overview-mode="preference"
+                aria-pressed="{% if overview_default_mode == "preference" %}true{% else %}false{% endif %}">Preference</button>
+        <button class="btn {% if overview_default_mode == "dominance" %}btn-brand{% else %}btn-outline-secondary{% endif %}"
+                type="button" data-codon-length-overview-mode-button data-overview-mode="dominance"
+                aria-pressed="{% if overview_default_mode == "dominance" %}true{% else %}false{% endif %}">Dominance</button>
+        <button class="btn btn-outline-secondary" type="button"
+                data-codon-length-overview-mode-button data-overview-mode="shift"
+                aria-pressed="false">Shift</button>
+        <button class="btn btn-outline-secondary" type="button"
+                data-codon-length-overview-mode-button data-overview-mode="similarity"
+                aria-pressed="false">Similarity</button>
+      </div>
     </div>
   </div>
 
@@ -178,6 +183,11 @@
         first selected visible taxa. Codon order stays fixed across panels.
       </p>
     </div>
+    <div class="d-flex flex-wrap gap-2 align-items-start">
+      {% for action in browse_download_tsv_actions %}
+        {% include "browser/includes/download_tsv_button.html" with download_tsv_action=action %}
+      {% endfor %}
+    </div>
   </div>
 
   {{ browse_payload|json_script:browse_payload_id }}
@@ -203,6 +213,11 @@
         Codon composition by length bin for the focused branch scope.
         Codon fractions are averaged across all repeat calls in scope per bin.
       </p>
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-start">
+      {% for action in inspect_download_tsv_actions %}
+        {% include "browser/includes/download_tsv_button.html" with download_tsv_action=action %}
+      {% endfor %}
     </div>
   </div>
 
@@ -250,6 +265,11 @@
       <div>
         <p class="section-kicker mb-1">Comparison</p>
         <h3 class="mb-0">{{ inspect_comparison_scope_label }}</h3>
+      </div>
+      <div class="d-flex flex-wrap gap-2 align-items-start">
+        {% for action in comparison_download_tsv_actions %}
+          {% include "browser/includes/download_tsv_button.html" with download_tsv_action=action %}
+        {% endfor %}
       </div>
     </div>
     <div class="table-responsive mb-4">
@@ -333,6 +353,11 @@
         No-JS fallback for the overview and browse layers; inspect layer is not
         yet available.
       </p>
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-start">
+      {% for action in summary_download_tsv_actions %}
+        {% include "browser/includes/download_tsv_button.html" with download_tsv_action=action %}
+      {% endfor %}
     </div>
   </div>
 

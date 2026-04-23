@@ -263,9 +263,39 @@ class RepeatLengthExplorerView(StatsTSVExportMixin, TemplateView):
         context["residue_choices"] = facet_choices["residues"]
         context["scope_items"] = self._scope_items()
         context["reset_url"] = reverse("browser:lengths")
+        context["overview_download_tsv_actions"] = self.get_tsv_download_actions(
+            {
+                "dataset_key": "overview_typical",
+                "label": "Download Typical TSV",
+                "available": bool(overview_rows),
+            },
+            {
+                "dataset_key": "overview_tail",
+                "label": "Download Tail TSV",
+                "available": bool(overview_rows),
+            },
+        )
+        context["browse_download_tsv_actions"] = self.get_tsv_download_actions(
+            {
+                "dataset_key": "summary",
+                "label": "Download Summary TSV",
+            }
+        )
+        context["summary_download_tsv_actions"] = self.get_tsv_download_actions(
+            {
+                "dataset_key": "summary",
+                "label": "Download Summary TSV",
+            }
+        )
         context["inspect_scope_active"] = self._inspect_scope_active()
         inspect_bundle = self._get_inspect_bundle()
         if inspect_bundle is not None:
+            context["inspect_download_tsv_actions"] = self.get_tsv_download_actions(
+                {
+                    "dataset_key": "inspect",
+                    "label": "Download Inspect TSV",
+                }
+            )
             context["inspect_payload"] = build_length_inspect_payload(
                 inspect_bundle,
                 scope_label=self._inspect_scope_label(),

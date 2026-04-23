@@ -130,14 +130,19 @@
         Showing {{ overview_visible_taxa_count }} visible taxon{{ overview_visible_taxa_count|pluralize }}.
       </p>
     </div>
-    <div class="mode-switch" data-overview-mode-switch>
-      <span class="mode-switch-label">View</span>
-      <button class="btn btn-brand" type="button"
-              data-overview-mode-button data-overview-mode="typical"
-              aria-pressed="true">Typical profile</button>
-      <button class="btn btn-outline-secondary" type="button"
-              data-overview-mode-button data-overview-mode="tail"
-              aria-pressed="false">Tail burden</button>
+    <div class="d-flex flex-wrap gap-2 align-items-start">
+      {% for action in overview_download_tsv_actions %}
+        {% include "browser/includes/download_tsv_button.html" with download_tsv_action=action %}
+      {% endfor %}
+      <div class="mode-switch" data-overview-mode-switch>
+        <span class="mode-switch-label">View</span>
+        <button class="btn btn-brand" type="button"
+                data-overview-mode-button data-overview-mode="typical"
+                aria-pressed="true">Typical profile</button>
+        <button class="btn btn-outline-secondary" type="button"
+                data-overview-mode-button data-overview-mode="tail"
+                aria-pressed="false">Tail burden</button>
+      </div>
     </div>
   </div>
 
@@ -157,10 +162,15 @@
       <h2>Ranked length distributions for the visible taxa</h2>
       <p class="text-secondary mb-0">Each row shows min, lower quartile, median, upper quartile, and max for the same bounded taxa listed in the summary table. Click a chart row to reopen the explorer scoped to that branch.</p>
     </div>
-    <div class="mode-switch" data-chart-mode-switch>
-      <span class="mode-switch-label">View</span>
-      <button class="btn btn-brand" type="button" data-chart-mode-button data-chart-mode="focused" aria-pressed="true">Focused</button>
-      <button class="btn btn-outline-secondary" type="button" data-chart-mode-button data-chart-mode="full-range" aria-pressed="false">Full range</button>
+    <div class="d-flex flex-wrap gap-2 align-items-start">
+      {% for action in browse_download_tsv_actions %}
+        {% include "browser/includes/download_tsv_button.html" with download_tsv_action=action %}
+      {% endfor %}
+      <div class="mode-switch" data-chart-mode-switch>
+        <span class="mode-switch-label">View</span>
+        <button class="btn btn-brand" type="button" data-chart-mode-button data-chart-mode="focused" aria-pressed="true">Focused</button>
+        <button class="btn btn-outline-secondary" type="button" data-chart-mode-button data-chart-mode="full-range" aria-pressed="false">Full range</button>
+      </div>
     </div>
   </div>
 
@@ -198,6 +208,11 @@
       <p class="section-kicker mb-2">Grouped taxa</p>
       <h2>{{ visible_taxa_count }} visible taxon{{ visible_taxa_count|pluralize }} at rank {{ current_rank }}</h2>
       <p class="text-secondary mb-0">Showing {{ visible_taxa_count }} of {{ total_taxa_count }} taxa at rank {{ current_rank }}. Rows are ordered by observation count and limited by the current Top N setting.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-start">
+      {% for action in summary_download_tsv_actions %}
+        {% include "browser/includes/download_tsv_button.html" with download_tsv_action=action %}
+      {% endfor %}
     </div>
   </div>
 
@@ -259,6 +274,11 @@
         Tail-aware survival curve for the current branch-scoped subset.
         The chart shows the fraction of repeat calls with length at or above each value.
       </p>
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-start">
+      {% for action in inspect_download_tsv_actions %}
+        {% include "browser/includes/download_tsv_button.html" with download_tsv_action=action %}
+      {% endfor %}
     </div>
   </div>
 

@@ -166,6 +166,19 @@ class StatsTSVExportMixin:
             "label": label or self.download_tsv_label,
         }
 
+    def get_tsv_download_actions(self, *definitions):
+        actions = []
+        for definition in definitions:
+            if not definition.get("available", True):
+                continue
+            actions.append(
+                self.get_tsv_download_action(
+                    definition["dataset_key"],
+                    label=definition.get("label"),
+                )
+            )
+        return actions
+
     def get_stats_tsv_filename(self, dataset_key: str) -> str:
         slug = self.tsv_filename_slug or self.__class__.__name__.lower()
         return f"homorepeat_{slug}_{dataset_key}.tsv"

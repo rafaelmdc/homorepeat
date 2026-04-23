@@ -483,12 +483,53 @@ class CodonCompositionLengthExplorerView(StatsTSVExportMixin, TemplateView):
         context["residue_choices"] = facet_choices["residues"]
         context["scope_items"] = self._scope_items()
         context["reset_url"] = reverse("browser:codon-composition-length")
+        context["overview_download_tsv_actions"] = self.get_tsv_download_actions(
+            {
+                "dataset_key": "preference",
+                "label": "Download Preference TSV",
+                "available": bool(context["overview_preference_payload"].get("available")),
+            },
+            {
+                "dataset_key": "dominance",
+                "label": "Download Dominance TSV",
+                "available": bool(context["overview_dominance_payload"].get("available")),
+            },
+            {
+                "dataset_key": "shift",
+                "label": "Download Shift TSV",
+                "available": bool(context["overview_shift_payload"].get("available")),
+            },
+            {
+                "dataset_key": "similarity",
+                "label": "Download Similarity TSV",
+                "available": bool(context["overview_pairwise_payload"].get("available")),
+            },
+        )
+        context["browse_download_tsv_actions"] = self.get_tsv_download_actions(
+            {
+                "dataset_key": "browse",
+                "label": "Download Browse TSV",
+                "available": bool(context["browse_payload"].get("available")),
+            }
+        )
+        context["summary_download_tsv_actions"] = self.get_tsv_download_actions(
+            {
+                "dataset_key": "summary",
+                "label": "Download Summary TSV",
+            }
+        )
         context["summary_empty_reason"] = self._summary_empty_reason()
         context["inspect_scope_active"] = self._inspect_scope_active()
         inspect_bundle = self._get_inspect_bundle()
         if inspect_bundle is not None:
             comparison_bundle = self._get_comparison_bundle()
             comparison_scope_label = self._comparison_scope_label()
+            context["inspect_download_tsv_actions"] = self.get_tsv_download_actions(
+                {
+                    "dataset_key": "inspect",
+                    "label": "Download Inspect TSV",
+                }
+            )
             inspect_payload = build_codon_length_inspect_payload(
                 inspect_bundle,
                 scope_label=self._inspect_scope_label(),
@@ -504,6 +545,13 @@ class CodonCompositionLengthExplorerView(StatsTSVExportMixin, TemplateView):
             context["inspect_has_comparison"] = bool(inspect_payload.get("comparisonBinRows"))
             context["inspect_comparison_scope_label"] = comparison_scope_label
             context["inspect_comparison_bin_rows"] = inspect_payload.get("comparisonBinRows", [])
+            context["comparison_download_tsv_actions"] = self.get_tsv_download_actions(
+                {
+                    "dataset_key": "comparison",
+                    "label": "Download Comparison TSV",
+                    "available": bool(inspect_payload.get("comparisonBinRows")),
+                }
+            )
             context["inspect_empty_reason"] = (
                 "No canonical repeat calls with codon-usage rows matched the current branch scope."
                 if not inspect_payload["available"]

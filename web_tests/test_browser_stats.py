@@ -236,6 +236,29 @@ class BrowserStatsTests(TestCase):
 
         self.assertEqual(response.status_code, 404)
 
+    def test_repeat_length_page_renders_section_download_actions(self):
+        response = self.client.get(
+            reverse("browser:lengths"),
+            {"rank": "species", "min_count": "1"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Download Typical TSV")
+        self.assertContains(response, "Download Tail TSV")
+        self.assertContains(response, "Download Summary TSV")
+        self.assertContains(
+            response,
+            'href="/browser/lengths/?rank=species&amp;min_count=1&amp;download=overview_typical"',
+        )
+        self.assertContains(
+            response,
+            'href="/browser/lengths/?rank=species&amp;min_count=1&amp;download=overview_tail"',
+        )
+        self.assertContains(
+            response,
+            'href="/browser/lengths/?rank=species&amp;min_count=1&amp;download=summary"',
+        )
+
     def test_repeat_length_inspect_download_returns_header_only_without_branch_scope(self):
         response = self.client.get(
             reverse("browser:lengths"),
@@ -335,6 +358,46 @@ class BrowserStatsTests(TestCase):
         self.assertEqual(
             b"".join(response.streaming_content).decode("utf-8"),
             "Scope\tObservations\tCodon\tShare\n",
+        )
+
+    def test_codon_ratio_page_hides_unavailable_overview_and_browse_actions_without_residue(self):
+        response = self.client.get(reverse("browser:codon-ratios"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Download Summary TSV")
+        self.assertNotContains(response, "Download Overview TSV")
+        self.assertNotContains(response, "Download Browse TSV")
+
+    def test_codon_ratio_page_renders_section_download_actions_when_residue_active(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 8, "codon_fraction": 1.0},
+            ],
+        )
+        self._set_repeat_call_codon_usages(
+            self.beta,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 8, "codon_fraction": 1.0},
+            ],
+        )
+
+        response = self.client.get(
+            reverse("browser:codon-ratios"),
+            {"rank": "species", "min_count": "1", "residue": "Q"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Download Summary TSV")
+        self.assertContains(response, "Download Overview TSV")
+        self.assertContains(response, "Download Browse TSV")
+        self.assertContains(
+            response,
+            'href="/browser/codon-ratios/?rank=species&amp;min_count=1&amp;residue=Q&amp;download=overview"',
+        )
+        self.assertContains(
+            response,
+            'href="/browser/codon-ratios/?rank=species&amp;min_count=1&amp;residue=Q&amp;download=browse"',
         )
 
     def test_codon_ratio_summary_download_exports_visible_codon_shares(self):
@@ -469,6 +532,54 @@ class BrowserStatsTests(TestCase):
         self.assertEqual(
             b"".join(response.streaming_content).decode("utf-8"),
             "Scope\tLength bin\tSupport\tDominant codon\tCodon\tCodon share\tShift from previous\n",
+        )
+
+    def test_codon_composition_length_page_renders_explicit_overview_actions(self):
+        self._seed_q_codon_usage_for_length_exports(with_shift=True)
+
+        response = self.client.get(
+            reverse("browser:codon-composition-length"),
+            {"rank": "species", "min_count": "1", "residue": "Q"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Download Summary TSV")
+        self.assertContains(response, "Download Preference TSV")
+        self.assertContains(response, "Download Shift TSV")
+        self.assertContains(response, "Download Similarity TSV")
+        self.assertContains(response, "Download Browse TSV")
+        self.assertNotContains(response, "Download Dominance TSV")
+        self.assertContains(
+            response,
+            'href="/browser/codon-composition-length/?rank=species&amp;min_count=1&amp;residue=Q&amp;download=preference"',
+        )
+        self.assertContains(
+            response,
+            'href="/browser/codon-composition-length/?rank=species&amp;min_count=1&amp;residue=Q&amp;download=similarity"',
+        )
+
+    def test_codon_composition_length_page_renders_inspect_and_comparison_actions(self):
+        self._seed_q_codon_usage_for_length_exports(with_shift=True)
+
+        response = self.client.get(
+            reverse("browser:codon-composition-length"),
+            {
+                "branch": str(self.alpha["taxon"].pk),
+                "rank": "species",
+                "residue": "Q",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Download Inspect TSV")
+        self.assertContains(response, "Download Comparison TSV")
+        self.assertContains(
+            response,
+            f'href="/browser/codon-composition-length/?branch={self.alpha["taxon"].pk}&amp;rank=species&amp;residue=Q&amp;download=inspect"',
+        )
+        self.assertContains(
+            response,
+            f'href="/browser/codon-composition-length/?branch={self.alpha["taxon"].pk}&amp;rank=species&amp;residue=Q&amp;download=comparison"',
         )
 
     def test_codon_composition_length_summary_download_exports_long_form_rows(self):
