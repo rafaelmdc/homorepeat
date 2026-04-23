@@ -3,11 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 
-from django.conf import settings
-from django.core.cache import cache
 from django.db.models import Count
 
 from ..models import Taxon, TaxonClosure
+from ._cache import build_or_get_cached
 from .filters import StatsFilterState
 from .params import ALLOWED_STATS_RANKS, next_lower_rank
 from .queries import build_filtered_repeat_call_queryset
@@ -39,83 +38,71 @@ def build_taxonomy_gutter_payload(
         visible_taxon_ids=visible_taxon_ids,
         collapse_rank=resolved_collapse_rank,
     )
-    cached_payload = cache.get(cache_key)
-    if cached_payload is not None:
-        return cached_payload
-
-    ancestor_chains = _build_ancestor_chains(visible_taxon_ids)
-    if not ancestor_chains:
-        return empty_payload
-
-    root_taxon_id = _lowest_common_ancestor_id(ancestor_chains)
-    if root_taxon_id is None:
-        return empty_payload
-
-    raw_nodes = _build_raw_visible_tree(
-        ancestor_chains=ancestor_chains,
-        root_taxon_id=root_taxon_id,
-        taxon_rows=taxon_rows,
-    )
-    _annotate_raw_visible_tree_rows(raw_nodes, root_taxon_id)
-    preserved_taxon_ids = _select_preserved_taxa(raw_nodes, root_taxon_id)
-    nodes, edges, root_node_id, max_depth = _build_preserved_visible_tree(
-        raw_nodes,
-        root_taxon_id=root_taxon_id,
-        preserved_taxon_ids=preserved_taxon_ids,
-    )
-    nodes_by_id = {
-        node["nodeId"]: node
-        for node in nodes
-    }
-
-    collapsed_child_rank = _collapsed_child_rank(resolved_collapse_rank)
-    child_counts_by_taxon_id = _build_scope_descendant_counts_by_taxon(
-        filter_state=filter_state,
-        visible_taxon_ids=visible_taxon_ids,
-        collapse_rank=resolved_collapse_rank,
-        collapsed_child_rank=collapsed_child_rank,
-    )
-
-    leaves = []
-    for row_index, row in enumerate(taxon_rows):
-        taxon_child_count = child_counts_by_taxon_id.get(row["taxon_id"], 0)
-        brace_label = _brace_label(taxon_child_count, collapsed_child_rank)
-        leaves.append(
-            {
-                "nodeId": _node_id(row["taxon_id"]),
-                "axisValue": str(row["taxon_id"]),
-                "rowIndex": row_index,
-                "taxonId": row["taxon_id"],
-                "taxonName": row["taxon_name"],
-                "rank": row["rank"],
-                "branchExplorerUrl": row.get("branch_explorer_url", ""),
-                "taxonDetailUrl": row.get("taxon_detail_url", ""),
-                "braceCount": taxon_child_count,
-                "braceLabel": brace_label,
-                "showBrace": bool(brace_label),
-            }
+    def _build() -> dict[str, object]:
+        ancestor_chains = _build_ancestor_chains(visible_taxon_ids)
+        if not ancestor_chains:
+            return empty_payload
+        root_taxon_id = _lowest_common_ancestor_id(ancestor_chains)
+        if root_taxon_id is None:
+            return empty_payload
+        raw_nodes = _build_raw_visible_tree(
+            ancestor_chains=ancestor_chains,
+            root_taxon_id=root_taxon_id,
+            taxon_rows=taxon_rows,
         )
-
-    root_node = nodes_by_id.get(root_node_id)
-    payload = {
-        "root": {
-            "nodeId": root_node["nodeId"],
-            "taxonId": root_node["taxonId"],
-            "taxonName": root_node["taxonName"],
-            "rank": root_node["rank"],
-            "depth": root_node["depth"],
+        _annotate_raw_visible_tree_rows(raw_nodes, root_taxon_id)
+        preserved_taxon_ids = _select_preserved_taxa(raw_nodes, root_taxon_id)
+        nodes, edges, root_node_id, max_depth = _build_preserved_visible_tree(
+            raw_nodes,
+            root_taxon_id=root_taxon_id,
+            preserved_taxon_ids=preserved_taxon_ids,
+        )
+        nodes_by_id = {node["nodeId"]: node for node in nodes}
+        collapsed_child_rank = _collapsed_child_rank(resolved_collapse_rank)
+        child_counts_by_taxon_id = _build_scope_descendant_counts_by_taxon(
+            filter_state=filter_state,
+            visible_taxon_ids=visible_taxon_ids,
+            collapse_rank=resolved_collapse_rank,
+            collapsed_child_rank=collapsed_child_rank,
+        )
+        leaves = []
+        for row_index, row in enumerate(taxon_rows):
+            taxon_child_count = child_counts_by_taxon_id.get(row["taxon_id"], 0)
+            brace_label = _brace_label(taxon_child_count, collapsed_child_rank)
+            leaves.append(
+                {
+                    "nodeId": _node_id(row["taxon_id"]),
+                    "axisValue": str(row["taxon_id"]),
+                    "rowIndex": row_index,
+                    "taxonId": row["taxon_id"],
+                    "taxonName": row["taxon_name"],
+                    "rank": row["rank"],
+                    "branchExplorerUrl": row.get("branch_explorer_url", ""),
+                    "taxonDetailUrl": row.get("taxon_detail_url", ""),
+                    "braceCount": taxon_child_count,
+                    "braceLabel": brace_label,
+                    "showBrace": bool(brace_label),
+                }
+            )
+        root_node = nodes_by_id.get(root_node_id)
+        return {
+            "root": {
+                "nodeId": root_node["nodeId"],
+                "taxonId": root_node["taxonId"],
+                "taxonName": root_node["taxonName"],
+                "rank": root_node["rank"],
+                "depth": root_node["depth"],
+            }
+            if root_node
+            else None,
+            "nodes": nodes,
+            "edges": edges,
+            "leaves": leaves,
+            "maxDepth": max_depth,
+            "collapseRank": resolved_collapse_rank,
+            "collapsedChildRank": collapsed_child_rank,
         }
-        if root_node
-        else None,
-        "nodes": nodes,
-        "edges": edges,
-        "leaves": leaves,
-        "maxDepth": max_depth,
-        "collapseRank": resolved_collapse_rank,
-        "collapsedChildRank": collapsed_child_rank,
-    }
-    cache.set(cache_key, payload, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
-    return payload
+    return build_or_get_cached(cache_key, _build)
 
 
 def _empty_taxonomy_gutter_payload(*, collapse_rank: str):

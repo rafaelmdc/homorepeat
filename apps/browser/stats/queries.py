@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from django.conf import settings
-from django.core.cache import cache
 from django.db import connection
 from django.db.models import Count, Exists, F, Max, Min, OuterRef, Q, Sum
 
@@ -16,6 +14,7 @@ from ..models import (
 )
 from .aggregates import PercentileCont
 from .bins import build_length_bin_definition, build_visible_length_bins
+from ._cache import build_or_get_cached
 from .filters import StatsFilterState
 from .ordering import order_taxon_rows_by_lineage
 from .summaries import (
@@ -31,110 +30,92 @@ from .summaries import (
 
 
 def build_ranked_length_summary_bundle(filter_state: StatsFilterState) -> dict[str, object]:
-    cache_key = f"browser:stats:length-summary:{filter_state.cache_key()}"
-    cached_bundle = cache.get(cache_key)
-    if cached_bundle is not None:
-        return cached_bundle
-
-    matching_repeat_calls_count = build_filtered_repeat_call_queryset(filter_state).count()
-    total_taxa_count = build_ranked_taxon_group_count(filter_state)
-    if connection.vendor == "postgresql":
-        summary_rows = list(build_ranked_length_summary_queryset(filter_state))
-    else:
-        group_rows = list(build_ranked_taxon_group_queryset(filter_state))
-        display_taxon_ids = [row["display_taxon_id"] for row in group_rows]
-        grouped_lengths = (
-            list(
-                build_group_length_values_queryset(
-                    filter_state,
-                    display_taxon_ids=display_taxon_ids,
+    def _build() -> dict[str, object]:
+        matching_repeat_calls_count = build_filtered_repeat_call_queryset(filter_state).count()
+        total_taxa_count = build_ranked_taxon_group_count(filter_state)
+        if connection.vendor == "postgresql":
+            summary_rows = list(build_ranked_length_summary_queryset(filter_state))
+        else:
+            group_rows = list(build_ranked_taxon_group_queryset(filter_state))
+            display_taxon_ids = [row["display_taxon_id"] for row in group_rows]
+            grouped_lengths = (
+                list(
+                    build_group_length_values_queryset(
+                        filter_state,
+                        display_taxon_ids=display_taxon_ids,
+                    )
                 )
+                if display_taxon_ids
+                else []
             )
-            if display_taxon_ids
-            else []
-        )
-        summary_rows = summarize_ranked_length_groups(group_rows, grouped_lengths)
-
-    if summary_rows:
-        summary_rows = order_taxon_rows_by_lineage(summary_rows)
-
-    bundle = {
-        "matching_repeat_calls_count": matching_repeat_calls_count,
-        "summary_rows": summary_rows,
-        "total_taxa_count": total_taxa_count,
-        "visible_taxa_count": len(summary_rows),
-    }
-    cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
-    return bundle
+            summary_rows = summarize_ranked_length_groups(group_rows, grouped_lengths)
+        if summary_rows:
+            summary_rows = order_taxon_rows_by_lineage(summary_rows)
+        return {
+            "matching_repeat_calls_count": matching_repeat_calls_count,
+            "summary_rows": summary_rows,
+            "total_taxa_count": total_taxa_count,
+            "visible_taxa_count": len(summary_rows),
+        }
+    return build_or_get_cached(f"browser:stats:length-summary:{filter_state.cache_key()}", _build)
 
 
 def build_length_profile_vector_bundle(filter_state: StatsFilterState) -> dict[str, object]:
-    cache_key = f"browser:stats:length-profile-vectors:{filter_state.cache_key()}"
-    cached_bundle = cache.get(cache_key)
-    if cached_bundle is not None:
-        return cached_bundle
-
-    summary_bundle = build_ranked_length_summary_bundle(filter_state)
-    summary_rows = summary_bundle["summary_rows"]
-    if not summary_rows:
-        bundle = {
-            "matching_repeat_calls_count": summary_bundle["matching_repeat_calls_count"],
-            "visible_taxa_count": 0,
-            "visible_bins": [],
-            "profile_rows": [],
-        }
-        cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
-        return bundle
-
-    visible_taxon_ids = [row["taxon_id"] for row in summary_rows]
-    grouped_length_counts = list(
-        build_group_length_counts_queryset(
-            filter_state,
-            display_taxon_ids=visible_taxon_ids,
+    def _build() -> dict[str, object]:
+        summary_bundle = build_ranked_length_summary_bundle(filter_state)
+        summary_rows = summary_bundle["summary_rows"]
+        if not summary_rows:
+            return {
+                "matching_repeat_calls_count": summary_bundle["matching_repeat_calls_count"],
+                "visible_taxa_count": 0,
+                "visible_bins": [],
+                "profile_rows": [],
+            }
+        visible_taxon_ids = [row["taxon_id"] for row in summary_rows]
+        grouped_length_counts = list(
+            build_group_length_counts_queryset(
+                filter_state,
+                display_taxon_ids=visible_taxon_ids,
+            )
         )
+        vector_summary = summarize_length_profile_vectors(
+            summary_rows,
+            grouped_length_counts,
+            species_count_by_taxon_id={
+                row["taxon_id"]: int(row["species_count"])
+                for row in summary_rows
+                if row.get("species_count") is not None
+            },
+        )
+        return {
+            "matching_repeat_calls_count": summary_bundle["matching_repeat_calls_count"],
+            "visible_taxa_count": len(vector_summary["profile_rows"]),
+            "visible_bins": vector_summary["visible_bins"],
+            "profile_rows": vector_summary["profile_rows"],
+        }
+    return build_or_get_cached(
+        f"browser:stats:length-profile-vectors:{filter_state.cache_key()}", _build
     )
-    vector_summary = summarize_length_profile_vectors(
-        summary_rows,
-        grouped_length_counts,
-        species_count_by_taxon_id={
-            row["taxon_id"]: int(row["species_count"])
-            for row in summary_rows
-            if row.get("species_count") is not None
-        },
-    )
-    bundle = {
-        "matching_repeat_calls_count": summary_bundle["matching_repeat_calls_count"],
-        "visible_taxa_count": len(vector_summary["profile_rows"]),
-        "visible_bins": vector_summary["visible_bins"],
-        "profile_rows": vector_summary["profile_rows"],
-    }
-    cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
-    return bundle
 
 
 def build_length_inspect_bundle(filter_state: StatsFilterState) -> dict[str, object]:
-    cache_key = f"browser:stats:length-inspect:{filter_state.cache_key()}"
-    cached_bundle = cache.get(cache_key)
-    if cached_bundle is not None:
-        return cached_bundle
-
-    lengths = sorted(
-        int(v)
-        for v in build_filtered_repeat_call_queryset(filter_state)
-        .values_list("length", flat=True)
-        if v is not None
-    )
-    summary = build_length_inspect_summary(lengths)
-    bundle = summary if summary is not None else {
-        "observation_count": 0,
-        "ccdf_points": [],
-        "median": None,
-        "q90": None,
-        "q95": None,
-        "max": None,
-    }
-    cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
-    return bundle
+    def _build() -> dict[str, object]:
+        lengths = sorted(
+            int(v)
+            for v in build_filtered_repeat_call_queryset(filter_state)
+            .values_list("length", flat=True)
+            if v is not None
+        )
+        summary = build_length_inspect_summary(lengths)
+        return summary if summary is not None else {
+            "observation_count": 0,
+            "ccdf_points": [],
+            "median": None,
+            "q90": None,
+            "q95": None,
+            "max": None,
+        }
+    return build_or_get_cached(f"browser:stats:length-inspect:{filter_state.cache_key()}", _build)
 
 
 def build_ranked_codon_composition_summary_bundle(filter_state: StatsFilterState) -> dict[str, object]:
@@ -147,46 +128,40 @@ def build_ranked_codon_composition_summary_bundle(filter_state: StatsFilterState
             "visible_codons": [],
         }
 
-    cache_key = f"browser:stats:codon-composition:{filter_state.cache_key()}"
-    cached_bundle = cache.get(cache_key)
-    if cached_bundle is not None:
-        return cached_bundle
-
-    filtered_repeat_call_queryset = build_filtered_repeat_call_queryset(filter_state)
-    matching_repeat_calls_count = filtered_repeat_call_queryset.count()
-    if _can_use_codon_composition_summary_rollup(filter_state):
-        rollup_bundle = _build_ranked_codon_composition_summary_bundle_from_rollup(
-            filter_state,
-            matching_repeat_calls_count=matching_repeat_calls_count,
-        )
-        if rollup_bundle is None:
+    def _build() -> dict[str, object]:
+        filtered_repeat_call_queryset = build_filtered_repeat_call_queryset(filter_state)
+        matching_repeat_calls_count = filtered_repeat_call_queryset.count()
+        if _can_use_codon_composition_summary_rollup(filter_state):
+            rollup_bundle = _build_ranked_codon_composition_summary_bundle_from_rollup(
+                filter_state,
+                matching_repeat_calls_count=matching_repeat_calls_count,
+            )
+            if rollup_bundle is None:
+                total_taxa_count, summary_rows, visible_codons = (
+                    _build_ranked_codon_composition_summary_bundle_live(
+                        filter_state,
+                        filtered_repeat_call_queryset=filtered_repeat_call_queryset,
+                    )
+                )
+            else:
+                total_taxa_count, summary_rows, visible_codons = rollup_bundle
+        else:
             total_taxa_count, summary_rows, visible_codons = (
                 _build_ranked_codon_composition_summary_bundle_live(
                     filter_state,
                     filtered_repeat_call_queryset=filtered_repeat_call_queryset,
                 )
             )
-        else:
-            total_taxa_count, summary_rows, visible_codons = rollup_bundle
-    else:
-        total_taxa_count, summary_rows, visible_codons = (
-            _build_ranked_codon_composition_summary_bundle_live(
-                filter_state,
-                filtered_repeat_call_queryset=filtered_repeat_call_queryset,
-            )
-        )
-    if summary_rows:
-        summary_rows = order_taxon_rows_by_lineage(summary_rows)
-
-    bundle = {
-        "matching_repeat_calls_count": matching_repeat_calls_count,
-        "summary_rows": summary_rows,
-        "total_taxa_count": total_taxa_count,
-        "visible_taxa_count": len(summary_rows),
-        "visible_codons": visible_codons,
-    }
-    cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
-    return bundle
+        if summary_rows:
+            summary_rows = order_taxon_rows_by_lineage(summary_rows)
+        return {
+            "matching_repeat_calls_count": matching_repeat_calls_count,
+            "summary_rows": summary_rows,
+            "total_taxa_count": total_taxa_count,
+            "visible_taxa_count": len(summary_rows),
+            "visible_codons": visible_codons,
+        }
+    return build_or_get_cached(f"browser:stats:codon-composition:{filter_state.cache_key()}", _build)
 
 
 def build_codon_length_composition_bundle(filter_state: StatsFilterState) -> dict[str, object]:
@@ -200,59 +175,51 @@ def build_codon_length_composition_bundle(filter_state: StatsFilterState) -> dic
             "matrix_rows": [],
         }
 
-    cache_key = f"browser:stats:codon-composition-length:{filter_state.cache_key()}"
-    cached_bundle = cache.get(cache_key)
-    if cached_bundle is not None:
-        return cached_bundle
-
-    filtered_repeat_call_queryset = build_filtered_repeat_call_queryset(filter_state)
-    matching_repeat_calls_count = filtered_repeat_call_queryset.count()
-    if _can_use_codon_composition_length_summary_rollup(filter_state):
-        rollup_bundle = _build_codon_length_composition_bundle_from_rollup(
-            filter_state,
-            matching_repeat_calls_count=matching_repeat_calls_count,
-        )
-        if rollup_bundle is None:
+    def _build() -> dict[str, object]:
+        filtered_repeat_call_queryset = build_filtered_repeat_call_queryset(filter_state)
+        matching_repeat_calls_count = filtered_repeat_call_queryset.count()
+        if _can_use_codon_composition_length_summary_rollup(filter_state):
+            rollup_bundle = _build_codon_length_composition_bundle_from_rollup(
+                filter_state,
+                matching_repeat_calls_count=matching_repeat_calls_count,
+            )
+            if rollup_bundle is None:
+                total_taxa_count, visible_codons, visible_bins, matrix_rows = (
+                    _build_codon_length_composition_bundle_live(filter_state)
+                )
+            else:
+                total_taxa_count, visible_codons, visible_bins, matrix_rows = rollup_bundle
+        else:
             total_taxa_count, visible_codons, visible_bins, matrix_rows = (
                 _build_codon_length_composition_bundle_live(filter_state)
             )
-        else:
-            total_taxa_count, visible_codons, visible_bins, matrix_rows = rollup_bundle
-    else:
-        total_taxa_count, visible_codons, visible_bins, matrix_rows = (
-            _build_codon_length_composition_bundle_live(filter_state)
-        )
-
-    if matrix_rows:
-        matrix_rows = order_taxon_rows_by_lineage(matrix_rows)
-        visible_bins, matrix_rows = _filter_codon_length_matrix_rows_by_min_count(
-            visible_bins,
-            matrix_rows,
-            min_count=filter_state.min_count,
-        )
-
-    if not matrix_rows or not visible_codons:
-        bundle = {
+        if matrix_rows:
+            matrix_rows = order_taxon_rows_by_lineage(matrix_rows)
+            visible_bins, matrix_rows = _filter_codon_length_matrix_rows_by_min_count(
+                visible_bins,
+                matrix_rows,
+                min_count=filter_state.min_count,
+            )
+        if not matrix_rows or not visible_codons:
+            return {
+                "matching_repeat_calls_count": matching_repeat_calls_count,
+                "total_taxa_count": total_taxa_count,
+                "visible_taxa_count": 0,
+                "visible_codons": list(visible_codons),
+                "visible_bins": list(visible_bins),
+                "matrix_rows": [],
+            }
+        return {
             "matching_repeat_calls_count": matching_repeat_calls_count,
             "total_taxa_count": total_taxa_count,
-            "visible_taxa_count": 0,
+            "visible_taxa_count": len(matrix_rows),
             "visible_codons": list(visible_codons),
             "visible_bins": list(visible_bins),
-            "matrix_rows": [],
+            "matrix_rows": matrix_rows,
         }
-        cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
-        return bundle
-
-    bundle = {
-        "matching_repeat_calls_count": matching_repeat_calls_count,
-        "total_taxa_count": total_taxa_count,
-        "visible_taxa_count": len(matrix_rows),
-        "visible_codons": list(visible_codons),
-        "visible_bins": list(visible_bins),
-        "matrix_rows": matrix_rows,
-    }
-    cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
-    return bundle
+    return build_or_get_cached(
+        f"browser:stats:codon-composition-length:{filter_state.cache_key()}", _build
+    )
 
 
 def _filter_codon_length_matrix_rows_by_min_count(visible_bins, matrix_rows, *, min_count: int):
@@ -307,27 +274,18 @@ def build_matching_repeat_calls_with_codon_usage_count(filter_state: StatsFilter
     if not filter_state.residue:
         return 0
 
-    cache_key = f"browser:stats:codon-usage-count:{filter_state.cache_key()}"
-    cached_count = cache.get(cache_key)
-    if cached_count is not None:
-        return cached_count
-
-    codon_usage_exists = CanonicalRepeatCallCodonUsage.objects.filter(
-        repeat_call_id=OuterRef("pk"),
-        amino_acid=filter_state.residue,
-    )
-    matching_count = (
-        build_filtered_repeat_call_queryset(filter_state)
-        .annotate(has_codon_usage=Exists(codon_usage_exists))
-        .filter(has_codon_usage=True)
-        .count()
-    )
-    cache.set(
-        cache_key,
-        matching_count,
-        timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60),
-    )
-    return matching_count
+    def _build() -> int:
+        codon_usage_exists = CanonicalRepeatCallCodonUsage.objects.filter(
+            repeat_call_id=OuterRef("pk"),
+            amino_acid=filter_state.residue,
+        )
+        return (
+            build_filtered_repeat_call_queryset(filter_state)
+            .annotate(has_codon_usage=Exists(codon_usage_exists))
+            .filter(has_codon_usage=True)
+            .count()
+        )
+    return build_or_get_cached(f"browser:stats:codon-usage-count:{filter_state.cache_key()}", _build)
 
 
 def build_codon_composition_inspect_bundle(filter_state: StatsFilterState) -> dict[str, object]:
@@ -338,38 +296,35 @@ def build_codon_composition_inspect_bundle(filter_state: StatsFilterState) -> di
             "codon_shares": [],
         }
 
-    cache_key = f"browser:stats:codon-composition-inspect:{filter_state.cache_key()}"
-    cached_bundle = cache.get(cache_key)
-    if cached_bundle is not None:
-        return cached_bundle
-
-    observation_count = build_filtered_repeat_call_queryset(filter_state).count()
-    codon_fraction_sums = list(
-        build_filtered_codon_usage_queryset(filter_state)
-        .values("codon")
-        .annotate(total_fraction=Sum("codon_fraction"))
-        .order_by("codon")
-        .values_list("codon", "total_fraction")
+    def _build() -> dict[str, object]:
+        observation_count = build_filtered_repeat_call_queryset(filter_state).count()
+        codon_fraction_sums = list(
+            build_filtered_codon_usage_queryset(filter_state)
+            .values("codon")
+            .annotate(total_fraction=Sum("codon_fraction"))
+            .order_by("codon")
+            .values_list("codon", "total_fraction")
+        )
+        visible_codons = [codon for codon, _ in codon_fraction_sums]
+        codon_shares = (
+            [
+                {
+                    "codon": codon,
+                    "share": normalize_numeric_summary_value(float(total_fraction) / observation_count),
+                }
+                for codon, total_fraction in codon_fraction_sums
+            ]
+            if observation_count > 0
+            else []
+        )
+        return {
+            "observation_count": observation_count,
+            "visible_codons": visible_codons,
+            "codon_shares": codon_shares,
+        }
+    return build_or_get_cached(
+        f"browser:stats:codon-composition-inspect:{filter_state.cache_key()}", _build
     )
-    visible_codons = [codon for codon, _ in codon_fraction_sums]
-    codon_shares = (
-        [
-            {
-                "codon": codon,
-                "share": normalize_numeric_summary_value(float(total_fraction) / observation_count),
-            }
-            for codon, total_fraction in codon_fraction_sums
-        ]
-        if observation_count > 0
-        else []
-    )
-    bundle = {
-        "observation_count": observation_count,
-        "visible_codons": visible_codons,
-        "codon_shares": codon_shares,
-    }
-    cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
-    return bundle
 
 
 def _aggregate_codon_length_by_bin(repeat_call_qs, codon_usage_qs) -> dict[str, object]:
@@ -458,45 +413,41 @@ def build_codon_length_parent_comparison_bundle(filter_state: StatsFilterState, 
     if not filter_state.residue or parent_taxon is None:
         return {"observation_count": 0, "visible_codons": [], "visible_bins": [], "bin_rows": []}
 
-    cache_key = f"browser:stats:codon-length-parent-comparison:{parent_taxon.pk}:{filter_state.cache_key()}"
-    cached_bundle = cache.get(cache_key)
-    if cached_bundle is not None:
-        return cached_bundle
-
-    parent_taxa_ids = (
-        TaxonClosure.objects.filter(ancestor_id=parent_taxon.pk)
-        .order_by()
-        .values_list("descendant_id", flat=True)
-        .distinct()
-    )
-    repeat_call_qs = CanonicalRepeatCall.objects.order_by()
-    if filter_state.current_run is not None:
-        repeat_call_qs = repeat_call_qs.filter(latest_pipeline_run=filter_state.current_run)
-    repeat_call_qs = repeat_call_qs.filter(taxon_id__in=parent_taxa_ids)
-    if filter_state.q:
-        repeat_call_qs = repeat_call_qs.filter(
-            Q(gene_symbol__istartswith=filter_state.q)
-            | Q(protein__protein_id__istartswith=filter_state.q)
-            | Q(protein_name__istartswith=filter_state.q)
-            | Q(accession__istartswith=filter_state.q)
+    def _build() -> dict[str, object]:
+        parent_taxa_ids = (
+            TaxonClosure.objects.filter(ancestor_id=parent_taxon.pk)
+            .order_by()
+            .values_list("descendant_id", flat=True)
+            .distinct()
         )
-    if filter_state.method:
-        repeat_call_qs = repeat_call_qs.filter(method=filter_state.method)
-    if filter_state.residue:
-        repeat_call_qs = repeat_call_qs.filter(repeat_residue=filter_state.residue)
-    if filter_state.length_min is not None:
-        repeat_call_qs = repeat_call_qs.filter(length__gte=filter_state.length_min)
-    if filter_state.length_max is not None:
-        repeat_call_qs = repeat_call_qs.filter(length__lte=filter_state.length_max)
-
-    codon_usage_qs = CanonicalRepeatCallCodonUsage.objects.order_by().filter(
-        repeat_call__in=repeat_call_qs,
-        amino_acid=filter_state.residue,
+        repeat_call_qs = CanonicalRepeatCall.objects.order_by()
+        if filter_state.current_run is not None:
+            repeat_call_qs = repeat_call_qs.filter(latest_pipeline_run=filter_state.current_run)
+        repeat_call_qs = repeat_call_qs.filter(taxon_id__in=parent_taxa_ids)
+        if filter_state.q:
+            repeat_call_qs = repeat_call_qs.filter(
+                Q(gene_symbol__istartswith=filter_state.q)
+                | Q(protein__protein_id__istartswith=filter_state.q)
+                | Q(protein_name__istartswith=filter_state.q)
+                | Q(accession__istartswith=filter_state.q)
+            )
+        if filter_state.method:
+            repeat_call_qs = repeat_call_qs.filter(method=filter_state.method)
+        if filter_state.residue:
+            repeat_call_qs = repeat_call_qs.filter(repeat_residue=filter_state.residue)
+        if filter_state.length_min is not None:
+            repeat_call_qs = repeat_call_qs.filter(length__gte=filter_state.length_min)
+        if filter_state.length_max is not None:
+            repeat_call_qs = repeat_call_qs.filter(length__lte=filter_state.length_max)
+        codon_usage_qs = CanonicalRepeatCallCodonUsage.objects.order_by().filter(
+            repeat_call__in=repeat_call_qs,
+            amino_acid=filter_state.residue,
+        )
+        return _aggregate_codon_length_by_bin(repeat_call_qs, codon_usage_qs)
+    return build_or_get_cached(
+        f"browser:stats:codon-length-parent-comparison:{parent_taxon.pk}:{filter_state.cache_key()}",
+        _build,
     )
-
-    bundle = _aggregate_codon_length_by_bin(repeat_call_qs, codon_usage_qs)
-    cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
-    return bundle
 
 
 def build_codon_length_inspect_bundle(filter_state: StatsFilterState) -> dict[str, object]:
@@ -508,17 +459,13 @@ def build_codon_length_inspect_bundle(filter_state: StatsFilterState) -> dict[st
             "bin_rows": [],
         }
 
-    cache_key = f"browser:stats:codon-length-inspect:{filter_state.cache_key()}"
-    cached_bundle = cache.get(cache_key)
-    if cached_bundle is not None:
-        return cached_bundle
-
-    bundle = _aggregate_codon_length_by_bin(
-        build_filtered_repeat_call_queryset(filter_state),
-        build_filtered_codon_usage_queryset(filter_state),
+    return build_or_get_cached(
+        f"browser:stats:codon-length-inspect:{filter_state.cache_key()}",
+        lambda: _aggregate_codon_length_by_bin(
+            build_filtered_repeat_call_queryset(filter_state),
+            build_filtered_codon_usage_queryset(filter_state),
+        ),
     )
-    cache.set(cache_key, bundle, timeout=getattr(settings, "HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60))
-    return bundle
 
 
 def build_filtered_repeat_call_queryset(filter_state: StatsFilterState):
