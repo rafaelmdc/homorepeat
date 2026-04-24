@@ -4,7 +4,6 @@ from .filters import StatsFilterState, apply_stats_filter_context, build_stats_f
 from .policy import (
     StatsPayloadClassification,
     StatsPayloadType,
-    build_stats_payload,
     classify_stats_payload,
 )
 from .payloads import (
@@ -61,7 +60,6 @@ __all__ = [
     "StatsPayloadClassification",
     "StatsPayloadType",
     "apply_stats_filter_context",
-    "build_stats_payload",
     "build_ccdf_points",
     "build_codon_composition_inspect_bundle",
     "build_codon_length_composition_bundle",

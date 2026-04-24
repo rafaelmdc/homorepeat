@@ -1,9 +1,11 @@
-"""Tests for Phase 5: download service boundary and DownloadBuild model."""
+"""Tests for Phase 5 and Phase 8: download service boundary and DownloadBuild model."""
 
 import json
+from datetime import timedelta
 
 from django.test import TestCase, SimpleTestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.browser.downloads import (
     DownloadBuildType,
@@ -241,6 +243,93 @@ class DownloadBuildStatusViewTests(TestCase):
         self.assertEqual(data["status"], "failed")
         self.assertFalse(data["is_ready"])
         self.assertEqual(data["error_message"], "Connection reset by peer")
+
+
+class ExpireStaleDownloadBuildsTaskTests(TestCase):
+    def _make_build(self, **kwargs):
+        return DownloadBuild.objects.create(
+            build_type=DownloadBuildType.GENOME_LIST,
+            scope_key="scope-expire",
+            catalog_version=1,
+            **kwargs,
+        )
+
+    def test_expires_stuck_pending_build(self):
+        from apps.browser.tasks import expire_stale_download_builds
+
+        build = self._make_build(status=DownloadBuild.Status.PENDING)
+        DownloadBuild.objects.filter(pk=build.pk).update(
+            created_at=timezone.now() - timedelta(hours=2)
+        )
+
+        result = expire_stale_download_builds()
+
+        build.refresh_from_db()
+        self.assertEqual(build.status, DownloadBuild.Status.EXPIRED)
+        self.assertEqual(result["stuck"], 1)
+        self.assertEqual(result["aged"], 0)
+
+    def test_expires_stuck_building_build(self):
+        from apps.browser.tasks import expire_stale_download_builds
+
+        build = self._make_build(status=DownloadBuild.Status.BUILDING)
+        DownloadBuild.objects.filter(pk=build.pk).update(
+            created_at=timezone.now() - timedelta(hours=2)
+        )
+
+        result = expire_stale_download_builds()
+
+        build.refresh_from_db()
+        self.assertEqual(build.status, DownloadBuild.Status.EXPIRED)
+        self.assertEqual(result["stuck"], 1)
+
+    def test_does_not_expire_recent_pending_build(self):
+        from apps.browser.tasks import expire_stale_download_builds
+
+        build = self._make_build(status=DownloadBuild.Status.PENDING)
+
+        result = expire_stale_download_builds()
+
+        build.refresh_from_db()
+        self.assertEqual(build.status, DownloadBuild.Status.PENDING)
+        self.assertEqual(result["stuck"], 0)
+
+    def test_expires_aged_ready_build(self):
+        from apps.browser.tasks import expire_stale_download_builds
+
+        now = timezone.now()
+        build = self._make_build(status=DownloadBuild.Status.READY, finished_at=now)
+        DownloadBuild.objects.filter(pk=build.pk).update(
+            finished_at=now - timedelta(days=8)
+        )
+
+        result = expire_stale_download_builds()
+
+        build.refresh_from_db()
+        self.assertEqual(build.status, DownloadBuild.Status.EXPIRED)
+        self.assertEqual(result["aged"], 1)
+        self.assertEqual(result["stuck"], 0)
+
+    def test_does_not_expire_recent_ready_build(self):
+        from apps.browser.tasks import expire_stale_download_builds
+
+        build = self._make_build(
+            status=DownloadBuild.Status.READY,
+            finished_at=timezone.now() - timedelta(days=1),
+        )
+
+        result = expire_stale_download_builds()
+
+        build.refresh_from_db()
+        self.assertEqual(build.status, DownloadBuild.Status.READY)
+        self.assertEqual(result["aged"], 0)
+
+    def test_returns_zero_counts_when_nothing_to_expire(self):
+        from apps.browser.tasks import expire_stale_download_builds
+
+        result = expire_stale_download_builds()
+
+        self.assertEqual(result, {"stuck": 0, "aged": 0})
 
 
 class DownloadServiceBoundaryTests(SimpleTestCase):

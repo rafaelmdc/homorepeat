@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Callable, TypeVar
 
 from .filters import StatsFilterState
 
@@ -33,9 +32,6 @@ class StatsPayloadType(StrEnum):
     TAXONOMY_GUTTER = "shared.taxonomy_gutter"
 
 
-_T = TypeVar("_T")
-
-
 def classify_stats_payload(
     filter_state: StatsFilterState,
     payload_type: StatsPayloadType,
@@ -43,16 +39,3 @@ def classify_stats_payload(
     del filter_state
     del payload_type
     return StatsPayloadClassification.SYNC_CACHE
-
-
-def build_stats_payload(
-    filter_state: StatsFilterState,
-    payload_type: StatsPayloadType,
-    build_fn: Callable[[], _T],
-) -> _T:
-    classification = classify_stats_payload(filter_state, payload_type)
-    if classification == StatsPayloadClassification.ASYNC_PERSISTED:
-        raise NotImplementedError(
-            f"Stats payload {payload_type.value!r} is classified as async+persisted and cannot be built inline yet."
-        )
-    return build_fn()

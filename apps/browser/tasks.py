@@ -1,10 +1,11 @@
 """Celery tasks for the browser app.
 
-All tasks in this module route through the payload_graph queue (for bundle
-pre-warming) or the downloads queue (for async artifact generation), as
-declared in CELERY_TASK_ROUTES in config/settings.py.
+Queue routing (declared in CELERY_TASK_ROUTES in config/settings.py):
+  payload_graph — run_post_import_warmup, warm_stats_bundle
+  downloads     — generate_download_artifact, expire_stale_download_builds
 """
 import logging
+from datetime import timedelta
 
 from celery import shared_task
 from django.utils import timezone
@@ -137,6 +138,32 @@ def warm_stats_bundle(self, payload_build_id: int) -> None:
                 error_message=str(exc)[:2000],
                 finished_at=timezone.now(),
             )
+
+
+@shared_task
+def expire_stale_download_builds() -> dict[str, int]:
+    """Expire stale DownloadBuild rows on a scheduled cadence.
+
+    Marks PENDING/BUILDING rows older than 1 hour as EXPIRED (stuck jobs that
+    never completed). Marks READY rows older than 7 days as EXPIRED (artifact
+    retention window). Runs periodically via Celery Beat on the downloads queue.
+    """
+    from apps.browser.models import DownloadBuild
+
+    now = timezone.now()
+    stuck = DownloadBuild.objects.filter(
+        status__in=[DownloadBuild.Status.PENDING, DownloadBuild.Status.BUILDING],
+        created_at__lt=now - timedelta(hours=1),
+    ).update(status=DownloadBuild.Status.EXPIRED)
+
+    aged = DownloadBuild.objects.filter(
+        status=DownloadBuild.Status.READY,
+        finished_at__lt=now - timedelta(days=7),
+    ).update(status=DownloadBuild.Status.EXPIRED)
+
+    if stuck or aged:
+        logger.info("download_builds expired: stuck=%d aged=%d", stuck, aged)
+    return {"stuck": stuck, "aged": aged}
 
 
 @shared_task(bind=True, max_retries=3)

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
-from unittest.mock import patch
 
 from django.test import RequestFactory, TestCase
 
@@ -10,7 +9,6 @@ from apps.browser.stats import build_stats_filter_state
 from apps.browser.stats.policy import (
     StatsPayloadClassification,
     StatsPayloadType,
-    build_stats_payload,
     classify_stats_payload,
 )
 
@@ -27,28 +25,6 @@ class BrowserStatsPolicyTests(TestCase):
                 StatsPayloadClassification.SYNC_CACHE,
                 payload_type.value,
             )
-
-    def test_build_stats_payload_runs_inline_for_sync_cache_policy(self):
-        self.assertEqual(
-            build_stats_payload(
-                self.filter_state,
-                StatsPayloadType.REPEAT_LENGTH_SUMMARY,
-                lambda: "ok",
-            ),
-            "ok",
-        )
-
-    def test_build_stats_payload_rejects_async_persisted_policy_inline(self):
-        with patch(
-            "apps.browser.stats.policy.classify_stats_payload",
-            return_value=StatsPayloadClassification.ASYNC_PERSISTED,
-        ):
-            with self.assertRaises(NotImplementedError):
-                build_stats_payload(
-                    self.filter_state,
-                    StatsPayloadType.REPEAT_LENGTH_SUMMARY,
-                    lambda: "ok",
-                )
 
 
 class BrowserStatsServiceBoundaryTests(TestCase):

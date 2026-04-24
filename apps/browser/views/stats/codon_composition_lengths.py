@@ -3,7 +3,6 @@ from django.views.generic import TemplateView
 
 from apps.browser.stats import (
     apply_stats_filter_context,
-    build_stats_payload,
     build_codon_length_browse_payload,
     build_codon_length_composition_bundle,
     build_codon_length_dominance_overview_payload,
@@ -257,7 +256,7 @@ class CodonCompositionLengthExplorerView(StatsTSVExportMixin, TemplateView):
         return self._filter_state
 
     def _build_payload(self, payload_type: StatsPayloadType, build_fn):
-        return build_stats_payload(self._get_filter_state(), payload_type, build_fn)
+        return build_fn()
 
     def _get_matching_repeat_calls_count(self) -> int:
         if not hasattr(self, "_matching_repeat_calls_count"):

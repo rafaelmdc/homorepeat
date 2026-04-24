@@ -3,7 +3,6 @@ from django.views.generic import TemplateView
 
 from apps.browser.stats import (
     apply_stats_filter_context,
-    build_stats_payload,
     build_length_inspect_bundle,
     build_length_inspect_payload,
     build_length_profile_vector_bundle,
@@ -131,7 +130,7 @@ class RepeatLengthExplorerView(StatsTSVExportMixin, TemplateView):
         return self._filter_state
 
     def _build_payload(self, payload_type: StatsPayloadType, build_fn):
-        return build_stats_payload(self._get_filter_state(), payload_type, build_fn)
+        return build_fn()
 
     def _inspect_scope_active(self) -> bool:
         return self._get_filter_state().branch_scope_active
