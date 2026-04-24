@@ -44,9 +44,6 @@ services:
       retries: 12
 
   migrate:
-    build:
-      context: .
-      dockerfile: containers/web.Dockerfile
     image: homorepeat-web:dev
     working_dir: /app
     command: >
@@ -133,9 +130,6 @@ services:
         condition: service_healthy
 
   celery-import-worker:
-    build:
-      context: .
-      dockerfile: containers/web.Dockerfile
     image: homorepeat-web:dev
     working_dir: /app
     command: celery -A config.celery worker -Q imports -c 2 --prefetch-multiplier 1 --loglevel=info
@@ -170,9 +164,6 @@ services:
   # CPU/DB-bound stats bundle pre-warming (payload_graph queue).
   # Autoscales between 1 and 4 workers; post-import fan-out may spike briefly.
   celery-graph-worker:
-    build:
-      context: .
-      dockerfile: containers/web.Dockerfile
     image: homorepeat-web:dev
     working_dir: /app
     command: celery -A config.celery worker -Q payload_graph --autoscale 4,1 --loglevel=info
@@ -205,9 +196,6 @@ services:
   # I/O-bound download artifact generation (downloads queue).
   # Low fixed concurrency; no prefetch so large jobs don't block the pool.
   celery-download-worker:
-    build:
-      context: .
-      dockerfile: containers/web.Dockerfile
     image: homorepeat-web:dev
     working_dir: /app
     command: celery -A config.celery worker -Q downloads -c 2 --prefetch-multiplier 1 --loglevel=info
@@ -238,9 +226,6 @@ services:
       start_period: 20s
 
   celery-beat:
-    build:
-      context: .
-      dockerfile: containers/web.Dockerfile
     image: homorepeat-web:dev
     working_dir: /app
     command: celery -A config.celery beat --loglevel=info
@@ -267,9 +252,6 @@ services:
         condition: service_healthy
 
   flower:
-    build:
-      context: .
-      dockerfile: containers/web.Dockerfile
     image: homorepeat-web:dev
     working_dir: /app
     command: celery -A config.celery flower --port=5555 --url_prefix=admin/flower
