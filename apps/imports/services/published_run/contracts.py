@@ -26,12 +26,29 @@ SEQUENCE_REQUIRED_COLUMNS = [
     "sequence_name",
     "sequence_length",
 ]
+MATCHED_SEQUENCE_REQUIRED_COLUMNS = [
+    "batch_id",
+    "sequence_id",
+    "genome_id",
+    "sequence_name",
+    "sequence_length",
+    "nucleotide_sequence",
+]
 PROTEIN_REQUIRED_COLUMNS = [
     "protein_id",
     "sequence_id",
     "genome_id",
     "protein_name",
     "protein_length",
+]
+MATCHED_PROTEIN_REQUIRED_COLUMNS = [
+    "batch_id",
+    "protein_id",
+    "sequence_id",
+    "genome_id",
+    "protein_name",
+    "protein_length",
+    "amino_acid_sequence",
 ]
 DOWNLOAD_MANIFEST_REQUIRED_COLUMNS = [
     "batch_id",
@@ -110,6 +127,17 @@ CODON_USAGE_REQUIRED_COLUMNS = [
     "codon",
     "codon_count",
     "codon_fraction",
+]
+REPEAT_CONTEXT_REQUIRED_COLUMNS = [
+    "call_id",
+    "protein_id",
+    "sequence_id",
+    "aa_left_flank",
+    "aa_right_flank",
+    "nt_left_flank",
+    "nt_right_flank",
+    "aa_context_window_size",
+    "nt_context_window_size",
 ]
 MANIFEST_REQUIRED_KEYS = [
     "run_id",

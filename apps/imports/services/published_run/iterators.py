@@ -13,8 +13,11 @@ from .contracts import (
     DOWNLOAD_MANIFEST_REQUIRED_COLUMNS,
     GENOME_REQUIRED_COLUMNS,
     ImportContractError,
+    MATCHED_PROTEIN_REQUIRED_COLUMNS,
+    MATCHED_SEQUENCE_REQUIRED_COLUMNS,
     NORMALIZATION_WARNING_REQUIRED_COLUMNS,
     PROTEIN_REQUIRED_COLUMNS,
+    REPEAT_CONTEXT_REQUIRED_COLUMNS,
     REPEAT_CALL_REQUIRED_COLUMNS,
     RUN_PARAM_REQUIRED_COLUMNS,
     SEQUENCE_REQUIRED_COLUMNS,
@@ -72,6 +75,29 @@ def iter_sequence_rows(path: Path, *, batch_id: str):
         }
 
 
+def iter_matched_sequence_rows(path: Path):
+    for row in _iter_tsv(path, MATCHED_SEQUENCE_REQUIRED_COLUMNS):
+        yield {
+            "sequence_id": _require_row_value(row, "sequence_id", path),
+            "batch_id": _require_row_value(row, "batch_id", path),
+            "genome_id": _require_row_value(row, "genome_id", path),
+            "sequence_name": _require_row_value(row, "sequence_name", path),
+            "sequence_length": _parse_int(row, "sequence_length", path),
+            "gene_symbol": _string_value(row.get("gene_symbol")),
+            "transcript_id": _string_value(row.get("transcript_id")),
+            "isoform_id": _string_value(row.get("isoform_id")),
+            "assembly_accession": _string_value(row.get("assembly_accession")),
+            "taxon_id": _parse_optional_int(row, "taxon_id", path),
+            "source_record_id": _string_value(row.get("source_record_id")),
+            "protein_external_id": _string_value(row.get("protein_external_id")),
+            "translation_table": _string_value(row.get("translation_table")),
+            "gene_group": _string_value(row.get("gene_group")),
+            "linkage_status": _string_value(row.get("linkage_status")),
+            "partial_status": _string_value(row.get("partial_status")),
+            "nucleotide_sequence": _require_row_value(row, "nucleotide_sequence", path),
+        }
+
+
 def iter_protein_rows(path: Path, *, batch_id: str):
     for row in _iter_tsv(path, PROTEIN_REQUIRED_COLUMNS):
         yield {
@@ -88,6 +114,26 @@ def iter_protein_rows(path: Path, *, batch_id: str):
             "taxon_id": _parse_optional_int(row, "taxon_id", path),
             "gene_group": _string_value(row.get("gene_group")),
             "protein_external_id": _string_value(row.get("protein_external_id")),
+        }
+
+
+def iter_matched_protein_rows(path: Path):
+    for row in _iter_tsv(path, MATCHED_PROTEIN_REQUIRED_COLUMNS):
+        yield {
+            "protein_id": _require_row_value(row, "protein_id", path),
+            "batch_id": _require_row_value(row, "batch_id", path),
+            "sequence_id": _require_row_value(row, "sequence_id", path),
+            "genome_id": _require_row_value(row, "genome_id", path),
+            "protein_name": _require_row_value(row, "protein_name", path),
+            "protein_length": _parse_int(row, "protein_length", path),
+            "gene_symbol": _string_value(row.get("gene_symbol")),
+            "translation_method": _string_value(row.get("translation_method")),
+            "translation_status": _string_value(row.get("translation_status")),
+            "assembly_accession": _string_value(row.get("assembly_accession")),
+            "taxon_id": _parse_optional_int(row, "taxon_id", path),
+            "gene_group": _string_value(row.get("gene_group")),
+            "protein_external_id": _string_value(row.get("protein_external_id")),
+            "amino_acid_sequence": _require_row_value(row, "amino_acid_sequence", path),
         }
 
 
@@ -235,10 +281,13 @@ def iter_codon_usage_rows(path: Path):
 
         if method not in VALID_METHODS:
             raise ImportContractError(f"{path} contains an invalid method: {method!r}")
-        if codon_count < 0:
-            raise ImportContractError(f"{path} contains a negative codon_count")
+        if codon_count < 1:
+            raise ImportContractError(f"{path} contains a codon_count below 1")
         if not isfinite(codon_fraction) or codon_fraction < 0 or codon_fraction > 1:
             raise ImportContractError(f"{path} contains a codon_fraction outside 0..1")
+        codon = _require_row_value(row, "codon", path).upper()
+        if len(codon) != 3 or any(base not in {"A", "T", "G", "C"} for base in codon):
+            raise ImportContractError(f"{path} contains an invalid DNA codon: {codon!r}")
 
         yield {
             "call_id": _require_row_value(row, "call_id", path),
@@ -247,9 +296,24 @@ def iter_codon_usage_rows(path: Path):
             "sequence_id": _require_row_value(row, "sequence_id", path),
             "protein_id": _require_row_value(row, "protein_id", path),
             "amino_acid": _require_row_value(row, "amino_acid", path),
-            "codon": _require_row_value(row, "codon", path),
+            "codon": codon,
             "codon_count": codon_count,
             "codon_fraction": codon_fraction,
+        }
+
+
+def iter_repeat_context_rows(path: Path):
+    for row in _iter_tsv(path, REPEAT_CONTEXT_REQUIRED_COLUMNS):
+        yield {
+            "call_id": _require_row_value(row, "call_id", path),
+            "protein_id": _require_row_value(row, "protein_id", path),
+            "sequence_id": _require_row_value(row, "sequence_id", path),
+            "aa_left_flank": _string_value(row.get("aa_left_flank")),
+            "aa_right_flank": _string_value(row.get("aa_right_flank")),
+            "nt_left_flank": _string_value(row.get("nt_left_flank")),
+            "nt_right_flank": _string_value(row.get("nt_right_flank")),
+            "aa_context_window_size": _parse_int(row, "aa_context_window_size", path),
+            "nt_context_window_size": _parse_int(row, "nt_context_window_size", path),
         }
 
 

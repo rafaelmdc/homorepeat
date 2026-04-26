@@ -15,9 +15,13 @@ from apps.imports.services.published_run import (
     iter_accession_status_rows,
     iter_download_manifest_rows,
     iter_genome_rows,
+    iter_matched_protein_rows,
+    iter_matched_sequence_rows,
     iter_normalization_warning_rows,
     iter_protein_rows,
+    iter_repeat_context_rows,
     iter_repeat_call_rows,
+    iter_codon_usage_rows,
     iter_run_parameter_rows,
     iter_sequence_rows,
     iter_taxonomy_rows,
@@ -210,6 +214,86 @@ class PublishedRunImportServiceTests(SimpleTestCase):
 
             with self.assertRaisesRegex(ImportContractError, "publish_contract_version"):
                 inspect_published_run(publish_root)
+
+    def test_v2_matched_sequence_and_protein_iterators_include_body_columns(self):
+        with TemporaryDirectory() as tempdir:
+            publish_root = build_minimal_v2_publish_root(Path(tempdir))
+            inspected = inspect_published_run(publish_root)
+
+            sequence_rows = list(iter_matched_sequence_rows(inspected.artifact_paths.matched_sequences_tsv))
+            protein_rows = list(iter_matched_protein_rows(inspected.artifact_paths.matched_proteins_tsv))
+
+            self.assertEqual(sequence_rows[0]["batch_id"], "batch_0001")
+            self.assertEqual(sequence_rows[0]["sequence_id"], "seq_1")
+            self.assertEqual(sequence_rows[0]["nucleotide_sequence"], "CAGCAGCAG")
+            self.assertEqual(protein_rows[0]["batch_id"], "batch_0001")
+            self.assertEqual(protein_rows[0]["protein_id"], "prot_1")
+            self.assertEqual(protein_rows[0]["amino_acid_sequence"], "QQQQQQQQQQQ")
+
+    def test_v2_repeat_context_iterator_parses_flanks_and_window_sizes(self):
+        with TemporaryDirectory() as tempdir:
+            publish_root = build_minimal_v2_publish_root(Path(tempdir))
+            inspected = inspect_published_run(publish_root)
+
+            context_rows = list(iter_repeat_context_rows(inspected.artifact_paths.repeat_context_tsv))
+
+            self.assertEqual(
+                context_rows,
+                [
+                    {
+                        "call_id": "call_1",
+                        "protein_id": "prot_1",
+                        "sequence_id": "seq_1",
+                        "aa_left_flank": "M",
+                        "aa_right_flank": "A",
+                        "nt_left_flank": "ATG",
+                        "nt_right_flank": "GCT",
+                        "aa_context_window_size": 12,
+                        "nt_context_window_size": 36,
+                    }
+                ],
+            )
+
+    def test_v2_matched_sequence_iterator_requires_nucleotide_sequence(self):
+        with TemporaryDirectory() as tempdir:
+            publish_root = build_minimal_v2_publish_root(Path(tempdir))
+            path = publish_root / "tables" / "matched_sequences.tsv"
+            path.write_text(
+                "batch_id\tsequence_id\tgenome_id\tsequence_name\tsequence_length\n"
+                "batch_0001\tseq_1\tgenome_1\tNM_000001.1\t90\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ImportContractError, "nucleotide_sequence"):
+                list(iter_matched_sequence_rows(path))
+
+    def test_codon_usage_iterator_requires_positive_dna_triplets(self):
+        with TemporaryDirectory() as tempdir:
+            publish_root = build_minimal_v2_publish_root(Path(tempdir))
+            path = publish_root / "tables" / "repeat_call_codon_usage.tsv"
+
+            path.write_text(
+                "call_id\tmethod\trepeat_residue\tsequence_id\tprotein_id\tamino_acid\tcodon\tcodon_count\tcodon_fraction\n"
+                "call_1\tpure\tQ\tseq_1\tprot_1\tQ\tcag\t1\t1.0\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(list(iter_codon_usage_rows(path))[0]["codon"], "CAG")
+
+            path.write_text(
+                "call_id\tmethod\trepeat_residue\tsequence_id\tprotein_id\tamino_acid\tcodon\tcodon_count\tcodon_fraction\n"
+                "call_1\tpure\tQ\tseq_1\tprot_1\tQ\tCAG\t0\t1.0\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ImportContractError, "codon_count"):
+                list(iter_codon_usage_rows(path))
+
+            path.write_text(
+                "call_id\tmethod\trepeat_residue\tsequence_id\tprotein_id\tamino_acid\tcodon\tcodon_count\tcodon_fraction\n"
+                "call_1\tpure\tQ\tseq_1\tprot_1\tQ\tNAG\t1\t1.0\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ImportContractError, "DNA codon"):
+                list(iter_codon_usage_rows(path))
 
     def test_inspect_published_run_exposes_real_small_raw_run_with_streaming_iterators(self):
         publish_root = _sibling_publish_root(SMALL_REAL_RUN_ID)
