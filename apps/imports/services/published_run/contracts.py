@@ -126,6 +126,7 @@ MANIFEST_REQUIRED_KEYS = [
     "repeat_residues",
     "artifacts",
 ]
+V2_MANIFEST_REQUIRED_KEYS = [*MANIFEST_REQUIRED_KEYS, "publish_contract_version"]
 ACQUISITION_VALIDATION_REQUIRED_KEYS = [
     "status",
     "scope",
@@ -148,6 +149,26 @@ VALID_METHODS = {"pure", "threshold", "seed_extend"}
 
 class ImportContractError(ValueError):
     """Raised when a published run does not satisfy the import contract."""
+
+
+@dataclass(frozen=True)
+class V2ArtifactPaths:
+    publish_root: Path
+    manifest: Path
+    repeat_calls_tsv: Path
+    run_params_tsv: Path
+    genomes_tsv: Path
+    taxonomy_tsv: Path
+    matched_sequences_tsv: Path
+    matched_proteins_tsv: Path
+    repeat_call_codon_usage_tsv: Path
+    repeat_context_tsv: Path
+    download_manifest_tsv: Path
+    normalization_warnings_tsv: Path
+    accession_status_tsv: Path
+    accession_call_counts_tsv: Path
+    status_summary_json: Path
+    acquisition_validation_json: Path
 
 
 @dataclass(frozen=True)
@@ -188,6 +209,6 @@ class RequiredArtifactPaths:
 
 @dataclass(frozen=True)
 class InspectedPublishedRun:
-    artifact_paths: RequiredArtifactPaths
+    artifact_paths: RequiredArtifactPaths | V2ArtifactPaths
     manifest: dict[str, Any]
     pipeline_run: dict[str, Any]

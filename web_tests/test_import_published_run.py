@@ -24,7 +24,12 @@ from apps.imports.services.published_run import (
     load_published_run,
 )
 
-from .support import add_finalized_codon_usage_artifact, build_minimal_publish_root, build_multibatch_publish_root
+from .support import (
+    add_finalized_codon_usage_artifact,
+    build_minimal_publish_root,
+    build_minimal_v2_publish_root,
+    build_multibatch_publish_root,
+)
 
 
 SIBLING_PIPELINE_RUNS_ROOT = Path(__file__).resolve().parents[2] / "homorepeat_pipeline" / "runs"
@@ -148,6 +153,64 @@ def _merge_rows_by_key(rows, *, key_field: str):
 
 
 class PublishedRunImportServiceTests(SimpleTestCase):
+    def test_inspect_published_run_accepts_v2_flat_contract(self):
+        with TemporaryDirectory() as tempdir:
+            publish_root = build_minimal_v2_publish_root(Path(tempdir))
+
+            inspected = inspect_published_run(publish_root)
+
+            self.assertEqual(inspected.pipeline_run["run_id"], "run-alpha-v2")
+            self.assertEqual(inspected.manifest["publish_contract_version"], 2)
+            self.assertEqual(inspected.artifact_paths.publish_root, publish_root.resolve())
+            self.assertEqual(
+                inspected.artifact_paths.repeat_calls_tsv,
+                publish_root.resolve() / "calls" / "repeat_calls.tsv",
+            )
+            self.assertEqual(
+                inspected.artifact_paths.matched_sequences_tsv,
+                publish_root.resolve() / "tables" / "matched_sequences.tsv",
+            )
+            self.assertEqual(
+                inspected.artifact_paths.matched_proteins_tsv,
+                publish_root.resolve() / "tables" / "matched_proteins.tsv",
+            )
+            self.assertEqual(
+                inspected.artifact_paths.repeat_call_codon_usage_tsv,
+                publish_root.resolve() / "tables" / "repeat_call_codon_usage.tsv",
+            )
+            self.assertFalse(hasattr(inspected.artifact_paths, "acquisition_batches"))
+
+    def test_inspect_published_run_accepts_v2_merged_publish_mode(self):
+        with TemporaryDirectory() as tempdir:
+            publish_root = build_minimal_v2_publish_root(
+                Path(tempdir),
+                acquisition_publish_mode="merged",
+            )
+
+            inspected = inspect_published_run(publish_root)
+
+            self.assertEqual(inspected.manifest["acquisition_publish_mode"], "merged")
+            self.assertEqual(inspected.manifest["publish_contract_version"], 2)
+
+    def test_inspect_published_run_rejects_v2_missing_required_file(self):
+        with TemporaryDirectory() as tempdir:
+            publish_root = build_minimal_v2_publish_root(Path(tempdir))
+            (publish_root / "tables" / "repeat_call_codon_usage.tsv").unlink()
+
+            with self.assertRaisesRegex(ImportContractError, "repeat_call_codon_usage.tsv"):
+                inspect_published_run(publish_root)
+
+    def test_inspect_published_run_rejects_unsupported_v2_contract_version(self):
+        with TemporaryDirectory() as tempdir:
+            publish_root = build_minimal_v2_publish_root(Path(tempdir))
+            manifest_path = publish_root / "metadata" / "run_manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["publish_contract_version"] = 3
+            manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ImportContractError, "publish_contract_version"):
+                inspect_published_run(publish_root)
+
     def test_inspect_published_run_exposes_real_small_raw_run_with_streaming_iterators(self):
         publish_root = _sibling_publish_root(SMALL_REAL_RUN_ID)
         if not publish_root.exists():

@@ -206,6 +206,154 @@ def build_minimal_publish_root(base_dir: Path, *, run_id: str = "run-alpha") -> 
     return publish_root
 
 
+def build_minimal_v2_publish_root(
+    base_dir: Path,
+    *,
+    run_id: str = "run-alpha-v2",
+    acquisition_publish_mode: str = "raw",
+) -> Path:
+    publish_root = base_dir / "publish"
+    (publish_root / "calls").mkdir(parents=True)
+    (publish_root / "tables").mkdir(parents=True)
+    (publish_root / "summaries").mkdir(parents=True)
+    (publish_root / "metadata").mkdir(parents=True)
+
+    manifest = {
+        "run_id": run_id,
+        "status": "success",
+        "started_at_utc": "2026-04-06T12:03:46Z",
+        "finished_at_utc": "2026-04-06T12:05:44Z",
+        "profile": "docker",
+        "acquisition_publish_mode": acquisition_publish_mode,
+        "publish_contract_version": 2,
+        "git_revision": "abc123",
+        "inputs": {},
+        "paths": {"publish_root": f"runs/{run_id}/publish", "run_root": f"runs/{run_id}"},
+        "params": {},
+        "enabled_methods": ["pure"],
+        "repeat_residues": ["Q"],
+        "artifacts": {
+            "calls": {
+                "repeat_calls_tsv": "publish/calls/repeat_calls.tsv",
+                "run_params_tsv": "publish/calls/run_params.tsv",
+            },
+            "tables": {
+                "genomes_tsv": "publish/tables/genomes.tsv",
+                "taxonomy_tsv": "publish/tables/taxonomy.tsv",
+                "matched_sequences_tsv": "publish/tables/matched_sequences.tsv",
+                "matched_proteins_tsv": "publish/tables/matched_proteins.tsv",
+                "repeat_call_codon_usage_tsv": "publish/tables/repeat_call_codon_usage.tsv",
+                "repeat_context_tsv": "publish/tables/repeat_context.tsv",
+                "download_manifest_tsv": "publish/tables/download_manifest.tsv",
+                "normalization_warnings_tsv": "publish/tables/normalization_warnings.tsv",
+                "accession_status_tsv": "publish/tables/accession_status.tsv",
+                "accession_call_counts_tsv": "publish/tables/accession_call_counts.tsv",
+            },
+            "summaries": {
+                "status_summary_json": "publish/summaries/status_summary.json",
+                "acquisition_validation_json": "publish/summaries/acquisition_validation.json",
+            },
+        },
+    }
+    (publish_root / "metadata" / "run_manifest.json").write_text(
+        json.dumps(manifest, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (publish_root / "calls" / "run_params.tsv").write_text(
+        "method\trepeat_residue\tparam_name\tparam_value\n"
+        "pure\tQ\tmin_repeat_count\t6\n",
+        encoding="utf-8",
+    )
+    (publish_root / "calls" / "repeat_calls.tsv").write_text(
+        "call_id\tmethod\tgenome_id\ttaxon_id\tsequence_id\tprotein_id\tstart\tend\tlength\trepeat_residue\trepeat_count\tnon_repeat_count\tpurity\taa_sequence\tcodon_sequence\tcodon_metric_name\tcodon_metric_value\twindow_definition\ttemplate_name\tmerge_rule\tscore\n"
+        "call_1\tpure\tgenome_1\t9606\tseq_1\tprot_1\t10\t20\t11\tQ\t11\t0\t1.0\tQQQQQQQQQQQ\tCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAG\tcodon_ratio\t1.0\t\t\t\t\n",
+        encoding="utf-8",
+    )
+    (publish_root / "tables" / "taxonomy.tsv").write_text(
+        "taxon_id\ttaxon_name\tparent_taxon_id\trank\tsource\n"
+        "1\troot\t\tno rank\ttest\n"
+        "9606\tHomo sapiens\t1\tspecies\ttest\n",
+        encoding="utf-8",
+    )
+    (publish_root / "tables" / "genomes.tsv").write_text(
+        "batch_id\tgenome_id\tsource\taccession\tgenome_name\tassembly_type\ttaxon_id\tassembly_level\tspecies_name\tnotes\n"
+        "batch_0001\tgenome_1\tncbi_datasets\tGCF_000001405.40\tExample genome\thaploid\t9606\tChromosome\tHomo sapiens\t\n",
+        encoding="utf-8",
+    )
+    (publish_root / "tables" / "matched_sequences.tsv").write_text(
+        "batch_id\tsequence_id\tgenome_id\tsequence_name\tsequence_length\tgene_symbol\ttranscript_id\tisoform_id\tassembly_accession\ttaxon_id\tsource_record_id\tprotein_external_id\ttranslation_table\tgene_group\tlinkage_status\tpartial_status\tnucleotide_sequence\n"
+        "batch_0001\tseq_1\tgenome_1\tNM_000001.1\t90\tGENE1\tNM_000001.1\tNP_000001.1\tGCF_000001405.40\t9606\tcds-1\tNP_000001.1\t1\tGENE1\tgff\t\tCAGCAGCAG\n",
+        encoding="utf-8",
+    )
+    (publish_root / "tables" / "matched_proteins.tsv").write_text(
+        "batch_id\tprotein_id\tsequence_id\tgenome_id\tprotein_name\tprotein_length\tgene_symbol\ttranslation_method\ttranslation_status\tassembly_accession\ttaxon_id\tgene_group\tprotein_external_id\tamino_acid_sequence\n"
+        "batch_0001\tprot_1\tseq_1\tgenome_1\tNP_000001.1\t30\tGENE1\ttranslated\ttranslated\tGCF_000001405.40\t9606\tGENE1\tNP_000001.1\tQQQQQQQQQQQ\n",
+        encoding="utf-8",
+    )
+    (publish_root / "tables" / "repeat_call_codon_usage.tsv").write_text(
+        "call_id\tmethod\trepeat_residue\tsequence_id\tprotein_id\tamino_acid\tcodon\tcodon_count\tcodon_fraction\n"
+        "call_1\tpure\tQ\tseq_1\tprot_1\tQ\tCAG\t11\t1.0\n",
+        encoding="utf-8",
+    )
+    (publish_root / "tables" / "repeat_context.tsv").write_text(
+        "call_id\tprotein_id\tsequence_id\taa_left_flank\taa_right_flank\tnt_left_flank\tnt_right_flank\taa_context_window_size\tnt_context_window_size\n"
+        "call_1\tprot_1\tseq_1\tM\tA\tATG\tGCT\t12\t36\n",
+        encoding="utf-8",
+    )
+    (publish_root / "tables" / "download_manifest.tsv").write_text(
+        "batch_id\tassembly_accession\tdownload_status\tpackage_mode\tdownload_path\trehydrated_path\tchecksum\tfile_size_bytes\tdownload_started_at\tdownload_finished_at\tnotes\n"
+        "batch_0001\tGCF_000001405.40\tdownloaded\tdirect_zip\t\t\t\t106807993\t\t\t\n",
+        encoding="utf-8",
+    )
+    (publish_root / "tables" / "normalization_warnings.tsv").write_text(
+        "warning_code\twarning_scope\twarning_message\tbatch_id\tgenome_id\tsequence_id\tprotein_id\tassembly_accession\tsource_file\tsource_record_id\n",
+        encoding="utf-8",
+    )
+    (publish_root / "tables" / "accession_status.tsv").write_text(
+        "assembly_accession\tbatch_id\tdownload_status\tnormalize_status\ttranslate_status\tdetect_status\tfinalize_status\tterminal_status\tfailure_stage\tfailure_reason\tn_genomes\tn_proteins\tn_repeat_calls\tnotes\n"
+        "GCF_000001405.40\tbatch_0001\tsuccess\tsuccess\tsuccess\tsuccess\tsuccess\tcompleted\t\t\t1\t1\t1\t\n",
+        encoding="utf-8",
+    )
+    (publish_root / "tables" / "accession_call_counts.tsv").write_text(
+        "assembly_accession\tbatch_id\tmethod\trepeat_residue\tdetect_status\tfinalize_status\tn_repeat_calls\n"
+        "GCF_000001405.40\tbatch_0001\tpure\tQ\tsuccess\tsuccess\t1\n",
+        encoding="utf-8",
+    )
+    (publish_root / "summaries" / "status_summary.json").write_text(
+        json.dumps({"status": "success"}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (publish_root / "summaries" / "acquisition_validation.json").write_text(
+        json.dumps(
+            {
+                "status": "pass",
+                "scope": "run",
+                "counts": {
+                    "n_selected_assemblies": 1,
+                    "n_downloaded_packages": 1,
+                    "n_genomes": 1,
+                    "n_sequences": 1,
+                    "n_proteins": 1,
+                    "n_warning_rows": 0,
+                },
+                "checks": {
+                    "all_genomes_have_taxids": True,
+                    "all_proteins_belong_to_genomes": True,
+                    "all_retained_proteins_trace_to_cds": True,
+                    "all_selected_accessions_accounted_for": True,
+                },
+                "failed_accessions": [],
+                "warning_summary": {},
+                "notes": [],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return publish_root
+
+
 def build_multibatch_publish_root(base_dir: Path, *, run_id: str = "run-multi-batch") -> Path:
     publish_root = build_minimal_publish_root(base_dir, run_id=run_id)
     batch_root = publish_root / "acquisition" / "batches" / "batch_0002"

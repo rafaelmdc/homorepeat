@@ -8,6 +8,7 @@ from .artifacts import (
     _resolve_batch_artifacts,
     _resolve_codon_usage_artifacts,
     resolve_required_artifacts,
+    resolve_v2_artifacts,
 )
 from .contracts import (
     CodonUsageArtifactPath,
@@ -17,14 +18,25 @@ from .contracts import (
 from .iterators import iter_codon_usage_rows
 from .manifest import (
     _ensure_raw_publish_mode,
+    _ensure_v2_contract,
     _normalize_pipeline_run,
     _read_manifest,
 )
 
 
 def inspect_published_run(publish_root: Path | str) -> InspectedPublishedRun:
-    artifact_paths = resolve_required_artifacts(publish_root)
-    manifest = _read_manifest(artifact_paths.manifest)
+    root = Path(publish_root).resolve()
+    manifest = _read_manifest(root / "metadata" / "run_manifest.json")
+    if "publish_contract_version" in manifest:
+        _ensure_v2_contract(manifest)
+        artifact_paths = resolve_v2_artifacts(root)
+        return InspectedPublishedRun(
+            artifact_paths=artifact_paths,
+            manifest=manifest,
+            pipeline_run=_normalize_pipeline_run(manifest, artifact_paths),
+        )
+
+    artifact_paths = resolve_required_artifacts(root)
     _ensure_raw_publish_mode(manifest)
     batch_artifact_paths = _resolve_batch_artifacts(artifact_paths)
     artifact_paths = replace(

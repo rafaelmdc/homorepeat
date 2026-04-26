@@ -1,4 +1,4 @@
-from .artifacts import resolve_required_artifacts
+from .artifacts import resolve_required_artifacts, resolve_v2_artifacts
 from .contracts import (
     ACCESSION_CALL_COUNT_REQUIRED_COLUMNS,
     ACCESSION_STATUS_REQUIRED_COLUMNS,
@@ -20,6 +20,8 @@ from .contracts import (
     SEQUENCE_REQUIRED_COLUMNS,
     TAXONOMY_REQUIRED_COLUMNS,
     VALID_METHODS,
+    V2ArtifactPaths,
+    V2_MANIFEST_REQUIRED_KEYS,
 )
 from .iterators import (
     iter_accession_call_count_rows,
@@ -57,6 +59,8 @@ __all__ = [
     "SEQUENCE_REQUIRED_COLUMNS",
     "TAXONOMY_REQUIRED_COLUMNS",
     "VALID_METHODS",
+    "V2ArtifactPaths",
+    "V2_MANIFEST_REQUIRED_KEYS",
     "inspect_published_run",
     "iter_accession_call_count_rows",
     "iter_accession_status_rows",
@@ -72,4 +76,5 @@ __all__ = [
     "iter_taxonomy_rows",
     "load_published_run",
     "resolve_required_artifacts",
+    "resolve_v2_artifacts",
 ]
