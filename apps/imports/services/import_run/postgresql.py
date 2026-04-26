@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
 from pathlib import Path
+from time import monotonic
 
 from django.db import connection
 
@@ -61,6 +64,8 @@ _TMP_CODON_USAGE = "tmp_homorepeat_import_codon_usage"
 _TMP_DOWNLOAD_MANIFEST = "tmp_homorepeat_import_dl_manifest"
 _TMP_NORMALIZATION_WARNINGS = "tmp_homorepeat_import_norm_warnings"
 _TMP_REPEAT_CONTEXT = "tmp_homorepeat_import_repeat_context"
+
+logger = logging.getLogger(__name__)
 
 
 def _import_inspected_run_postgresql(
@@ -202,19 +207,103 @@ def _import_inspected_run_v2_postgresql(
         reporter=reporter,
         force=True,
     )
-    repeat_call_count = _stage_repeat_call_rows(inspected)
-    retained_sequence_count, retained_protein_count = _create_retained_entity_tables()
-    taxonomy_rows = _load_taxonomy_rows(inspected)
-    _upsert_taxa(taxonomy_rows)
-    _rebuild_taxon_closure()
+    repeat_call_count = _run_v2_timed_step(
+        batch,
+        reporter,
+        label="stage repeat calls",
+        message="Staging v2 repeat-call rows.",
+        count_key="repeat_calls",
+        func=lambda: _stage_repeat_call_rows(inspected),
+    )
+    retained_sequence_count, retained_protein_count = _run_v2_timed_step(
+        batch,
+        reporter,
+        label="derive retained entity tables",
+        message="Deriving retained sequence and protein IDs.",
+        count_key="retained_entities",
+        func=_create_retained_entity_tables,
+    )
+    taxonomy_rows = _run_v2_timed_step(
+        batch,
+        reporter,
+        label="load taxonomy",
+        message="Loading v2 taxonomy rows.",
+        count_key="taxonomy",
+        func=lambda: _load_taxonomy_rows(inspected),
+    )
+    _run_v2_timed_step(
+        batch,
+        reporter,
+        label="upsert taxonomy",
+        message="Upserting taxonomy rows.",
+        count_key="taxonomy",
+        func=lambda: _upsert_taxa(taxonomy_rows),
+    )
+    _run_v2_timed_step(
+        batch,
+        reporter,
+        label="rebuild taxon closure",
+        message="Rebuilding taxon closure rows.",
+        count_key="taxonomy",
+        func=_rebuild_taxon_closure,
+    )
 
-    genome_stage_count = _stage_v2_genome_rows(paths)
-    sequence_stage_count = _stage_v2_matched_sequence_rows(paths)
-    protein_stage_count = _stage_v2_matched_protein_rows(paths)
-    download_manifest_stage_count = _stage_v2_download_manifest_rows(paths)
-    normalization_warning_stage_count = _stage_v2_normalization_warning_rows(paths)
-    repeat_context_stage_count = _stage_v2_repeat_context_rows(paths)
-    batch_count = _create_v2_acquisition_batches_from_staged_tables(pipeline_run, paths)
+    genome_stage_count = _run_v2_timed_step(
+        batch,
+        reporter,
+        label="stage genomes",
+        message="Staging v2 genome rows.",
+        count_key="genomes",
+        func=lambda: _stage_v2_genome_rows(paths),
+    )
+    sequence_stage_count = _run_v2_timed_step(
+        batch,
+        reporter,
+        label="stage matched sequences",
+        message="Staging v2 matched sequence rows.",
+        count_key="sequences",
+        func=lambda: _stage_v2_matched_sequence_rows(paths),
+    )
+    protein_stage_count = _run_v2_timed_step(
+        batch,
+        reporter,
+        label="stage matched proteins",
+        message="Staging v2 matched protein rows.",
+        count_key="proteins",
+        func=lambda: _stage_v2_matched_protein_rows(paths),
+    )
+    download_manifest_stage_count = _run_v2_timed_step(
+        batch,
+        reporter,
+        label="stage download manifest",
+        message="Staging v2 download manifest rows.",
+        count_key="download_manifest_entries",
+        func=lambda: _stage_v2_download_manifest_rows(paths),
+    )
+    normalization_warning_stage_count = _run_v2_timed_step(
+        batch,
+        reporter,
+        label="stage normalization warnings",
+        message="Staging v2 normalization warning rows.",
+        count_key="normalization_warnings",
+        func=lambda: _stage_v2_normalization_warning_rows(paths),
+    )
+    repeat_context_stage_count = _run_v2_timed_step(
+        batch,
+        reporter,
+        label="stage repeat context",
+        message="Staging v2 repeat-call context rows.",
+        count_key="repeat_call_contexts",
+        func=lambda: _stage_v2_repeat_context_rows(paths),
+    )
+    batch_count = _run_v2_timed_step(
+        batch,
+        reporter,
+        label="derive acquisition batches",
+        message="Deriving acquisition batches from v2 staged rows.",
+        count_key="acquisition_batches",
+        func=lambda: _create_v2_acquisition_batches_from_staged_tables(pipeline_run, paths),
+    )
     batch_by_batch_id = {
         item.batch_id: item
         for item in AcquisitionBatch.objects.filter(pipeline_run=pipeline_run).only("id", "batch_id")
@@ -233,20 +322,52 @@ def _import_inspected_run_v2_postgresql(
         reporter=reporter,
         force=True,
     )
-    genome_count = _create_genomes_from_staged_rows(batch, pipeline_run, genome_stage_count, reporter=reporter)
-    sequence_count = _create_v2_sequences_from_staged_rows(
+    genome_count = _run_v2_timed_step(
         batch,
-        pipeline_run,
-        sequence_stage_count,
-        reporter=reporter,
+        reporter,
+        label="insert genomes",
+        message="Inserting v2 genome rows.",
+        count_key="genomes",
+        func=lambda: _create_genomes_from_staged_rows(batch, pipeline_run, genome_stage_count, reporter=reporter),
+        phase=ImportPhase.IMPORTING,
     )
-    protein_count = _create_v2_proteins_from_staged_rows(
+    sequence_count = _run_v2_timed_step(
         batch,
-        pipeline_run,
-        protein_stage_count,
-        reporter=reporter,
+        reporter,
+        label="insert matched sequences",
+        message="Inserting v2 matched sequence rows.",
+        count_key="sequences",
+        func=lambda: _create_v2_sequences_from_staged_rows(
+            batch,
+            pipeline_run,
+            sequence_stage_count,
+            reporter=reporter,
+        ),
+        phase=ImportPhase.IMPORTING,
     )
-    _update_genome_analyzed_protein_counts(pipeline_run)
+    protein_count = _run_v2_timed_step(
+        batch,
+        reporter,
+        label="insert matched proteins",
+        message="Inserting v2 matched protein rows.",
+        count_key="proteins",
+        func=lambda: _create_v2_proteins_from_staged_rows(
+            batch,
+            pipeline_run,
+            protein_stage_count,
+            reporter=reporter,
+        ),
+        phase=ImportPhase.IMPORTING,
+    )
+    _run_v2_timed_step(
+        batch,
+        reporter,
+        label="update genome analyzed protein counts",
+        message="Updating genome analyzed-protein counts.",
+        count_key="genomes",
+        func=lambda: _update_genome_analyzed_protein_counts(pipeline_run),
+        phase=ImportPhase.IMPORTING,
+    )
 
     run_parameter_count = _create_run_parameters_streamed(
         pipeline_run,
@@ -300,6 +421,72 @@ def _import_inspected_run_v2_postgresql(
         "repeat_call_codon_usages": repeat_call_codon_usage_count,
     }
     return pipeline_run, counts
+
+
+def _run_v2_timed_step(
+    batch: ImportBatch,
+    reporter: _ImportBatchStateReporter | None,
+    *,
+    label: str,
+    message: str,
+    count_key: str,
+    func: Callable[[], object],
+    phase: str = ImportPhase.STAGING,
+):
+    _set_batch_state(
+        batch,
+        phase=phase,
+        progress_payload={
+            "message": message,
+            "stage": label,
+        },
+        reporter=reporter,
+        force=True,
+    )
+    started_at = monotonic()
+    result = func()
+    elapsed_seconds = monotonic() - started_at
+    row_count = _v2_step_count(result)
+    logger.info(
+        "v2 PostgreSQL import step completed",
+        extra={
+            "stage": label,
+            "row_count": row_count,
+            "elapsed_seconds": round(elapsed_seconds, 3),
+            "import_batch_id": batch.pk,
+        },
+    )
+    progress_payload = {
+        "message": f"{message} Done.",
+        "stage": label,
+        count_key: row_count,
+        "elapsed_seconds": round(elapsed_seconds, 3),
+    }
+    if isinstance(result, tuple) and count_key == "retained_entities":
+        progress_payload["retained_sequences"] = int(result[0] or 0)
+        progress_payload["retained_proteins"] = int(result[1] or 0)
+    _set_batch_state(
+        batch,
+        phase=phase,
+        progress_payload=progress_payload,
+        reporter=reporter,
+        force=True,
+    )
+    return result
+
+
+def _v2_step_count(result: object) -> int:
+    if result is None:
+        return 0
+    if isinstance(result, int):
+        return result
+    if isinstance(result, tuple):
+        return sum(int(item or 0) for item in result if isinstance(item, int))
+    if isinstance(result, list):
+        return len(result)
+    if isinstance(result, dict):
+        return len(result)
+    return 0
 
 
 def _stage_repeat_call_rows(inspected: InspectedPublishedRun) -> int:
