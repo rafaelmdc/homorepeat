@@ -1,12 +1,14 @@
+from datetime import timedelta
 from io import StringIO
+from time import monotonic, sleep
 
 from django.core.management import CommandError, call_command
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 
 from apps.browser.catalog import sync_canonical_catalog_for_run
-from apps.browser.catalog.sync import _import_batch_row_count
+from apps.browser.catalog.sync import _catalog_sync_keepalive, _import_batch_row_count
 from apps.browser.models import (
     AcquisitionBatch,
     CanonicalGenome,
@@ -24,6 +26,52 @@ from apps.browser.models import (
 )
 from apps.imports.models import ImportBatch
 from web_tests.support import ensure_test_taxonomy
+
+
+class _ImmediateReporter:
+    def __init__(self, batch):
+        self.batch = batch
+
+    def save(self, update_fields, *, force=False):
+        self.batch.save(update_fields=update_fields)
+
+
+class CatalogSyncKeepaliveTests(TransactionTestCase):
+    def test_keepalive_refreshes_catalog_sync_heartbeat_from_background_connection(self):
+        stale_heartbeat = timezone.now() - timedelta(minutes=20)
+        batch = ImportBatch.objects.create(
+            source_path="/tmp/run-alpha/publish",
+            status=ImportBatch.Status.RUNNING,
+            phase="syncing_canonical_catalog",
+            heartbeat_at=stale_heartbeat,
+            progress_payload={"counts": {"genomes": 1}},
+        )
+        reporter = _ImmediateReporter(batch)
+
+        with _catalog_sync_keepalive(
+            batch,
+            reporter=reporter,
+            stage="canonical_codon_composition_length_summaries",
+            message="Rebuilding canonical codon-composition by length summaries.",
+            interval=0.01,
+        ):
+            initial_heartbeat = batch.heartbeat_at
+            deadline = monotonic() + 1.0
+            while monotonic() < deadline:
+                batch.refresh_from_db()
+                if batch.heartbeat_at > initial_heartbeat:
+                    break
+                sleep(0.01)
+            else:
+                self.fail("catalog sync keepalive did not refresh the import batch heartbeat")
+
+        batch.refresh_from_db()
+        self.assertEqual(batch.phase, "syncing_canonical_catalog")
+        self.assertEqual(
+            batch.progress_payload["stage"],
+            "canonical_codon_composition_length_summaries",
+        )
+        self.assertEqual(batch.progress_payload["counts"], {"genomes": 1})
 
 
 class CanonicalModelTests(TestCase):

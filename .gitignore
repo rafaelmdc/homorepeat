@@ -211,3 +211,4 @@ runs/*
 runtime/cache/
 .nextflow*
 .idea/material_theme_project_new.xml
+.codex

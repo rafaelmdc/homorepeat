@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from itertools import islice
+from threading import Event, Thread
 from typing import TYPE_CHECKING
 
-from django.db import connection, transaction
+from django.db import close_old_connections, connection, transaction
 from django.db.models import Count, Exists, OuterRef
 from django.utils import timezone
 
@@ -47,6 +49,33 @@ class _CanonicalGenomeRef:
 
 
 CANONICAL_SYNC_BATCH_SIZE = 1000
+CATALOG_SYNC_KEEPALIVE_INTERVAL_SECONDS = 30.0
+
+
+def _catalog_sync_progress_payload(
+    import_batch: ImportBatch,
+    *,
+    stage: str,
+    message: str,
+    processed: int | None = None,
+    total: int | None = None,
+    unit: str = "rows",
+) -> dict[str, object]:
+    prior_payload = import_batch.progress_payload if isinstance(import_batch.progress_payload, dict) else {}
+    progress_payload: dict[str, object] = {
+        "message": message,
+        "stage": stage,
+    }
+    counts = prior_payload.get("counts")
+    if isinstance(counts, dict):
+        progress_payload["counts"] = counts
+    if processed is not None:
+        progress_payload["processed"] = processed
+        progress_payload["current"] = processed
+    if total is not None:
+        progress_payload["total"] = total
+        progress_payload["unit"] = unit
+    return _normalize_progress_payload(progress_payload)
 
 
 def _report_catalog_sync_progress(
@@ -64,21 +93,14 @@ def _report_catalog_sync_progress(
         return
 
     prior_payload = import_batch.progress_payload if isinstance(import_batch.progress_payload, dict) else {}
-    progress_payload: dict[str, object] = {
-        "message": message,
-        "stage": stage,
-    }
-    counts = prior_payload.get("counts")
-    if isinstance(counts, dict):
-        progress_payload["counts"] = counts
-    if processed is not None:
-        progress_payload["processed"] = processed
-        progress_payload["current"] = processed
-    if total is not None:
-        progress_payload["total"] = total
-        progress_payload["unit"] = unit
-    progress_payload = _normalize_progress_payload(progress_payload)
-
+    progress_payload = _catalog_sync_progress_payload(
+        import_batch,
+        stage=stage,
+        message=message,
+        processed=processed,
+        total=total,
+        unit=unit,
+    )
     stage_changed = (
         prior_payload.get("stage") != stage
         or prior_payload.get("message") != message
@@ -90,6 +112,69 @@ def _report_catalog_sync_progress(
         ["phase", "heartbeat_at", "progress_payload"],
         force=force or stage_changed,
     )
+
+
+@contextmanager
+def _catalog_sync_keepalive(
+    import_batch: ImportBatch,
+    *,
+    reporter: _ImportBatchStateReporter | None = None,
+    stage: str,
+    message: str,
+    interval: float = CATALOG_SYNC_KEEPALIVE_INTERVAL_SECONDS,
+):
+    _report_catalog_sync_progress(
+        import_batch,
+        reporter=reporter,
+        stage=stage,
+        message=message,
+        force=True,
+    )
+    if reporter is None:
+        yield
+        return
+
+    stop_event = Event()
+
+    def beat() -> None:
+        close_old_connections()
+        try:
+            while not stop_event.wait(interval):
+                ImportBatch.objects.filter(
+                    pk=import_batch.pk,
+                    status=ImportBatch.Status.RUNNING,
+                ).update(
+                    phase="syncing_canonical_catalog",
+                    heartbeat_at=timezone.now(),
+                    progress_payload=_catalog_sync_progress_payload(
+                        import_batch,
+                        stage=stage,
+                        message=message,
+                    ),
+                )
+        except Exception:
+            return
+        finally:
+            close_old_connections()
+
+    thread = Thread(
+        target=beat,
+        name=f"catalog-sync-keepalive-{import_batch.pk}",
+        daemon=True,
+    )
+    thread.start()
+    try:
+        yield
+    finally:
+        stop_event.set()
+        thread.join(timeout=1.0)
+        _report_catalog_sync_progress(
+            import_batch,
+            reporter=reporter,
+            stage=stage,
+            message=message,
+            force=True,
+        )
 
 
 def _normalize_progress_payload(progress_payload: dict[str, object]) -> dict[str, object]:
@@ -222,30 +307,34 @@ def sync_canonical_catalog_for_run(
     # Transaction 2: rebuild precomputed summary tables (each wraps its own
     # transaction.atomic() internally). These are read-only against the
     # canonical tables, so they do not need to be atomic with transaction 1.
-    _report_catalog_sync_progress(
+    with _catalog_sync_keepalive(
         import_batch,
         reporter=reporter,
         stage="canonical_codon_composition_summaries",
         message="Rebuilding canonical codon-composition summaries.",
-        force=True,
-    )
-    rebuild_canonical_codon_composition_summaries()
-    _report_catalog_sync_progress(
+    ):
+        rebuild_canonical_codon_composition_summaries()
+    with _catalog_sync_keepalive(
         import_batch,
         reporter=reporter,
         stage="canonical_codon_composition_length_summaries",
         message="Rebuilding canonical codon-composition by length summaries.",
-        force=True,
-    )
-    rebuild_canonical_codon_composition_length_summaries()
+    ):
+        rebuild_canonical_codon_composition_length_summaries()
 
     # Transaction 3: update derived counts and stamp the run as synced.
     with transaction.atomic():
-        _refresh_canonical_protein_repeat_call_counts(
-            pipeline_run=pipeline_run,
-            import_batch=import_batch,
+        with _catalog_sync_keepalive(
+            import_batch,
             reporter=reporter,
-        )
+            stage="canonical_protein_repeat_call_counts",
+            message="Refreshing canonical protein repeat-call counts.",
+        ):
+            _refresh_canonical_protein_repeat_call_counts(
+                pipeline_run=pipeline_run,
+                import_batch=import_batch,
+                reporter=reporter,
+            )
         _record_pipeline_run_canonical_sync(
             pipeline_run,
             import_batch=import_batch,
@@ -315,29 +404,33 @@ def _sync_canonical_catalog_for_run_postgresql(
         cursor.execute("ANALYZE browser_canonicalrepeatcallcodonusage")
         cursor.execute("ANALYZE browser_taxonclosure")
 
-    _report_catalog_sync_progress(
+    with _catalog_sync_keepalive(
         import_batch,
         reporter=reporter,
         stage="canonical_codon_composition_summaries",
         message="Rebuilding canonical codon-composition summaries.",
-        force=True,
-    )
-    rebuild_canonical_codon_composition_summaries()
-    _report_catalog_sync_progress(
+    ):
+        rebuild_canonical_codon_composition_summaries()
+    with _catalog_sync_keepalive(
         import_batch,
         reporter=reporter,
         stage="canonical_codon_composition_length_summaries",
         message="Rebuilding canonical codon-composition by length summaries.",
-        force=True,
-    )
-    rebuild_canonical_codon_composition_length_summaries()
+    ):
+        rebuild_canonical_codon_composition_length_summaries()
 
     with transaction.atomic():
-        _refresh_canonical_protein_repeat_call_counts_postgresql(
-            pipeline_run=pipeline_run,
-            import_batch=import_batch,
+        with _catalog_sync_keepalive(
+            import_batch,
             reporter=reporter,
-        )
+            stage="canonical_protein_repeat_call_counts",
+            message="Refreshing canonical protein repeat-call counts.",
+        ):
+            _refresh_canonical_protein_repeat_call_counts_postgresql(
+                pipeline_run=pipeline_run,
+                import_batch=import_batch,
+                reporter=reporter,
+            )
         _record_pipeline_run_canonical_sync(
             pipeline_run,
             import_batch=import_batch,
