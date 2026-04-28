@@ -2,85 +2,67 @@
 
 ## Management Commands
 
-Migrate:
+All commands can be run directly or inside the Compose stack:
+
+```bash
+# Direct
+python3 manage.py <command>
+
+# Inside Compose
+docker compose exec web python manage.py <command>
+```
+
+**Migrate:**
 
 ```bash
 python3 manage.py migrate
 ```
 
-Import a published run:
+**Import a published run:**
 
 ```bash
 python3 manage.py import_run --publish-root /absolute/path/to/<run>/publish
 ```
 
-The supported published-run import surface is publish contract v2. The manifest
-at `metadata/run_manifest.json` must include `publish_contract_version: 2`.
-The required v2 public files are `calls/repeat_calls.tsv`,
-`calls/run_params.tsv`, the run-level TSVs under `tables/`, run summaries under
-`summaries/`, and the manifest under `metadata/`.
+The manifest at `metadata/run_manifest.json` must include `publish_contract_version: 2`. Required v2 files are `calls/repeat_calls.tsv`, `calls/run_params.tsv`, the TSVs under `tables/`, summaries under `summaries/`, and the manifest under `metadata/`.
 
-The v2 importer does not read the older public `acquisition/`, `status/`,
-`calls/finalized/`, `cds.fna`, or `proteins.faa` paths. Full sequence/protein
-bodies must be present in the matched TSV columns:
-`matched_sequences.tsv.nucleotide_sequence` and
-`matched_proteins.tsv.amino_acid_sequence`.
-
-Process the oldest queued import:
+**Process the oldest queued import:**
 
 ```bash
 python3 manage.py import_run --next-pending
 ```
 
-Rebuild canonical browser metadata:
+**Rebuild canonical catalog metadata:**
 
 ```bash
 python3 manage.py backfill_canonical_catalog
 python3 manage.py backfill_browser_metadata
 ```
 
-Rebuild codon rollups:
+**Rebuild codon rollups:**
 
 ```bash
 python3 manage.py backfill_codon_composition_summaries
 python3 manage.py backfill_codon_composition_length_summaries
 ```
 
-In Compose, prefix commands with:
-
-```bash
-docker compose exec web
-```
-
 ## Import and Rollup Maintenance
 
-The canonical catalog sync path rebuilds:
+The canonical catalog sync rebuilds codon composition summaries, codon composition by length summaries, and canonical protein repeat-call counts.
 
-- canonical codon composition summaries
-- canonical codon composition by length summaries
-- canonical protein repeat-call counts
+If codon share values in an unfiltered view do not match a filtered/branch view, rebuild the relevant rollup table and compare against live aggregation. Unfiltered views are the most likely to use rollups.
 
-If codon share values in an unfiltered view do not match a filtered/branch view,
-first rebuild the relevant rollup table and then compare against live
-aggregation. Unfiltered views are the ones most likely to use rollups.
-
-For codon-by-length summaries, shares for a complete selected residue codon set
-should sum to 1 within each taxon/bin, aside from rounding. If they do not,
-check for:
+For codon-by-length summaries, shares for a complete residue codon set should sum to 1 within each taxon/bin (within rounding). If they do not, check for:
 
 - stale rollup rows
 - denominator bugs that count codon-usage rows instead of distinct repeat calls
 - incomplete or invalid imported codon fractions
 
-## Cache Behavior
+## Cache Behaviour
 
-Stats bundles and taxonomy gutter payloads are cached using a hash of validated
-filter state. Cache TTL comes from `HOMOREPEAT_BROWSER_STATS_CACHE_TTL`, default
-60 seconds.
+Stats bundles and taxonomy gutter payloads are cached using a hash of the validated filter state. TTL is controlled by `HOMOREPEAT_BROWSER_STATS_CACHE_TTL` (default: 60 seconds).
 
-Taxonomy gutter payloads also include a local cache version in
-`apps/browser/stats/taxonomy_gutter.py`. Bump it when changing payload shape or
-alignment semantics.
+Taxonomy gutter payloads also carry a local version constant in `apps/browser/stats/taxonomy_gutter.py`. Bump it when changing payload shape or alignment semantics.
 
 ## Validation Checklist
 
@@ -115,40 +97,15 @@ Manual browser checks should cover:
 
 ## Database Notes
 
-PostgreSQL is the production-like path. Large publish contract v2 imports should
-use PostgreSQL because run-level TSVs are streamed into temporary tables with
-`COPY` and joined in SQL. SQLite remains useful for compact local fixtures and
-parser checks, but it does not exercise the production staging path or
-PostgreSQL-specific SQL rollup paths.
+PostgreSQL is the production-like path. Large v2 imports stream run-level TSVs into temporary tables with `COPY` and join in SQL. SQLite is a lightweight fallback for compact fixtures and parser checks; it does not exercise the PostgreSQL staging path or SQL rollup rebuilds.
 
-When changing raw SQL rollups, validate both:
+When changing raw SQL rollups, validate both the PostgreSQL rebuild command in the Compose stack and the Django tests using the Python/live fallback.
 
-- PostgreSQL rebuild command in the Compose stack
-- Django tests using the Python/live fallback semantics
-
-For a real v2 import validation, run:
+For a real v2 import validation:
 
 ```bash
 docker compose exec web python manage.py import_run \
   --publish-root /workspace/homorepeat_pipeline/runs/<run-id>/publish
 ```
 
-Then compare source table row counts against imported raw counts for repeat
-calls, matched sequences, matched proteins, repeat-call codon usage, repeat
-context, and operational tables. Also confirm canonical sequence/protein bodies
-are populated after sync and codon rollups rebuild successfully.
-
-## Documentation Rules
-
-Keep evergreen documentation in:
-
-- `docs/usage.md`
-- `docs/architecture.md`
-- `docs/statistics.md`
-- `docs/operations.md`
-
-Keep dated handoff notes in `docs/journal/`.
-
-Do not add new long-lived implementation-plan folders unless they describe a
-current architectural contract. Temporary plans should be converted into a
-session log or deleted after implementation.
+Then compare source table row counts against imported raw counts for repeat calls, matched sequences, matched proteins, repeat-call codon usage, repeat context, and operational tables. Confirm canonical sequence/protein bodies are populated after sync and codon rollups rebuild successfully.

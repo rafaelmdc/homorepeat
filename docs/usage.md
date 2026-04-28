@@ -1,44 +1,39 @@
 # Usage
 
-HomoRepeat is a Django application for importing published HomoRepeat pipeline
-runs and browsing the current canonical repeat-call catalog.
-
 ## Local Setup
 
-From the repository root:
+Copy the example environment file and start the stack:
 
 ```bash
 cp .env.example .env
-python3 manage.py migrate
-python3 manage.py test web_tests
-python3 manage.py runserver 0.0.0.0:8000
+docker compose up --build
 ```
 
-With no database environment variables, Django uses `db.sqlite3`. The local
-Docker Compose stack uses PostgreSQL:
+The `migrate` service runs automatically before `web` starts. The app is available at **http://localhost:8000**.
+
+On subsequent starts:
 
 ```bash
-docker compose up web worker postgres
+docker compose up
 ```
-
-For Compose auto-discovery, set `HOMOREPEAT_RUNS_ROOT` in `.env` to the
-host-side directory containing run folders. Compose mounts that directory at
-`/workspace/homorepeat_pipeline/runs` inside the web and worker containers, which
-is the path Django uses.
 
 The Compose stack exposes:
 
 - web app: `http://localhost:8000`
 - PostgreSQL: local port `5432`
-- worker: queued import processor
+- Celery workers: import, graph pre-warming, and download generation queues
+
+To run management commands inside the stack:
+
+```bash
+docker compose exec web python manage.py <command>
+```
 
 ## Importing Pipeline Runs
 
-The app imports published pipeline output. Normal browser requests read from the
-database; they do not read pipeline files at request time.
+The app imports published pipeline output. Browser requests read from the database; they do not access pipeline files at request time.
 
-The supported import contract is publish contract version 2. A v2 `publish/`
-directory contains run-level public files:
+The supported import format is publish contract v2. A v2 `publish/` directory has this layout:
 
 ```text
 publish/
@@ -64,61 +59,45 @@ publish/
 ```
 
 `metadata/run_manifest.json` must include `publish_contract_version: 2`.
-The importer does not require the older public `acquisition/`, `status/`,
-`calls/finalized/`, `cds.fna`, or `proteins.faa` artifacts for v2 imports.
-Matched sequence/protein bodies are read from
-`tables/matched_sequences.tsv.nucleotide_sequence` and
-`tables/matched_proteins.tsv.amino_acid_sequence`.
 
-Large v2 imports require PostgreSQL. SQLite remains a lightweight development
-fallback for compact fixtures and local smoke checks; it does not exercise the
-production `COPY` staging path.
-
-Manual import:
+**Manual import:**
 
 ```bash
-python3 manage.py import_run --publish-root /absolute/path/to/<run>/publish
+docker compose exec web python manage.py import_run \
+  --publish-root /workspace/homorepeat_pipeline/runs/<run-id>/publish
 ```
 
-Inside Compose:
+**Import queue UI:**
+
+Set `HOMOREPEAT_RUNS_ROOT` in `.env` to the host directory containing run folders. Compose mounts it read-only at `/workspace/homorepeat_pipeline/runs`. Then use **http://localhost:8000/imports/** to queue runs for the worker to process.
+
+**Process the oldest queued import manually:**
 
 ```bash
-docker compose exec web python manage.py import_run --publish-root /workspace/homorepeat_pipeline/runs/<run-id>/publish
 docker compose exec web python manage.py import_run --next-pending
 ```
 
-Set `HOMOREPEAT_RUNS_ROOT` to the directory containing run folders if the import
-UI should auto-detect published runs. In Docker Compose, use the host-side path
-in `.env`; inside the container, import paths use
-`/workspace/homorepeat_pipeline/runs`.
+## Routes
 
-## Main Routes
+| URL | Description |
+|-----|-------------|
+| `/` | Site home |
+| `/healthz/` | JSON healthcheck |
+| `/browser/` | Browser directory |
+| `/browser/homorepeats/` | Primary homorepeat observation table |
+| `/browser/codon-usage/` | Repeat codon-usage profile table |
+| `/browser/lengths/` | Repeat-length distributions |
+| `/browser/codon-ratios/` | Residue-scoped codon composition |
+| `/browser/codon-composition-length/` | Codon composition across length bins |
+| `/browser/runs/` | Imported runs and provenance |
+| `/browser/accessions/`, `/browser/genomes/`, `/browser/sequences/`, `/browser/proteins/`, `/browser/calls/` | Supporting canonical catalog browsers |
+| `/browser/warnings/`, `/browser/accession-status/`, `/browser/accession-call-counts/`, `/browser/download-manifest/` | Operational provenance browsers |
+| `/imports/` | Staff-facing import queue |
+| `/imports/history/` | Import batch history and progress |
 
-- `/`: site home.
-- `/healthz/`: JSON healthcheck.
-- `/imports/`: staff-facing import queue.
-- `/imports/history/`: import batch progress and history.
-- `/browser/`: browser directory.
-- `/browser/homorepeats/`: primary biology-first homorepeat observation table.
-- `/browser/codon-usage/`: primary biology-first repeat codon-usage profile
-  table.
-- `/browser/runs/`: imported runs and provenance.
-- `/browser/accessions/`, `/browser/genomes/`, `/browser/sequences/`,
-  `/browser/proteins/`, `/browser/calls/`, `/browser/codon-usage-rows/`:
-  supporting canonical catalog and technical repeat/codon browsers.
-- `/browser/lengths/`: repeat length statistics.
-- `/browser/codon-ratios/`: residue-scoped codon composition.
-- `/browser/codon-composition-length/`: residue-scoped codon composition across
-  repeat-length bins.
-- `/browser/warnings/`, `/browser/accession-status/`,
-  `/browser/accession-call-counts/`, `/browser/download-manifest/`: operational
-  provenance browsers.
+Filtered table downloads use `?download=tsv`. The homorepeat table also supports `?download=aa_fasta` and `?download=dna_fasta`.
 
-Filtered table downloads use `download=tsv`. Homorepeats also supports
-`download=aa_fasta` for repeat amino-acid FASTA and `download=dna_fasta` for
-repeat codon DNA FASTA.
-
-## Common Checks
+## Running Tests
 
 Run all browser tests:
 
@@ -126,7 +105,7 @@ Run all browser tests:
 python3 manage.py test web_tests
 ```
 
-Run focused stats/browser checks:
+Run focused test modules:
 
 ```bash
 python3 manage.py test web_tests.test_browser_stats
@@ -135,7 +114,7 @@ python3 manage.py test web_tests.test_browser_codon_ratios
 python3 manage.py test web_tests.test_browser_codon_composition_lengths
 ```
 
-Check JavaScript syntax for chart files:
+Check JavaScript syntax:
 
 ```bash
 node --check static/js/stats-chart-shell.js
