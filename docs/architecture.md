@@ -1,6 +1,6 @@
 # Architecture
 
-HomoRepeat is a Django application split into three apps:
+PAARTA is a Django application split into three apps:
 
 - `apps/core` — home page, site shell, and healthcheck
 - `apps/browser` — read-only canonical biology browser and statistical views

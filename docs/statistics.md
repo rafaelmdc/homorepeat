@@ -1,6 +1,6 @@
 # Statistics and Scientific Semantics
 
-This document defines the statistics shown by the HomoRepeat browser and the
+This document defines the statistics shown by the PAARTA browser and the
 biological assumptions behind them.
 
 ## Filter State

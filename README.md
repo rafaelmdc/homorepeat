@@ -1,6 +1,6 @@
-# HomoRepeat Browser
+# PAARTA
 
-HomoRepeat is a web application for browsing and analysing homorepeats — runs of consecutive identical or near-identical amino acids — found in proteins across organisms spanning the tree of life. It provides searchable tables, statistical charts, and bulk downloads of repeat observations linked to taxonomy, gene, and codon-usage data.
+**PAARTA** (Poly-Amino Acid Repeat Tract Atlas) is a web application for browsing and analysing homorepeats — runs of consecutive identical or near-identical amino acids — found in proteins across organisms spanning the tree of life. It provides searchable tables, statistical charts, and bulk downloads of repeat observations linked to taxonomy, gene, and codon-usage data.
 
 ## Requirements
 
@@ -26,7 +26,7 @@ docker compose up
 
 ## Loading Data
 
-The app is empty on first start. Populate it by importing a published HomoRepeat pipeline run.
+The app is empty on first start. Populate it by importing a published PAARTA pipeline run.
 
 **Option 1 — command line:**
 
