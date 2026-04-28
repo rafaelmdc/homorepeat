@@ -1,0 +1,24 @@
+{% for homorepeat in homorepeats %}
+  <tr data-virtual-row="1">
+    <td>
+      <a href="{% url 'browser:taxon-detail' homorepeat.taxon_id %}?run={{ homorepeat.latest_pipeline_run.run_id|urlencode }}">
+        {{ homorepeat.taxon.taxon_name }}
+      </a>
+    </td>
+    <td><a href="{% url 'browser:genome-detail' homorepeat.latest_repeat_call.genome_id %}">{{ homorepeat.accession }}</a></td>
+    <td>
+      <a href="{% url 'browser:protein-detail' homorepeat.latest_repeat_call.protein_id %}">{{ homorepeat.protein_name }}</a>
+      {% if homorepeat.gene_symbol %}
+        <span class="text-secondary d-block">{{ homorepeat.gene_symbol }}</span>
+      {% endif %}
+    </td>
+    <td>{{ homorepeat.repeat_residue }}</td>
+    <td>{{ homorepeat.length }}</td>
+    <td><code>{{ homorepeat.repeat_pattern }}</code></td>
+    <td title="{{ homorepeat.purity }}">{{ homorepeat.purity|stringformat:"s"|slice:":4" }}</td>
+    <td>{{ homorepeat.protein_position }}</td>
+    <td>
+      <a href="{% url 'browser:repeatcall-detail' homorepeat.latest_repeat_call.pk %}">{{ homorepeat.method }}</a>
+    </td>
+  </tr>
+{% endfor %}

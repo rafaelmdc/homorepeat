@@ -18,7 +18,7 @@ from apps.browser.models import (
     RunParameter,
     Sequence,
 )
-from apps.browser.views import ProteinListView, RepeatCallListView, SequenceListView
+from apps.browser.views import HomorepeatListView, ProteinListView, RepeatCallListView, SequenceListView
 from apps.imports.models import ImportBatch
 
 from .support import build_test_repeat_call_values, create_imported_run_fixture
@@ -2181,6 +2181,163 @@ class BrowserViewTests(TestCase):
 
     def test_repeatcall_list_renders_tsv_download_link_with_filters(self):
         url = reverse("browser:repeatcall-list")
+        response = self.client.get(
+            url,
+            {
+                "run": "run-alpha",
+                "protein": self.alpha["protein"].protein_id,
+                "method": RepeatCall.Method.PURE,
+                "residue": "Q",
+                "order_by": "length",
+                "page": "1",
+                "fragment": "virtual-scroll",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            (
+                f'href="{url}?run=run-alpha&amp;protein={self.alpha["protein"].protein_id}'
+                '&amp;method=pure&amp;residue=Q&amp;order_by=length&amp;download=tsv"'
+            ),
+        )
+        self.assertNotContains(response, "page=1&amp;download=tsv")
+        self.assertNotContains(response, "fragment=virtual-scroll&amp;download=tsv")
+
+    def test_homorepeat_list_renders_biology_first_table(self):
+        response = self.client.get(reverse("browser:homorepeat-list"), {"run": "run-alpha"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Homorepeats")
+        self.assertContains(response, "Organism")
+        self.assertContains(response, "Genome / Assembly")
+        self.assertContains(response, "Protein / Gene")
+        self.assertContains(response, "Repeat class")
+        self.assertContains(response, "Pattern")
+        self.assertContains(response, "Position")
+        self.assertContains(response, "Homo sapiens")
+        self.assertContains(response, "GCF_ALPHA")
+        self.assertContains(response, "GENE1")
+        self.assertContains(response, "11Q")
+        self.assertContains(response, "10-20 (5%)")
+        self.assertNotContains(response, "<span>Latest run</span>", html=True)
+        self.assertNotContains(response, "<span>Call</span>", html=True)
+
+    def test_homorepeat_list_combined_filters_work(self):
+        matched = self._create_repeat_call(
+            self.alpha,
+            suffix="homorepeat_filter_match",
+            gene_symbol="HOMOFLT",
+            method=RepeatCall.Method.THRESHOLD,
+            residue="A",
+            length=9,
+            purity=0.78,
+        )
+        self._create_repeat_call(
+            self.alpha,
+            suffix="homorepeat_filter_low_purity",
+            gene_symbol="HOMOFLT",
+            method=RepeatCall.Method.THRESHOLD,
+            residue="A",
+            length=9,
+            purity=0.40,
+        )
+        self._create_repeat_call(
+            self.beta,
+            suffix="homorepeat_filter_beta",
+            gene_symbol="HOMOFLT",
+            method=RepeatCall.Method.THRESHOLD,
+            residue="A",
+            length=9,
+            purity=0.78,
+            taxon=self.beta["taxon"],
+        )
+
+        response = self.client.get(
+            reverse("browser:homorepeat-list"),
+            {
+                "run": "run-alpha",
+                "branch": str(self.mammalia.pk),
+                "method": RepeatCall.Method.THRESHOLD,
+                "residue": "A",
+                "gene_symbol": "HOMOFLT",
+                "length_min": "8",
+                "length_max": "10",
+                "purity_min": "0.70",
+                "purity_max": "0.80",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, matched["repeat_call"].protein_name)
+        self.assertContains(response, "7A2Q")
+        self.assertNotContains(response, "call_homorepeat_filter_low_purity")
+        self.assertNotContains(response, "call_homorepeat_filter_beta")
+
+    def test_homorepeat_list_loads_pattern_fields_without_codon_sequence(self):
+        response = self.client.get(reverse("browser:homorepeat-list"), {"run": "run-alpha"})
+
+        self.assertEqual(response.status_code, 200)
+        homorepeat = response.context["page_obj"].object_list[0]
+        self.assertNotIn("aa_sequence", homorepeat.get_deferred_fields())
+        self.assertNotIn("repeat_count", homorepeat.get_deferred_fields())
+        self.assertNotIn("non_repeat_count", homorepeat.get_deferred_fields())
+        self.assertIn("codon_sequence", homorepeat.get_deferred_fields())
+        self.assertEqual(homorepeat.repeat_pattern, "11Q")
+
+    def test_homorepeat_list_uses_cursor_pagination_for_default_ordering(self):
+        self.assertEqual(
+            HomorepeatListView.default_ordering,
+            ("accession", "protein_name", "start", "id"),
+        )
+
+        response = self.client.get(reverse("browser:homorepeat-list"), {"run": "run-alpha"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["page_obj"].cursor_pagination)
+
+    def test_homorepeat_list_virtual_scroll_fragment_returns_rows(self):
+        response = self.client.get(
+            reverse("browser:homorepeat-list"),
+            {"run": "run-alpha", "fragment": "virtual-scroll"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("rows_html", payload)
+        self.assertIn("11Q", payload["rows_html"])
+        self.assertEqual(payload["row_count"], 1)
+        self.assertNotIn("count", payload)
+        self.assertEqual(payload["next_query"], "")
+
+    def test_homorepeat_list_tsv_export_includes_full_sequences(self):
+        response = self.client.get(
+            reverse("browser:homorepeat-list"),
+            {
+                "run": "run-alpha",
+                "download": "tsv",
+                "page": "2",
+                "fragment": "virtual-scroll",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Disposition"], 'attachment; filename="homorepeat_homorepeats.tsv"')
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn(
+            "Organism\tGenome / Assembly\tProtein\tGene\tRepeat class\tLength\tPattern\tPurity\tPosition\tMethod",
+            body,
+        )
+        self.assertIn("Source call\tStart\tEnd\tRepeat count\tNon-repeat count\tRepeat sequence\tCodon sequence", body)
+        self.assertIn("call_alpha", body)
+        self.assertIn("QQQQQQQQQQQ", body)
+        self.assertIn("CAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAG", body)
+
+    def test_homorepeat_list_renders_tsv_download_link_with_filters(self):
+        url = reverse("browser:homorepeat-list")
         response = self.client.get(
             url,
             {

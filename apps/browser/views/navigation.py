@@ -41,6 +41,12 @@ def _browser_directory_sections():
             "description": "Start with the current canonical biology and use run pages only when you need provenance.",
             "items": [
                 _nav_item(
+                    "Homorepeats",
+                    "Biology-first current homorepeat observations with organism, protein, repeat architecture, position, purity, and method.",
+                    url_name="browser:homorepeat-list",
+                    count=CanonicalRepeatCall.objects.count(),
+                ),
+                _nav_item(
                     "Accessions",
                     "Canonical accession records with current counts and supporting import history.",
                     url_name="browser:accession-list",

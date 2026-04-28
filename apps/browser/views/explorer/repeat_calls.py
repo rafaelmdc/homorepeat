@@ -8,6 +8,7 @@ from apps.browser.explorer.canonical import (
     build_canonical_repeat_call_detail_context,
     scoped_canonical_repeat_calls,
 )
+from apps.browser.presentation import format_protein_position, format_repeat_pattern
 
 from ...exports import BrowserTSVExportMixin, TSVColumn
 from ...models import CanonicalRepeatCall, PipelineRun, RepeatCall
@@ -31,6 +32,50 @@ def resolve_browser_facets(*, pipeline_run=None, pipeline_runs=None):
     )
 
 
+REPEAT_CALL_LIST_FIELDS = (
+    "id",
+    "latest_pipeline_run_id",
+    "latest_pipeline_run__id",
+    "latest_pipeline_run__run_id",
+    "latest_repeat_call_id",
+    "latest_repeat_call__id",
+    "latest_repeat_call__call_id",
+    "latest_repeat_call__protein_id",
+    "latest_repeat_call__genome_id",
+    "latest_repeat_call__sequence_id",
+    "taxon_id",
+    "taxon__id",
+    "taxon__taxon_id",
+    "taxon__taxon_name",
+    "source_call_id",
+    "method",
+    "accession",
+    "gene_symbol",
+    "protein_name",
+    "protein_length",
+    "start",
+    "end",
+    "length",
+    "repeat_residue",
+    "purity",
+)
+
+BIOLOGICAL_REPEAT_LIST_FIELDS = REPEAT_CALL_LIST_FIELDS + (
+    "aa_sequence",
+    "repeat_count",
+    "non_repeat_count",
+)
+
+BIOLOGICAL_REPEAT_TSV_FIELDS = BIOLOGICAL_REPEAT_LIST_FIELDS + (
+    "codon_sequence",
+)
+
+
+def repeat_call_source_id(repeat_call):
+    latest_repeat_call = getattr(repeat_call, "latest_repeat_call", None)
+    return repeat_call.source_call_id or getattr(latest_repeat_call, "call_id", "")
+
+
 class RepeatCallListView(BrowserTSVExportMixin, VirtualScrollListView):
     model = CanonicalRepeatCall
     template_name = "browser/repeatcall_list.html"
@@ -39,10 +84,7 @@ class RepeatCallListView(BrowserTSVExportMixin, VirtualScrollListView):
     virtual_scroll_colspan = 10
     tsv_filename_slug = "repeat_calls"
     tsv_columns = (
-        TSVColumn(
-            "Call",
-            lambda repeat_call: repeat_call.source_call_id or getattr(repeat_call.latest_repeat_call, "call_id", None),
-        ),
+        TSVColumn("Call", repeat_call_source_id),
         TSVColumn("Accession", "accession"),
         TSVColumn("Protein", "protein_name"),
         TSVColumn("Gene", "gene_symbol"),
@@ -156,6 +198,83 @@ class RepeatCallListView(BrowserTSVExportMixin, VirtualScrollListView):
         context["selected_protein"] = _resolve_protein_filter(current_run, context["current_protein"])
         context["method_choices"] = facet_choices["methods"]
         context["residue_choices"] = facet_choices["residues"]
+        return context
+
+
+class HomorepeatListView(RepeatCallListView):
+    template_name = "browser/homorepeat_list.html"
+    context_object_name = "homorepeats"
+    virtual_scroll_row_template_name = "browser/includes/homorepeat_list_rows.html"
+    virtual_scroll_colspan = 9
+    tsv_filename_slug = "homorepeats"
+    download_tsv_label = "Download Homorepeats TSV"
+    tsv_columns = (
+        TSVColumn("Organism", "taxon.taxon_name"),
+        TSVColumn("Genome / Assembly", "accession"),
+        TSVColumn("Protein", "protein_name"),
+        TSVColumn("Gene", "gene_symbol"),
+        TSVColumn("Repeat class", "repeat_residue"),
+        TSVColumn("Length", "length"),
+        TSVColumn("Pattern", lambda repeat_call: format_repeat_pattern(repeat_call.aa_sequence)),
+        TSVColumn("Purity", "purity"),
+        TSVColumn(
+            "Position",
+            lambda repeat_call: format_protein_position(
+                repeat_call.start,
+                repeat_call.end,
+                repeat_call.protein_length,
+            ),
+        ),
+        TSVColumn("Method", "method"),
+        TSVColumn("Source call", repeat_call_source_id),
+        TSVColumn("Start", "start"),
+        TSVColumn("End", "end"),
+        TSVColumn("Repeat count", "repeat_count"),
+        TSVColumn("Non-repeat count", "non_repeat_count"),
+        TSVColumn("Repeat sequence", "aa_sequence"),
+        TSVColumn("Codon sequence", "codon_sequence"),
+        TSVColumn("Latest run", "latest_pipeline_run.run_id"),
+    )
+    ordering_map = {
+        "organism": ("taxon__taxon_name", "accession", "protein_name", "start", "id"),
+        "-organism": ("-taxon__taxon_name", "accession", "protein_name", "start", "id"),
+        "genome": ("accession", "protein_name", "start", "id"),
+        "-genome": ("-accession", "protein_name", "start", "id"),
+        "protein_name": ("protein_name", "accession", "start", "id"),
+        "-protein_name": ("-protein_name", "accession", "start", "id"),
+        "gene_symbol": ("gene_symbol", "accession", "protein_name", "start", "id"),
+        "-gene_symbol": ("-gene_symbol", "accession", "protein_name", "start", "id"),
+        "residue": ("repeat_residue", "accession", "protein_name", "start", "id"),
+        "-residue": ("-repeat_residue", "accession", "protein_name", "start", "id"),
+        "length": ("length", "accession", "protein_name", "start", "id"),
+        "-length": ("-length", "accession", "protein_name", "start", "id"),
+        "purity": ("purity", "accession", "protein_name", "start", "id"),
+        "-purity": ("-purity", "accession", "protein_name", "start", "id"),
+        "position": ("start", "end", "accession", "protein_name", "id"),
+        "-position": ("-start", "-end", "accession", "protein_name", "id"),
+        "method": ("method", "accession", "protein_name", "start", "id"),
+        "-method": ("-method", "accession", "protein_name", "start", "id"),
+    }
+    default_ordering = ("accession", "protein_name", "start", "id")
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        return queryset.only(*BIOLOGICAL_REPEAT_LIST_FIELDS)
+
+    def prepare_tsv_queryset(self, queryset):
+        return queryset.only(*BIOLOGICAL_REPEAT_TSV_FIELDS)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        homorepeats = context.get("homorepeats")
+        if homorepeats is not None:
+            for homorepeat in homorepeats:
+                homorepeat.repeat_pattern = format_repeat_pattern(homorepeat.aa_sequence)
+                homorepeat.protein_position = format_protein_position(
+                    homorepeat.start,
+                    homorepeat.end,
+                    homorepeat.protein_length,
+                )
         return context
 
 
