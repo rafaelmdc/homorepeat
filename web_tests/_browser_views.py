@@ -2399,8 +2399,8 @@ class BrowserViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Filtered TSV")
-        self.assertContains(response, "Repeat AA FASTA")
-        self.assertContains(response, "Codon DNA FASTA")
+        self.assertContains(response, "AA FASTA")
+        self.assertContains(response, "DNA FASTA")
         self.assertContains(
             response,
             (
@@ -2461,10 +2461,21 @@ class BrowserViewTests(TestCase):
         self.assertEqual(response["Content-Type"], "text/x-fasta; charset=utf-8")
         self.assertEqual(response["Content-Disposition"], 'attachment; filename="homorepeat_homorepeats.faa"')
         body = b"".join(response.streaming_content).decode("utf-8")
-        self.assertIn("source_call:call_homorepeat_fasta_match", body)
+        header = body.splitlines()[0]
+        self.assertRegex(header, r"^>homorepeat=\d+ ")
+        self.assertNotIn("|GCF_ALPHA|", header)
+        self.assertNotIn("|NP_homorepeat_fasta_match|", header)
+        self.assertIn("assembly=GCF_ALPHA", header)
+        self.assertIn("protein=NP_homorepeat_fasta_match", header)
+        self.assertIn("method=pure", header)
+        self.assertIn("repeat_class=Q", header)
+        self.assertIn("protein_position=10-94", header)
+        self.assertNotIn("source_call", body)
+        self.assertNotIn("canonical_repeat_call", body)
         self.assertIn("seq_type=aa_repeat", body)
-        self.assertIn("gene=LONG%20GENE", body)
+        self.assertIn('gene="LONG GENE"', body)
         self.assertIn("repeat_pattern=85Q", body)
+        self.assertIn("protein_percent=17", body)
         self.assertIn("Q" * 80 + "\n" + "Q" * 5 + "\n", body)
         self.assertNotIn("SPLITGENE", body)
         self.assertNotIn("page=2", response["Content-Disposition"])
@@ -2484,7 +2495,28 @@ class BrowserViewTests(TestCase):
         self.assertEqual(response["Content-Disposition"], 'attachment; filename="homorepeat_homorepeats.fna"')
         body = b"".join(response.streaming_content).decode("utf-8")
         self.assertIn("seq_type=dna_codon", body)
+        self.assertIn('organism="Homo sapiens"', body)
+        self.assertIn("protein_position=10-20", body)
+        self.assertIn("protein_percent=5", body)
+        self.assertNotIn("%20", body)
+        self.assertNotIn("%28", body)
         self.assertIn("CAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAG", body)
+
+    def test_homorepeat_fasta_querysets_only_load_needed_sequence_fields_and_stream_by_pk(self):
+        view = HomorepeatListView()
+        view.request = self.client.get(
+            reverse("browser:homorepeat-list"),
+            {"run": "run-alpha", "order_by": "-length"},
+        ).wsgi_request
+        aa_row = view.get_fasta_queryset("aa_fasta").first()
+        dna_row = view.get_fasta_queryset("dna_fasta").first()
+
+        self.assertIn("codon_sequence", aa_row.get_deferred_fields())
+        self.assertNotIn("aa_sequence", aa_row.get_deferred_fields())
+        self.assertIn("aa_sequence", dna_row.get_deferred_fields())
+        self.assertNotIn("codon_sequence", dna_row.get_deferred_fields())
+        self.assertEqual(tuple(view.get_fasta_queryset("aa_fasta").query.order_by), ("pk",))
+        self.assertEqual(tuple(view.get_fasta_queryset("dna_fasta").query.order_by), ("pk",))
 
     def test_homorepeat_list_dna_fasta_skips_blank_codon_sequences(self):
         blank = self._create_repeat_call(

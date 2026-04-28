@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from typing import Callable
-from urllib.parse import quote
 
 from django.core.exceptions import ImproperlyConfigured
 from django.http import Http404
@@ -10,7 +9,6 @@ from django.utils.http import content_disposition_header
 
 TSV_CONTENT_TYPE = "text/tab-separated-values; charset=utf-8"
 FASTA_CONTENT_TYPE = "text/x-fasta; charset=utf-8"
-FASTA_METADATA_SAFE_CHARS = "-_.:"
 FASTA_SEQUENCE_LINE_WIDTH = 80
 
 
@@ -77,7 +75,23 @@ def _format_tsv_row(values) -> str:
 
 
 def clean_fasta_metadata_value(value) -> str:
-    return quote(str(value), safe=FASTA_METADATA_SAFE_CHARS)
+    text = str(value).replace("\t", " ").replace("\r", " ").replace("\n", " ")
+    if not text:
+        return text
+    if any(char.isspace() for char in text) or '"' in text or "\\" in text:
+        text = text.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{text}"'
+    return text
+
+
+def clean_fasta_record_id_part(value) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return "unknown"
+    return "".join(
+        char if char.isalnum() or char in "-_.:" else "_"
+        for char in text
+    )
 
 
 def _format_fasta_header(record_id, metadata) -> str:

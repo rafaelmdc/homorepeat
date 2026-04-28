@@ -21,7 +21,7 @@ from ...exports import (
     FASTAMetadataField,
     FASTARecordBuilder,
     TSVColumn,
-    clean_fasta_metadata_value,
+    clean_fasta_record_id_part,
     stream_fasta_response,
 )
 from ...models import CanonicalRepeatCall, CanonicalRepeatCallCodonUsage, PipelineRun, RepeatCall
@@ -83,6 +83,14 @@ BIOLOGICAL_REPEAT_TSV_FIELDS = BIOLOGICAL_REPEAT_LIST_FIELDS + (
     "codon_sequence",
 )
 
+HOMOREPEAT_AA_FASTA_FIELDS = BIOLOGICAL_REPEAT_LIST_FIELDS
+
+HOMOREPEAT_DNA_FASTA_FIELDS = REPEAT_CALL_LIST_FIELDS + (
+    "codon_sequence",
+    "repeat_count",
+    "non_repeat_count",
+)
+
 
 def repeat_call_source_id(repeat_call):
     latest_repeat_call = getattr(repeat_call, "latest_repeat_call", None)
@@ -90,8 +98,20 @@ def repeat_call_source_id(repeat_call):
 
 
 def homorepeat_fasta_record_id(repeat_call):
-    source_call = clean_fasta_metadata_value(repeat_call_source_id(repeat_call) or repeat_call.pk)
-    return f"homorepeat|canonical_repeat_call:{repeat_call.pk}|source_call:{source_call}"
+    return f"homorepeat={clean_fasta_record_id_part(repeat_call.pk)}"
+
+
+def homorepeat_protein_span(repeat_call):
+    if repeat_call.start is None or repeat_call.end is None:
+        return ""
+    return f"{repeat_call.start}-{repeat_call.end}"
+
+
+def homorepeat_protein_percent(repeat_call):
+    if repeat_call.start is None or repeat_call.end is None or not repeat_call.protein_length:
+        return ""
+    midpoint = (repeat_call.start + repeat_call.end) / 2
+    return round((midpoint / repeat_call.protein_length) * 100)
 
 
 HOMOREPEAT_FASTA_METADATA_FIELDS = (
@@ -102,15 +122,8 @@ HOMOREPEAT_FASTA_METADATA_FIELDS = (
     FASTAMetadataField("protein", "protein_name"),
     FASTAMetadataField("repeat_class", "repeat_residue"),
     FASTAMetadataField("repeat_length", "length"),
-    FASTAMetadataField("repeat_pattern", lambda repeat_call: format_repeat_pattern(repeat_call.aa_sequence)),
-    FASTAMetadataField(
-        "protein_position",
-        lambda repeat_call: format_protein_position(
-            repeat_call.start,
-            repeat_call.end,
-            repeat_call.protein_length,
-        ),
-    ),
+    FASTAMetadataField("protein_position", homorepeat_protein_span),
+    FASTAMetadataField("protein_percent", homorepeat_protein_percent),
     FASTAMetadataField("purity", "purity"),
     FASTAMetadataField("start", "start"),
     FASTAMetadataField("end", "end"),
@@ -120,6 +133,11 @@ HOMOREPEAT_FASTA_METADATA_FIELDS = (
     FASTAMetadataField("latest_run", "latest_pipeline_run.run_id"),
 )
 
+HOMOREPEAT_AA_FASTA_METADATA_FIELDS = HOMOREPEAT_FASTA_METADATA_FIELDS[:7] + (
+    FASTAMetadataField("repeat_pattern", lambda repeat_call: format_repeat_pattern(repeat_call.aa_sequence)),
+    *HOMOREPEAT_FASTA_METADATA_FIELDS[7:],
+)
+
 
 def homorepeat_fasta_builder(*, seq_type: str, sequence: str):
     return FASTARecordBuilder(
@@ -127,7 +145,7 @@ def homorepeat_fasta_builder(*, seq_type: str, sequence: str):
         sequence=sequence,
         metadata_fields=(
             FASTAMetadataField("seq_type", lambda repeat_call: seq_type),
-            *HOMOREPEAT_FASTA_METADATA_FIELDS,
+            *(HOMOREPEAT_AA_FASTA_METADATA_FIELDS if sequence == "aa_sequence" else HOMOREPEAT_FASTA_METADATA_FIELDS),
         ),
     )
 
@@ -332,12 +350,12 @@ class HomorepeatListView(RepeatCallListView):
     fasta_chunk_size = 2000
     fasta_downloads = {
         "aa_fasta": {
-            "label": "Repeat AA FASTA",
+            "label": "AA FASTA",
             "filename": "homorepeat_homorepeats.faa",
             "builder": homorepeat_fasta_builder(seq_type="aa_repeat", sequence="aa_sequence"),
         },
         "dna_fasta": {
-            "label": "Codon DNA FASTA",
+            "label": "DNA FASTA",
             "filename": "homorepeat_homorepeats.fna",
             "builder": homorepeat_fasta_builder(seq_type="dna_codon", sequence="codon_sequence"),
         },
@@ -405,7 +423,12 @@ class HomorepeatListView(RepeatCallListView):
         return queryset.only(*BIOLOGICAL_REPEAT_TSV_FIELDS)
 
     def prepare_fasta_queryset(self, queryset, download_value):
-        return queryset.only(*BIOLOGICAL_REPEAT_TSV_FIELDS)
+        field_names = (
+            HOMOREPEAT_DNA_FASTA_FIELDS
+            if download_value == "dna_fasta"
+            else HOMOREPEAT_AA_FASTA_FIELDS
+        )
+        return queryset.order_by("pk").only(*field_names)
 
     def get_fasta_queryset(self, download_value):
         return self.prepare_fasta_queryset(self.get_queryset(), download_value)
