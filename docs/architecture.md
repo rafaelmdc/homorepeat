@@ -23,7 +23,9 @@ The primary scientific browser surfaces are built from the canonical repeat-call
 
 ## Import Flow
 
-1. `apps/imports/services/published_run/` validates the published pipeline artifacts. Supported format: publish contract v2 (`publish_contract_version: 2` in `metadata/run_manifest.json`).
+PAARTA ingests PAASTA (Poly-Amino Acid Sequence Tract Analyzer) — PAASTA runs the pipeline; PAARTA imports what it publishes.
+
+1. `apps/imports/services/published_run/` validates the published PAASTA artifacts. Supported format: publish contract v2 (`publish_contract_version: 2` in `metadata/run_manifest.json`).
 2. `apps/imports/services/import_run/` writes raw per-run tables. The PostgreSQL path streams TSVs into temporary tables via `COPY`, then inserts raw rows with SQL joins.
 3. `apps/browser/catalog/sync.py` rebuilds the canonical catalog from the raw import.
 4. Codon composition rollups are rebuilt from canonical codon-usage rows.

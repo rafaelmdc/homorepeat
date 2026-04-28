@@ -26,7 +26,7 @@ docker compose up
 
 ## Loading Data
 
-The app is empty on first start. Populate it by importing a published PAARTA pipeline run.
+The app is empty on first start. Populate it by importing a published PAASTA run. PAARTA ingests PAASTA — the pipeline downloads assemblies, calls repeats, and writes the published output that PAARTA imports.
 
 **Option 1 — command line:**
 

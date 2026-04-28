@@ -29,9 +29,9 @@ To run management commands inside the stack:
 docker compose exec web python manage.py <command>
 ```
 
-## Importing Pipeline Runs
+## Importing PAASTA Runs
 
-The app imports published pipeline output. Browser requests read from the database; they do not access pipeline files at request time.
+PAARTA ingests PAASTA (Poly-Amino Acid Sequence Tract Analyzer) — [PAASTA](../homorepeat_pipeline) runs the pipeline; PAARTA imports what it publishes. Browser requests read from the database; they do not access pipeline files at request time.
 
 The supported import format is publish contract v2. A v2 `publish/` directory has this layout:
 
