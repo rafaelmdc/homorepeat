@@ -35,6 +35,7 @@ def _nav_item(title: str, description: str, *, url_name: str, count: int | None 
 
 
 def _browser_directory_sections():
+    homorepeat_count = CanonicalRepeatCall.objects.count()
     return [
         {
             "title": "Primary scientific tables",
@@ -44,12 +45,13 @@ def _browser_directory_sections():
                     "Homorepeats",
                     "Biology-first current homorepeat observations with organism, protein, repeat architecture, position, purity, and method.",
                     url_name="browser:homorepeat-list",
-                    count=CanonicalRepeatCall.objects.count(),
+                    count=homorepeat_count,
                 ),
                 _nav_item(
                     "Codon Usage",
                     "Row-level repeat codon profiles with coverage, codon counts, profile percentages, and dominant codon.",
                     url_name="browser:codon-usage-list",
+                    count=homorepeat_count,
                 ),
             ],
         },

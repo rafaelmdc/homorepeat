@@ -196,6 +196,8 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, reverse("browser:downloadmanifest-list"))
         self.assertContains(response, "run-alpha")
         self.assertContains(response, "run-beta")
+        primary_items = response.context["directory_sections"][0]["items"]
+        self.assertEqual(primary_items[1]["count"], primary_items[0]["count"])
 
     def test_browser_home_recent_runs_use_browser_metadata_counts(self):
         self.alpha["pipeline_run"].browser_metadata = {
