@@ -1,0 +1,28 @@
+{% for codon_usage_profile in codon_usage_profiles %}
+  <tr data-virtual-row="1">
+    <td>
+      <a href="{% url 'browser:taxon-detail' codon_usage_profile.taxon_id %}?run={{ codon_usage_profile.latest_pipeline_run.run_id|urlencode }}">
+        {{ codon_usage_profile.taxon.taxon_name }}
+      </a>
+    </td>
+    <td><a href="{% url 'browser:genome-detail' codon_usage_profile.latest_repeat_call.genome_id %}">{{ codon_usage_profile.accession }}</a></td>
+    <td>
+      <a href="{% url 'browser:protein-detail' codon_usage_profile.latest_repeat_call.protein_id %}">{{ codon_usage_profile.protein_name }}</a>
+      {% if codon_usage_profile.gene_symbol %}
+        <span class="text-secondary d-block">{{ codon_usage_profile.gene_symbol }}</span>
+      {% endif %}
+    </td>
+    <td>{{ codon_usage_profile.repeat_residue }}</td>
+    <td>{{ codon_usage_profile.length }}</td>
+    <td><code>{{ codon_usage_profile.repeat_pattern }}</code></td>
+    <td>{{ codon_usage_profile.codon_coverage }}</td>
+    <td>
+      <a href="{% url 'browser:repeatcall-detail' codon_usage_profile.latest_repeat_call.pk %}" title="Open repeat details">
+        {{ codon_usage_profile.codon_profile }}
+      </a>
+    </td>
+    <td>{{ codon_usage_profile.codon_counts }}</td>
+    <td>{{ codon_usage_profile.dominant_codon }}</td>
+    <td>{{ codon_usage_profile.method }}</td>
+  </tr>
+{% endfor %}

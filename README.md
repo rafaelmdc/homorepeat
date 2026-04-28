@@ -70,9 +70,12 @@ With the Compose stack running, you can:
 Current endpoints:
 - `/`: site home
 - `/healthz/`: JSON healthcheck
-- `/browser/`: browser directory page for canonical biology and provenance
+- `/browser/`: browser directory page for primary scientific tables, supporting
+  catalog views, statistics, and provenance
+- `/browser/homorepeats/`: biology-first homorepeat observation table
+- `/browser/codon-usage/`: repeat-level codon usage profile table
 - `/browser/runs/`: imported runs and run-level provenance/history
-- `/browser/accessions/`, `/browser/genomes/`, `/browser/sequences/`, `/browser/proteins/`, `/browser/calls/`: main canonical biological browse surfaces
+- `/browser/accessions/`, `/browser/genomes/`, `/browser/sequences/`, `/browser/proteins/`, `/browser/calls/`: supporting canonical catalog and technical repeat-call browse surfaces
 - `/browser/warnings/`, `/browser/accession-status/`, `/browser/accession-call-counts/`, `/browser/download-manifest/`: operational provenance browsers
 - `/imports/`: staff-only import queue
 - `/imports/history/`: import batch history, phase, and progress

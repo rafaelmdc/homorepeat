@@ -8,6 +8,20 @@ from django.utils.http import content_disposition_header
 
 
 TSV_CONTENT_TYPE = "text/tab-separated-values; charset=utf-8"
+FASTA_CONTENT_TYPE = "text/x-fasta; charset=utf-8"
+FASTA_SEQUENCE_LINE_WIDTH = 80
+
+
+def _resolve_attr_or_callable(value: str | Callable, obj):
+    if callable(value):
+        return value(obj)
+
+    resolved = obj
+    for attr in value.split("."):
+        resolved = getattr(resolved, attr, None)
+        if resolved is None:
+            return None
+    return resolved
 
 
 @dataclass(frozen=True)
@@ -16,15 +30,33 @@ class TSVColumn:
     value: str | Callable
 
     def get_value(self, obj):
-        if callable(self.value):
-            return self.value(obj)
+        return _resolve_attr_or_callable(self.value, obj)
 
-        value = obj
-        for attr in self.value.split("."):
-            value = getattr(value, attr, None)
-            if value is None:
-                return None
-        return value
+
+@dataclass(frozen=True)
+class FASTAMetadataField:
+    key: str
+    value: str | Callable
+
+    def get_value(self, obj):
+        return _resolve_attr_or_callable(self.value, obj)
+
+
+@dataclass(frozen=True)
+class FASTARecordBuilder:
+    record_id: str | Callable
+    sequence: str | Callable
+    metadata_fields: tuple[FASTAMetadataField, ...] = ()
+
+    def build_record(self, obj):
+        return (
+            _resolve_attr_or_callable(self.record_id, obj),
+            {
+                field.key: field.get_value(obj)
+                for field in self.metadata_fields
+            },
+            _resolve_attr_or_callable(self.sequence, obj),
+        )
 
 
 def clean_tsv_value(value) -> str:
@@ -42,6 +74,41 @@ def _format_tsv_row(values) -> str:
     return "\t".join(clean_tsv_value(value) for value in values) + "\n"
 
 
+def clean_fasta_metadata_value(value) -> str:
+    text = str(value).replace("\t", " ").replace("\r", " ").replace("\n", " ")
+    if not text:
+        return text
+    if any(char.isspace() for char in text) or '"' in text or "\\" in text:
+        text = text.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{text}"'
+    return text
+
+
+def clean_fasta_record_id_part(value) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return "unknown"
+    return "".join(
+        char if char.isalnum() or char in "-_.:" else "_"
+        for char in text
+    )
+
+
+def _format_fasta_header(record_id, metadata) -> str:
+    header_parts = [str(record_id)]
+    header_parts.extend(
+        f"{key}={clean_fasta_metadata_value(value)}"
+        for key, value in metadata.items()
+        if value not in ("", None)
+    )
+    return ">" + " ".join(header_parts) + "\n"
+
+
+def _iter_wrapped_sequence(sequence: str, *, width: int = FASTA_SEQUENCE_LINE_WIDTH):
+    for index in range(0, len(sequence), width):
+        yield sequence[index : index + width] + "\n"
+
+
 def iter_tsv_rows(headers, rows):
     headers = tuple(headers)
     expected_width = len(headers)
@@ -57,10 +124,33 @@ def iter_tsv_rows(headers, rows):
         yield _format_tsv_row(row)
 
 
+def iter_fasta_records(records, *, line_width: int = FASTA_SEQUENCE_LINE_WIDTH):
+    for record_id, metadata, sequence in records:
+        if record_id in ("", None) or sequence in ("", None):
+            continue
+        sequence = str(sequence).replace(" ", "").replace("\r", "").replace("\n", "")
+        if not sequence:
+            continue
+        yield _format_fasta_header(record_id, metadata or {})
+        yield from _iter_wrapped_sequence(sequence, width=line_width)
+
+
 def stream_tsv_response(filename: str, headers, rows) -> StreamingHttpResponse:
     response = StreamingHttpResponse(
         iter_tsv_rows(headers, rows),
         content_type=TSV_CONTENT_TYPE,
+    )
+    response["Content-Disposition"] = content_disposition_header(
+        as_attachment=True,
+        filename=filename,
+    )
+    return response
+
+
+def stream_fasta_response(filename: str, records) -> StreamingHttpResponse:
+    response = StreamingHttpResponse(
+        iter_fasta_records(records),
+        content_type=FASTA_CONTENT_TYPE,
     )
     response["Content-Disposition"] = content_disposition_header(
         as_attachment=True,
@@ -78,8 +168,11 @@ class BrowserTSVExportMixin:
     tsv_filename_slug = ""
     download_tsv_label = "Download TSV"
 
+    def get_download_value(self):
+        return self.request.GET.get(self.download_param, "").strip()
+
     def dispatch(self, request, *args, **kwargs):
-        if request.GET.get(self.download_param, "").strip() == self.download_value:
+        if self.get_download_value() == self.download_value:
             return self.render_tsv_response()
         return super().dispatch(request, *args, **kwargs)
 
@@ -90,19 +183,26 @@ class BrowserTSVExportMixin:
         slug = self.tsv_filename_slug or self.__class__.__name__.lower()
         return f"homorepeat_{slug}.tsv"
 
-    def get_tsv_download_url(self):
+    def get_download_url(self, download_value: str):
         query = self.request.GET.copy()
         for param in self.download_strip_params:
             query.pop(param, None)
-        query[self.download_param] = self.download_value
+        query[self.download_param] = download_value
         encoded_query = query.urlencode()
         return f"{self.request.path}?{encoded_query}" if encoded_query else self.request.path
 
-    def get_tsv_download_action(self):
+    def get_download_action(self, download_value: str, label: str):
         return {
-            "href": self.get_tsv_download_url(),
-            "label": self.download_tsv_label,
+            "href": self.get_download_url(download_value),
+            "label": label,
+            "value": download_value,
         }
+
+    def get_tsv_download_url(self):
+        return self.get_download_url(self.download_value)
+
+    def get_tsv_download_action(self):
+        return self.get_download_action(self.download_value, self.download_tsv_label)
 
     def get_tsv_queryset(self):
         return self.prepare_tsv_queryset(self.get_queryset())

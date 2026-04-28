@@ -99,9 +99,13 @@ in `.env`; inside the container, import paths use
 - `/imports/`: staff-facing import queue.
 - `/imports/history/`: import batch progress and history.
 - `/browser/`: browser directory.
+- `/browser/homorepeats/`: primary biology-first homorepeat observation table.
+- `/browser/codon-usage/`: primary biology-first repeat codon-usage profile
+  table.
 - `/browser/runs/`: imported runs and provenance.
 - `/browser/accessions/`, `/browser/genomes/`, `/browser/sequences/`,
-  `/browser/proteins/`, `/browser/calls/`: canonical biology browsers.
+  `/browser/proteins/`, `/browser/calls/`, `/browser/codon-usage-rows/`:
+  supporting canonical catalog and technical repeat/codon browsers.
 - `/browser/lengths/`: repeat length statistics.
 - `/browser/codon-ratios/`: residue-scoped codon composition.
 - `/browser/codon-composition-length/`: residue-scoped codon composition across
@@ -109,6 +113,10 @@ in `.env`; inside the container, import paths use
 - `/browser/warnings/`, `/browser/accession-status/`,
   `/browser/accession-call-counts/`, `/browser/download-manifest/`: operational
   provenance browsers.
+
+Filtered table downloads use `download=tsv`. Homorepeats also supports
+`download=aa_fasta` for repeat amino-acid FASTA and `download=dna_fasta` for
+repeat codon DNA FASTA.
 
 ## Common Checks
 

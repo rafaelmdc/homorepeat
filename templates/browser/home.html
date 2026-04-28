@@ -8,18 +8,18 @@
   <div class="landing-band-shell">
     <div class="landing-copy">
       <span class="section-kicker mb-3">Browser</span>
-      <h1 class="landing-title mb-3">Canonical entity browser with imported runs kept available as provenance.</h1>
+      <h1 class="landing-title mb-3">Biology-first homorepeat and codon usage browsing.</h1>
       <p class="landing-lead mb-0">
-        Start from the current accession, genome, sequence, protein, and
-        repeat-call catalog. Imported runs and operational tables remain
-        available when you need audit history, import scope, or troubleshooting
-        context.
+        Start from compact Homorepeats and Codon Usage tables. Canonical entity,
+        run, and operational views remain available when you need supporting
+        catalog records, audit history, or troubleshooting context.
       </p>
     </div>
     <aside class="landing-aside">
       <p class="sheet-label">Start here</p>
-      <p class="mb-3">Begin with current accessions, then drill into genomes, sequences, proteins, and repeat calls.</p>
-      <a class="btn btn-brand w-100" href="{% url 'browser:accession-list' %}">Open accession browser</a>
+      <p class="mb-3">Begin with current homorepeat observations, then open codon usage profiles when codon preference is the question.</p>
+      <a class="btn btn-brand w-100 mb-2" href="{% url 'browser:homorepeat-list' %}">Open Homorepeats</a>
+      <a class="btn btn-outline-dark w-100" href="{% url 'browser:codon-usage-list' %}">Open Codon Usage</a>
     </aside>
   </div>
 </section>

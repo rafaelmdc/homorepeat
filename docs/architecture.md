@@ -28,6 +28,20 @@ The canonical layer is the current-serving catalog. Canonical records keep
 `latest_pipeline_run`, `latest_import_batch`, and `last_seen_at` so current
 biology can be traced back to the import that last touched it.
 
+The primary row-level scientific browser surfaces are built from the canonical
+repeat-call catalog:
+
+- **Homorepeats**: compact repeat observations with organism, assembly,
+  protein/gene, repeat class, repeat architecture pattern, length, purity,
+  position, and method.
+- **Codon Usage**: one row-level profile per repeat call's target residue,
+  using canonical codon-usage rows to show coverage, count-derived codon
+  percentages, codon counts, and dominant codon.
+
+The older accession, genome, sequence, protein, and repeat-call list pages
+remain supporting catalog/provenance views rather than the main scientific
+entry point.
+
 Taxonomy:
 
 - `Taxon`: NCBI-style taxonomy node.
@@ -78,6 +92,11 @@ List browsers are built on reusable class-based views:
 - `VirtualScrollListView`
 
 They support search, sorting, cursor pagination, and AJAX row fragments.
+
+`HomorepeatListView` and `CodonUsageListView` reuse the canonical repeat-call
+filtering, virtual-scroll pagination, and TSV export infrastructure. Their
+default table columns are biology-first; fuller sequences and provenance fields
+are exposed through row details and downloads.
 
 Statistical views are `TemplateView` subclasses under `apps/browser/views/stats/`.
 They parse URL filters into `StatsFilterState`, build summary bundles through

@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Codon Usage{% endblock %}
+{% block body_class %}codon-usage-list-page{% endblock %}
+
+{% block content %}
+<section class="landing-band mb-4">
+  <div class="landing-band-shell">
+    <div class="landing-copy">
+      <span class="section-kicker mb-3">Codon Usage</span>
+      <h1 class="landing-title mb-3">Repeat-level codon profiles for the current catalog.</h1>
+      <p class="landing-lead mb-0">
+        Compare which codons encode each amino-acid repeat and whether one codon dominates, without expanding raw codon-usage rows.
+      </p>
+    </div>
+    <aside class="landing-aside">
+      <p class="sheet-label">Current scope</p>
+      <p class="mb-2">
+        {% if current_run %}
+          Current codon profiles last imported by run <strong>{{ current_run.run_id }}</strong>{% if branch_scope_active %}, {{ branch_scope_noun }} <strong>{{ branch_scope_label }}</strong>{% endif %}.
+        {% elif branch_scope_active %}
+          {{ branch_scope_noun|title }} <strong>{{ branch_scope_label }}</strong> across current codon profiles.
+        {% else %}
+          Browsing current repeat codon profiles.
+        {% endif %}
+      </p>
+      {% if selected_protein %}
+        <p class="mb-0">Protein scope: <strong>{{ selected_protein.protein_name }}</strong>.</p>
+      {% endif %}
+    </aside>
+  </div>
+</section>
+
+<section class="filter-card mb-4">
+  <form class="row g-3 align-items-end" method="get">
+    {% if current_genome %}
+      <input type="hidden" name="genome" value="{{ current_genome }}">
+    {% endif %}
+    {% if current_sequence %}
+      <input type="hidden" name="sequence" value="{{ current_sequence }}">
+    {% endif %}
+    {% if current_protein %}
+      <input type="hidden" name="protein" value="{{ current_protein }}">
+    {% endif %}
+    {% if current_order_by %}
+      <input type="hidden" name="order_by" value="{{ current_order_by }}">
+    {% endif %}
+    <div class="col-lg-3">
+      <label class="form-label" for="id_q">Search</label>
+      <input class="form-control" id="id_q" type="text" name="q" value="{{ current_query }}" placeholder="Protein, gene, or assembly prefix">
+    </div>
+    <div class="col-md-4 col-lg-2">
+      <label class="form-label" for="id_run">Latest run</label>
+      <select class="form-select" id="id_run" name="run">
+        <option value="">All runs</option>
+        {% for pipeline_run in run_choices %}
+          <option value="{{ pipeline_run.run_id }}" {% if current_run_id == pipeline_run.run_id %}selected{% endif %}>{{ pipeline_run.run_id }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4 col-lg-2">
+      <label class="form-label" for="id_branch_q">Branch search</label>
+      <input class="form-control" id="id_branch_q" type="text" name="branch_q" value="{{ current_branch_input }}" placeholder="Taxonomy ID or name prefix">
+    </div>
+    <div class="col-md-4 col-lg-2">
+      <label class="form-label" for="id_method">Method</label>
+      <select class="form-select" id="id_method" name="method">
+        <option value="">All methods</option>
+        {% for method in method_choices %}
+          <option value="{{ method }}" {% if current_method == method %}selected{% endif %}>{{ method }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4 col-lg-2">
+      <label class="form-label" for="id_accession">Assembly</label>
+      <input class="form-control" id="id_accession" type="text" name="accession" value="{{ current_accession }}" placeholder="GCF_">
+    </div>
+    <div class="col-md-4 col-lg-1">
+      <label class="form-label" for="id_residue">Class</label>
+      <select class="form-select" id="id_residue" name="residue">
+        <option value="">All</option>
+        {% for residue in residue_choices %}
+          <option value="{{ residue }}" {% if current_residue == residue %}selected{% endif %}>{{ residue }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4 col-lg-2">
+      <label class="form-label" for="id_gene_symbol">Gene</label>
+      <input class="form-control" id="id_gene_symbol" type="text" name="gene_symbol" value="{{ current_gene_symbol }}" placeholder="GENE1">
+    </div>
+    <div class="col-md-3 col-lg-1">
+      <label class="form-label" for="id_length_min">Min length</label>
+      <input class="form-control" id="id_length_min" type="number" min="0" name="length_min" value="{{ current_length_min }}">
+    </div>
+    <div class="col-md-3 col-lg-1">
+      <label class="form-label" for="id_length_max">Max length</label>
+      <input class="form-control" id="id_length_max" type="number" min="0" name="length_max" value="{{ current_length_max }}">
+    </div>
+    <div class="col-md-3 col-lg-1">
+      <label class="form-label" for="id_purity_min">Min purity</label>
+      <input class="form-control" id="id_purity_min" type="number" min="0" max="1" step="0.01" name="purity_min" value="{{ current_purity_min }}">
+    </div>
+    <div class="col-md-3 col-lg-1">
+      <label class="form-label" for="id_purity_max">Max purity</label>
+      <input class="form-control" id="id_purity_max" type="number" min="0" max="1" step="0.01" name="purity_max" value="{{ current_purity_max }}">
+    </div>
+    <div class="col-12">
+      <div class="filter-actions">
+        <button class="btn btn-primary" type="submit">Apply</button>
+        <a class="btn btn-outline-secondary" href="{% url 'browser:codon-usage-list' %}">Reset</a>
+      </div>
+    </div>
+  </form>
+</section>
+
+<section class="surface-card surface-card-wide" {% if virtual_scroll_enabled %}data-virtual-scroll-surface{% endif %}>
+  <div class="section-header">
+    <div>
+      <p class="section-kicker mb-2">Current repeat codon profiles</p>
+      <h2>{{ page_obj.paginator.count }} codon profile{{ page_obj.paginator.count|pluralize }}</h2>
+    </div>
+    {% include "browser/includes/download_tsv_button.html" %}
+  </div>
+
+  <div
+    class="{% if virtual_scroll_enabled %}virtual-scroll-frame{% endif %}"
+    {% if virtual_scroll_enabled %}
+      data-virtual-scroll-root
+      data-virtual-scroll-url="{{ virtual_scroll_fragment_url }}"
+      data-virtual-scroll-next-query="{{ virtual_scroll_next_query }}"
+      data-virtual-scroll-previous-query="{{ virtual_scroll_previous_query }}"
+      data-virtual-scroll-total-rows="{{ virtual_scroll_total_rows }}"
+      data-virtual-scroll-colspan="{{ virtual_scroll_colspan }}"
+      data-virtual-scroll-window-pages="{{ virtual_scroll_window_pages }}"
+    {% endif %}
+  >
+  <div class="table-responsive">
+    <table class="table align-middle mb-0 data-table">
+      <thead>
+        <tr>
+          {% include "browser/includes/sortable_th.html" with label="Organism" header=sort_links.organism %}
+          {% include "browser/includes/sortable_th.html" with label="Genome / Assembly" header=sort_links.genome %}
+          {% include "browser/includes/sortable_th.html" with label="Protein / Gene" header=sort_links.protein_name %}
+          {% include "browser/includes/sortable_th.html" with label="Repeat class" header=sort_links.residue %}
+          {% include "browser/includes/sortable_th.html" with label="Length" header=sort_links.length %}
+          <th>Pattern</th>
+          <th>Codon coverage</th>
+          <th>Codon profile</th>
+          <th>Codon counts</th>
+          <th>Dominant codon</th>
+          {% include "browser/includes/sortable_th.html" with label="Method" header=sort_links.method %}
+        </tr>
+      </thead>
+      <tbody {% if virtual_scroll_enabled %}data-virtual-scroll-body{% endif %}>
+        {% if codon_usage_profiles %}
+          {% include "browser/includes/codon_usage_list_rows.html" %}
+        {% else %}
+          <tr>
+            <td colspan="11" class="empty-cell">No codon usage profiles matched these filters.</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+  </div>
+
+  {% include "browser/includes/pagination.html" %}
+</section>
+{% endblock %}

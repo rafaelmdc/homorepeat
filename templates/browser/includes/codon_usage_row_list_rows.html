@@ -1,0 +1,30 @@
+{% for codon_usage in codon_usage_rows %}
+  <tr data-virtual-row="1">
+    <td>
+      <a href="{% url 'browser:taxon-detail' codon_usage.repeat_call.taxon_id %}?run={{ codon_usage.repeat_call.latest_pipeline_run.run_id|urlencode }}">
+        {{ codon_usage.repeat_call.taxon.taxon_name }}
+      </a>
+    </td>
+    <td><a href="{% url 'browser:genome-detail' codon_usage.repeat_call.latest_repeat_call.genome_id %}">{{ codon_usage.repeat_call.accession }}</a></td>
+    <td>
+      {% if codon_usage.repeat_call.gene_symbol %}
+        <a href="{% url 'browser:protein-detail' codon_usage.repeat_call.latest_repeat_call.protein_id %}">{{ codon_usage.repeat_call.gene_symbol }}</a>
+        <a class="text-secondary d-block" href="{% url 'browser:protein-detail' codon_usage.repeat_call.latest_repeat_call.protein_id %}">{{ codon_usage.repeat_call.protein_name }}</a>
+      {% else %}
+        <a href="{% url 'browser:protein-detail' codon_usage.repeat_call.latest_repeat_call.protein_id %}">{{ codon_usage.repeat_call.protein_name }}</a>
+      {% endif %}
+    </td>
+    <td>{{ codon_usage.repeat_call.repeat_residue }}</td>
+    <td>{{ codon_usage.amino_acid }}</td>
+    <td><code>{{ codon_usage.codon }}</code></td>
+    <td>{{ codon_usage.codon_count }}</td>
+    <td>{{ codon_usage.codon_fraction }}</td>
+    <td>{{ codon_usage.repeat_call.method }}</td>
+    <td>
+      <a href="{% url 'browser:repeatcall-detail' codon_usage.repeat_call.latest_repeat_call.pk %}">
+        {% firstof codon_usage.repeat_call.source_call_id codon_usage.repeat_call.latest_repeat_call.call_id %}
+      </a>
+    </td>
+    <td><a href="{% url 'browser:run-detail' codon_usage.repeat_call.latest_pipeline_run_id %}">{{ codon_usage.repeat_call.latest_pipeline_run.run_id }}</a></td>
+  </tr>
+{% endfor %}

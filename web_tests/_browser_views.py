@@ -2,7 +2,7 @@ from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
 from django.test import TestCase
-from django.urls import reverse
+from django.urls import resolve, reverse
 from django.utils import timezone
 
 from apps.browser.catalog import sync_canonical_catalog_for_run
@@ -15,10 +15,18 @@ from apps.browser.models import (
     NormalizationWarning,
     Protein,
     RepeatCall,
+    RepeatCallCodonUsage,
     RunParameter,
     Sequence,
 )
-from apps.browser.views import ProteinListView, RepeatCallListView, SequenceListView
+from apps.browser.views import (
+    CodonUsageListView,
+    CodonUsageRowListView,
+    HomorepeatListView,
+    ProteinListView,
+    RepeatCallListView,
+    SequenceListView,
+)
 from apps.imports.models import ImportBatch
 
 from .support import build_test_repeat_call_values, create_imported_run_fixture
@@ -142,13 +150,41 @@ class BrowserViewTests(TestCase):
         )
         return {"sequence": sequence, "protein": protein, "repeat_call": repeat_call}
 
+    def _set_repeat_call_codon_usages(self, run_data, *, repeat_call=None, rows):
+        target_repeat_call = repeat_call or run_data["repeat_call"]
+        RepeatCallCodonUsage.objects.filter(repeat_call=target_repeat_call).delete()
+        RepeatCallCodonUsage.objects.bulk_create(
+            [
+                RepeatCallCodonUsage(
+                    repeat_call=target_repeat_call,
+                    amino_acid=row["amino_acid"],
+                    codon=row["codon"],
+                    codon_count=row["codon_count"],
+                    codon_fraction=row["codon_fraction"],
+                )
+                for row in rows
+            ]
+        )
+        sync_canonical_catalog_for_run(
+            target_repeat_call.pipeline_run,
+            import_batch=target_repeat_call.pipeline_run.canonical_sync_batch,
+            last_seen_at=timezone.now(),
+            replace_all_repeat_call_methods=True,
+        )
+        return target_repeat_call
+
     def test_browser_home_shows_counts_and_recent_runs(self):
         response = self.client.get(reverse("browser:home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Current catalog")
-        self.assertContains(response, "Open accession browser")
+        self.assertContains(response, "Primary scientific tables")
+        self.assertContains(response, "Open Homorepeats")
+        self.assertContains(response, reverse("browser:homorepeat-list"))
+        self.assertContains(response, "Open Codon Usage")
+        self.assertContains(response, reverse("browser:codon-usage-list"))
+        self.assertContains(response, "Supporting catalog")
         self.assertContains(response, reverse("browser:accession-list"))
+        self.assertContains(response, "Technical canonical repeat-call table")
         self.assertContains(response, "Repeat lengths")
         self.assertContains(response, reverse("browser:lengths"))
         self.assertContains(response, "Codon ratios")
@@ -157,10 +193,16 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, reverse("browser:codon-composition-length"))
         self.assertContains(response, "Run provenance")
         self.assertContains(response, "Operational provenance")
+        self.assertContains(response, "Codon usage rows")
+        self.assertContains(response, reverse("browser:codonusage-row-list"))
         self.assertContains(response, reverse("browser:accessionstatus-list"))
         self.assertContains(response, reverse("browser:downloadmanifest-list"))
         self.assertContains(response, "run-alpha")
         self.assertContains(response, "run-beta")
+        section_titles = [section["title"] for section in response.context["directory_sections"]]
+        self.assertLess(section_titles.index("Statistical explorers"), section_titles.index("Supporting catalog"))
+        primary_items = response.context["directory_sections"][0]["items"]
+        self.assertEqual(primary_items[1]["count"], primary_items[0]["count"])
 
     def test_browser_home_recent_runs_use_browser_metadata_counts(self):
         self.alpha["pipeline_run"].browser_metadata = {
@@ -2204,6 +2246,587 @@ class BrowserViewTests(TestCase):
         )
         self.assertNotContains(response, "page=1&amp;download=tsv")
         self.assertNotContains(response, "fragment=virtual-scroll&amp;download=tsv")
+
+    def test_homorepeat_list_renders_biology_first_table(self):
+        response = self.client.get(reverse("browser:homorepeat-list"), {"run": "run-alpha"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Homorepeats")
+        self.assertContains(response, "Organism")
+        self.assertContains(response, "Genome / Assembly")
+        self.assertContains(response, "Gene / Protein")
+        self.assertContains(response, "Repeat class")
+        self.assertContains(response, "Pattern")
+        self.assertContains(response, "Position")
+        self.assertContains(response, "Homo sapiens")
+        self.assertContains(response, "GCF_ALPHA")
+        self.assertContains(response, "GENE1")
+        self.assertContains(response, "11Q")
+        self.assertContains(response, "10-20 (5%)")
+        self.assertContains(
+            response,
+            f'href="{reverse("browser:repeatcall-detail", args=[self.alpha["repeat_call"].pk])}" title="Open repeat details"',
+        )
+        self.assertNotContains(response, "<span>Latest run</span>", html=True)
+        self.assertNotContains(response, "<span>Call</span>", html=True)
+
+    def test_homorepeat_list_combined_filters_work(self):
+        matched = self._create_repeat_call(
+            self.alpha,
+            suffix="homorepeat_filter_match",
+            gene_symbol="HOMOFLT",
+            method=RepeatCall.Method.THRESHOLD,
+            residue="A",
+            length=9,
+            purity=0.78,
+        )
+        self._create_repeat_call(
+            self.alpha,
+            suffix="homorepeat_filter_low_purity",
+            gene_symbol="HOMOFLT",
+            method=RepeatCall.Method.THRESHOLD,
+            residue="A",
+            length=9,
+            purity=0.40,
+        )
+        self._create_repeat_call(
+            self.beta,
+            suffix="homorepeat_filter_beta",
+            gene_symbol="HOMOFLT",
+            method=RepeatCall.Method.THRESHOLD,
+            residue="A",
+            length=9,
+            purity=0.78,
+            taxon=self.beta["taxon"],
+        )
+
+        response = self.client.get(
+            reverse("browser:homorepeat-list"),
+            {
+                "run": "run-alpha",
+                "branch": str(self.mammalia.pk),
+                "method": RepeatCall.Method.THRESHOLD,
+                "residue": "A",
+                "gene_symbol": "HOMOFLT",
+                "length_min": "8",
+                "length_max": "10",
+                "purity_min": "0.70",
+                "purity_max": "0.80",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, matched["repeat_call"].protein_name)
+        self.assertContains(response, "7A2Q")
+        self.assertNotContains(response, "call_homorepeat_filter_low_purity")
+        self.assertNotContains(response, "call_homorepeat_filter_beta")
+
+    def test_homorepeat_list_loads_pattern_fields_without_codon_sequence(self):
+        response = self.client.get(reverse("browser:homorepeat-list"), {"run": "run-alpha"})
+
+        self.assertEqual(response.status_code, 200)
+        homorepeat = response.context["page_obj"].object_list[0]
+        self.assertNotIn("aa_sequence", homorepeat.get_deferred_fields())
+        self.assertNotIn("repeat_count", homorepeat.get_deferred_fields())
+        self.assertNotIn("non_repeat_count", homorepeat.get_deferred_fields())
+        self.assertIn("codon_sequence", homorepeat.get_deferred_fields())
+        self.assertEqual(homorepeat.repeat_pattern, "11Q")
+
+    def test_homorepeat_list_uses_cursor_pagination_for_default_ordering(self):
+        self.assertEqual(
+            HomorepeatListView.default_ordering,
+            ("accession", "protein_name", "start", "id"),
+        )
+
+        response = self.client.get(reverse("browser:homorepeat-list"), {"run": "run-alpha"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["page_obj"].cursor_pagination)
+
+    def test_homorepeat_list_virtual_scroll_fragment_returns_rows(self):
+        response = self.client.get(
+            reverse("browser:homorepeat-list"),
+            {"run": "run-alpha", "fragment": "virtual-scroll"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("rows_html", payload)
+        self.assertIn("11Q", payload["rows_html"])
+        self.assertEqual(payload["row_count"], 1)
+        self.assertNotIn("count", payload)
+        self.assertEqual(payload["next_query"], "")
+
+    def test_homorepeat_list_tsv_export_includes_full_sequences(self):
+        response = self.client.get(
+            reverse("browser:homorepeat-list"),
+            {
+                "run": "run-alpha",
+                "download": "tsv",
+                "page": "2",
+                "fragment": "virtual-scroll",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Disposition"], 'attachment; filename="homorepeat_homorepeats.tsv"')
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn(
+            "Organism\tGenome / Assembly\tGene\tProtein\tRepeat class\tLength\tPattern\tPurity\tPosition\tMethod",
+            body,
+        )
+        self.assertIn("Source call\tStart\tEnd\tRepeat count\tNon-repeat count\tRepeat sequence\tCodon sequence", body)
+        self.assertIn("call_alpha", body)
+        self.assertIn("QQQQQQQQQQQ", body)
+        self.assertIn("CAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAG", body)
+
+    def test_homorepeat_list_renders_tsv_download_link_with_filters(self):
+        url = reverse("browser:homorepeat-list")
+        response = self.client.get(
+            url,
+            {
+                "run": "run-alpha",
+                "protein": self.alpha["protein"].protein_id,
+                "method": RepeatCall.Method.PURE,
+                "residue": "Q",
+                "order_by": "length",
+                "page": "1",
+                "fragment": "virtual-scroll",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Filtered TSV")
+        self.assertContains(response, "AA FASTA")
+        self.assertContains(response, "DNA FASTA")
+        self.assertContains(
+            response,
+            (
+                f'href="{url}?run=run-alpha&amp;protein={self.alpha["protein"].protein_id}'
+                '&amp;method=pure&amp;residue=Q&amp;order_by=length&amp;download=tsv"'
+            ),
+        )
+        self.assertContains(
+            response,
+            (
+                f'href="{url}?run=run-alpha&amp;protein={self.alpha["protein"].protein_id}'
+                '&amp;method=pure&amp;residue=Q&amp;order_by=length&amp;download=aa_fasta"'
+            ),
+        )
+        self.assertContains(
+            response,
+            (
+                f'href="{url}?run=run-alpha&amp;protein={self.alpha["protein"].protein_id}'
+                '&amp;method=pure&amp;residue=Q&amp;order_by=length&amp;download=dna_fasta"'
+            ),
+        )
+        self.assertNotContains(response, "page=1&amp;download=tsv")
+        self.assertNotContains(response, "fragment=virtual-scroll&amp;download=tsv")
+
+    def test_homorepeat_list_aa_fasta_export_streams_filtered_sequences(self):
+        matched = self._create_repeat_call(
+            self.alpha,
+            suffix="homorepeat_fasta_match",
+            gene_symbol="LONG GENE",
+            method=RepeatCall.Method.PURE,
+            residue="Q",
+            length=85,
+            purity=1.0,
+        )
+        matched["protein"].amino_acid_sequence = "M" * 300
+        matched["protein"].save(update_fields=["amino_acid_sequence"])
+        sync_canonical_catalog_for_run(
+            matched["repeat_call"].pipeline_run,
+            import_batch=matched["repeat_call"].pipeline_run.canonical_sync_batch,
+            last_seen_at=timezone.now(),
+            replace_all_repeat_call_methods=True,
+        )
+        self._create_repeat_call(
+            self.alpha,
+            suffix="homorepeat_fasta_split",
+            gene_symbol="SPLITGENE",
+            method=RepeatCall.Method.PURE,
+            residue="A",
+            length=9,
+            purity=1.0,
+        )
+
+        response = self.client.get(
+            reverse("browser:homorepeat-list"),
+            {
+                "run": "run-alpha",
+                "gene_symbol": "LONG GENE",
+                "download": "aa_fasta",
+                "page": "2",
+                "fragment": "virtual-scroll",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/x-fasta; charset=utf-8")
+        self.assertEqual(response["Content-Disposition"], 'attachment; filename="homorepeat_homorepeats.faa"')
+        body = b"".join(response.streaming_content).decode("utf-8")
+        header = body.splitlines()[0]
+        self.assertRegex(header, r"^>homorepeat=\d+ ")
+        self.assertNotIn("|GCF_ALPHA|", header)
+        self.assertNotIn("|NP_homorepeat_fasta_match|", header)
+        self.assertIn("assembly=GCF_ALPHA", header)
+        self.assertIn("protein=NP_homorepeat_fasta_match", header)
+        self.assertIn("method=pure", header)
+        self.assertIn("repeat_class=Q", header)
+        self.assertIn("start=10", header)
+        self.assertIn("end=94", header)
+        self.assertIn("length=85", header)
+        self.assertIn("position=10-94", header)
+        self.assertIn("position_percent=17", header)
+        self.assertIn("sequence_length=300", header)
+        self.assertNotIn("aa_start", header)
+        self.assertNotIn("aa_end", header)
+        self.assertNotIn("aa_length", header)
+        self.assertNotIn("dna_start", header)
+        self.assertNotIn("dna_end", header)
+        self.assertNotIn("dna_length", header)
+        self.assertNotIn("protein_position", header)
+        self.assertNotIn("source_call", body)
+        self.assertNotIn("canonical_repeat_call", body)
+        self.assertIn("seq_type=aa_protein", body)
+        self.assertIn('gene="LONG GENE"', body)
+        self.assertIn("repeat_pattern=85Q", body)
+        self.assertIn("M" * 80 + "\n" + "M" * 80 + "\n" + "M" * 80 + "\n" + "M" * 60 + "\n", body)
+        self.assertNotIn("Q" * 80 + "\n" + "Q" * 5 + "\n", body)
+        self.assertNotIn("SPLITGENE", body)
+        self.assertNotIn("page=2", response["Content-Disposition"])
+
+    def test_homorepeat_list_dna_fasta_export_streams_full_nucleotide_sequences(self):
+        response = self.client.get(
+            reverse("browser:homorepeat-list"),
+            {
+                "run": "run-alpha",
+                "gene_symbol": "GENE1",
+                "download": "dna_fasta",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/x-fasta; charset=utf-8")
+        self.assertEqual(response["Content-Disposition"], 'attachment; filename="homorepeat_homorepeats.fna"')
+        body = b"".join(response.streaming_content).decode("utf-8")
+        header = body.splitlines()[0]
+        self.assertIn("seq_type=dna_sequence", body)
+        self.assertIn('organism="Homo sapiens"', body)
+        self.assertIn("start=28", header)
+        self.assertIn("end=60", header)
+        self.assertIn("length=33", header)
+        self.assertIn("sequence_length=900", header)
+        self.assertNotIn("aa_start", header)
+        self.assertNotIn("aa_end", header)
+        self.assertNotIn("aa_length", header)
+        self.assertNotIn("dna_start", header)
+        self.assertNotIn("dna_end", header)
+        self.assertNotIn("dna_length", header)
+        self.assertNotIn("protein_position", header)
+        self.assertNotIn("repeat_length", header)
+        self.assertNotIn("%20", body)
+        self.assertNotIn("%28", body)
+        self.assertIn("CAG" * 26 + "CA\n", body)
+        self.assertIn("G" + "CAG" * 26 + "C\n", body)
+        self.assertNotEqual(body.count("CAG"), 11)
+
+    def test_homorepeat_fasta_querysets_only_load_needed_sequence_fields_and_stream_by_pk(self):
+        view = HomorepeatListView()
+        view.request = self.client.get(
+            reverse("browser:homorepeat-list"),
+            {"run": "run-alpha", "order_by": "-length"},
+        ).wsgi_request
+        aa_row = view.get_fasta_queryset("aa_fasta").first()
+        dna_row = view.get_fasta_queryset("dna_fasta").first()
+
+        self.assertIn("codon_sequence", aa_row.get_deferred_fields())
+        self.assertNotIn("aa_sequence", aa_row.get_deferred_fields())
+        self.assertNotIn("amino_acid_sequence", aa_row.protein.get_deferred_fields())
+        self.assertIn("aa_sequence", dna_row.get_deferred_fields())
+        self.assertIn("codon_sequence", dna_row.get_deferred_fields())
+        self.assertNotIn("nucleotide_sequence", dna_row.sequence.get_deferred_fields())
+        self.assertEqual(tuple(view.get_fasta_queryset("aa_fasta").query.order_by), ("pk",))
+        self.assertEqual(tuple(view.get_fasta_queryset("dna_fasta").query.order_by), ("pk",))
+
+    def test_homorepeat_list_dna_fasta_skips_blank_nucleotide_sequences(self):
+        blank = self._create_repeat_call(
+            self.alpha,
+            suffix="homorepeat_blank_dna",
+            gene_symbol="BLANKDNA",
+            method=RepeatCall.Method.PURE,
+            residue="Q",
+            length=9,
+            purity=1.0,
+        )
+        blank["sequence"].nucleotide_sequence = ""
+        blank["sequence"].save(update_fields=["nucleotide_sequence"])
+        sync_canonical_catalog_for_run(
+            blank["repeat_call"].pipeline_run,
+            import_batch=blank["repeat_call"].pipeline_run.canonical_sync_batch,
+            last_seen_at=timezone.now(),
+            replace_all_repeat_call_methods=True,
+        )
+
+        response = self.client.get(
+            reverse("browser:homorepeat-list"),
+            {
+                "run": "run-alpha",
+                "gene_symbol": "BLANKDNA",
+                "download": "dna_fasta",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertEqual(body, "")
+
+    def test_codon_usage_list_renders_row_level_profiles(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 8, "codon_fraction": 0.72},
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 3, "codon_fraction": 0.28},
+                {"amino_acid": "A", "codon": "GCT", "codon_count": 1, "codon_fraction": 1.0},
+            ],
+        )
+
+        response = self.client.get(reverse("browser:codon-usage-list"), {"run": "run-alpha"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Codon Usage")
+        self.assertContains(response, "Codon coverage")
+        self.assertContains(response, "Codon profile")
+        self.assertContains(response, "Codon counts")
+        self.assertContains(response, "Dominant codon")
+        self.assertContains(response, "Homo sapiens")
+        self.assertContains(response, "11Q")
+        self.assertContains(response, "11/11")
+        self.assertContains(response, "CAG 73%, CAA 27%")
+        self.assertContains(response, "CAG 8 / CAA 3")
+        self.assertContains(response, "CAG")
+        self.assertContains(
+            response,
+            f'href="{reverse("browser:repeatcall-detail", args=[self.alpha["repeat_call"].pk])}" title="Open repeat details"',
+        )
+        self.assertNotContains(response, "GCT")
+
+    def test_codon_usage_route_uses_stable_view_export(self):
+        match = resolve(reverse("browser:codon-usage-list"))
+
+        self.assertIs(match.func.view_class, CodonUsageListView)
+
+    def test_codon_usage_list_only_shows_calls_with_target_codon_usage(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 11, "codon_fraction": 1.0},
+            ],
+        )
+
+        response = self.client.get(reverse("browser:codon-usage-list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "GCF_ALPHA")
+        self.assertNotContains(response, "GCF_BETA")
+
+    def test_codon_usage_list_uses_cursor_pagination_for_default_ordering(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 11, "codon_fraction": 1.0},
+            ],
+        )
+
+        response = self.client.get(reverse("browser:codon-usage-list"), {"run": "run-alpha"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["page_obj"].cursor_pagination)
+        codon_usage_profile = response.context["page_obj"].object_list[0]
+        self.assertIn("codon_usages", getattr(codon_usage_profile, "_prefetched_objects_cache", {}))
+
+    def test_codon_usage_list_uses_count_derived_percentages(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 5, "codon_fraction": 0.1},
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 5, "codon_fraction": 0.9},
+            ],
+        )
+
+        response = self.client.get(reverse("browser:codon-usage-list"), {"run": "run-alpha"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "CAA 50%, CAG 50%")
+        self.assertContains(response, "CAA 5 / CAG 5")
+        self.assertContains(response, ">CAA</td>")
+
+    def test_codon_usage_list_tsv_export_includes_sequences_and_parseable_counts(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 8, "codon_fraction": 0.72},
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 3, "codon_fraction": 0.28},
+            ],
+        )
+
+        response = self.client.get(
+            reverse("browser:codon-usage-list"),
+            {
+                "run": "run-alpha",
+                "download": "tsv",
+                "page": "2",
+                "fragment": "virtual-scroll",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Disposition"], 'attachment; filename="homorepeat_codon_usage.tsv"')
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn(
+            "Organism\tGenome / Assembly\tProtein\tGene\tRepeat class\tLength\tPattern\tCodon coverage",
+            body,
+        )
+        self.assertIn("Parseable codon counts\tParseable codon fractions", body)
+        self.assertIn("CAG=8;CAA=3", body)
+        self.assertIn("CAG=0.727;CAA=0.273", body)
+        self.assertIn("QQQQQQQQQQQ", body)
+        self.assertIn("CAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAG", body)
+
+    def test_codon_usage_list_renders_tsv_download_link_with_filters(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 11, "codon_fraction": 1.0},
+            ],
+        )
+        url = reverse("browser:codon-usage-list")
+        response = self.client.get(
+            url,
+            {
+                "run": "run-alpha",
+                "protein": self.alpha["protein"].protein_id,
+                "method": RepeatCall.Method.PURE,
+                "residue": "Q",
+                "order_by": "length",
+                "page": "1",
+                "fragment": "virtual-scroll",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            (
+                f'href="{url}?run=run-alpha&amp;protein={self.alpha["protein"].protein_id}'
+                '&amp;method=pure&amp;residue=Q&amp;order_by=length&amp;download=tsv"'
+            ),
+        )
+        self.assertNotContains(response, "page=1&amp;download=tsv")
+        self.assertNotContains(response, "fragment=virtual-scroll&amp;download=tsv")
+
+    def test_codon_usage_list_virtual_scroll_fragment_returns_profiles(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 11, "codon_fraction": 1.0},
+            ],
+        )
+
+        response = self.client.get(
+            reverse("browser:codon-usage-list"),
+            {"run": "run-alpha", "fragment": "virtual-scroll"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("rows_html", payload)
+        self.assertIn("CAG 100%", payload["rows_html"])
+        self.assertEqual(payload["row_count"], 1)
+        self.assertNotIn("count", payload)
+        self.assertEqual(payload["next_query"], "")
+
+    def test_codon_usage_row_route_uses_stable_view_export(self):
+        match = resolve(reverse("browser:codonusage-row-list"))
+
+        self.assertIs(match.func.view_class, CodonUsageRowListView)
+
+    def test_codon_usage_row_list_renders_supporting_catalog_table(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 8, "codon_fraction": 0.72},
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 3, "codon_fraction": 0.28},
+            ],
+        )
+
+        response = self.client.get(reverse("browser:codonusage-row-list"), {"run": "run-alpha"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Codon usage rows")
+        self.assertContains(response, "Gene / Protein")
+        self.assertContains(response, "Amino acid")
+        self.assertContains(response, "Codon")
+        self.assertContains(response, "Homo sapiens")
+        self.assertContains(response, "GCF_ALPHA")
+        self.assertContains(response, "GENE1")
+        self.assertContains(response, "NP_run-alpha")
+        self.assertContains(response, "CAG")
+        self.assertContains(response, "0.72")
+        self.assertContains(response, reverse("browser:repeatcall-detail", args=[self.alpha["repeat_call"].pk]))
+        self.assertNotContains(response, "GCF_BETA")
+
+    def test_codon_usage_row_list_filters_by_codon_and_exports_tsv(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 8, "codon_fraction": 0.72},
+                {"amino_acid": "Q", "codon": "CAA", "codon_count": 3, "codon_fraction": 0.28},
+            ],
+        )
+
+        response = self.client.get(
+            reverse("browser:codonusage-row-list"),
+            {"run": "run-alpha", "codon": "CAG", "download": "tsv"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Disposition"], 'attachment; filename="homorepeat_codon_usage_rows.tsv"')
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn(
+            "Organism\tGenome / Assembly\tGene\tProtein\tRepeat class\tAmino acid\tCodon\tCodon count\tCodon fraction",
+            body,
+        )
+        self.assertIn("CAG\t8\t0.72", body)
+        self.assertNotIn("CAA\t3\t0.28", body)
+
+    def test_codon_usage_row_list_virtual_scroll_fragment_returns_rows(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 11, "codon_fraction": 1.0},
+            ],
+        )
+
+        response = self.client.get(
+            reverse("browser:codonusage-row-list"),
+            {"run": "run-alpha", "fragment": "virtual-scroll"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("rows_html", payload)
+        self.assertIn("CAG", payload["rows_html"])
+        self.assertEqual(payload["row_count"], 1)
+        self.assertNotIn("count", payload)
+        self.assertEqual(payload["next_query"], "")
 
     def test_sequence_list_virtual_scroll_fragment_returns_rows_without_count(self):
         response = self.client.get(
