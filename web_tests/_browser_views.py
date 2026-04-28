@@ -2,7 +2,7 @@ from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
 from django.test import TestCase
-from django.urls import reverse
+from django.urls import resolve, reverse
 from django.utils import timezone
 
 from apps.browser.catalog import sync_canonical_catalog_for_run
@@ -19,7 +19,13 @@ from apps.browser.models import (
     RunParameter,
     Sequence,
 )
-from apps.browser.views import HomorepeatListView, ProteinListView, RepeatCallListView, SequenceListView
+from apps.browser.views import (
+    CodonUsageListView,
+    HomorepeatListView,
+    ProteinListView,
+    RepeatCallListView,
+    SequenceListView,
+)
 from apps.imports.models import ImportBatch
 
 from .support import build_test_repeat_call_values, create_imported_run_fixture
@@ -170,9 +176,14 @@ class BrowserViewTests(TestCase):
         response = self.client.get(reverse("browser:home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Current catalog")
-        self.assertContains(response, "Open accession browser")
+        self.assertContains(response, "Primary scientific tables")
+        self.assertContains(response, "Open Homorepeats")
+        self.assertContains(response, reverse("browser:homorepeat-list"))
+        self.assertContains(response, "Open Codon Usage")
+        self.assertContains(response, reverse("browser:codon-usage-list"))
+        self.assertContains(response, "Supporting catalog")
         self.assertContains(response, reverse("browser:accession-list"))
+        self.assertContains(response, "Technical canonical repeat-call table")
         self.assertContains(response, "Repeat lengths")
         self.assertContains(response, reverse("browser:lengths"))
         self.assertContains(response, "Codon ratios")
@@ -2245,6 +2256,10 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, "GENE1")
         self.assertContains(response, "11Q")
         self.assertContains(response, "10-20 (5%)")
+        self.assertContains(
+            response,
+            f'href="{reverse("browser:repeatcall-detail", args=[self.alpha["repeat_call"].pk])}" title="Open repeat details"',
+        )
         self.assertNotContains(response, "<span>Latest run</span>", html=True)
         self.assertNotContains(response, "<span>Call</span>", html=True)
 
@@ -2410,7 +2425,16 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, "CAG 73%, CAA 27%")
         self.assertContains(response, "CAG 8 / CAA 3")
         self.assertContains(response, "CAG")
+        self.assertContains(
+            response,
+            f'href="{reverse("browser:repeatcall-detail", args=[self.alpha["repeat_call"].pk])}" title="Open repeat details"',
+        )
         self.assertNotContains(response, "GCT")
+
+    def test_codon_usage_route_uses_stable_view_export(self):
+        match = resolve(reverse("browser:codon-usage-list"))
+
+        self.assertIs(match.func.view_class, CodonUsageListView)
 
     def test_codon_usage_list_only_shows_calls_with_target_codon_usage(self):
         self._set_repeat_call_codon_usages(
@@ -2425,6 +2449,21 @@ class BrowserViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "GCF_ALPHA")
         self.assertNotContains(response, "GCF_BETA")
+
+    def test_codon_usage_list_uses_cursor_pagination_for_default_ordering(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 11, "codon_fraction": 1.0},
+            ],
+        )
+
+        response = self.client.get(reverse("browser:codon-usage-list"), {"run": "run-alpha"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["page_obj"].cursor_pagination)
+        codon_usage_profile = response.context["page_obj"].object_list[0]
+        self.assertIn("codon_usages", getattr(codon_usage_profile, "_prefetched_objects_cache", {}))
 
     def test_codon_usage_list_uses_count_derived_percentages(self):
         self._set_repeat_call_codon_usages(
@@ -2474,6 +2513,38 @@ class BrowserViewTests(TestCase):
         self.assertIn("CAG=0.727;CAA=0.273", body)
         self.assertIn("QQQQQQQQQQQ", body)
         self.assertIn("CAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAG", body)
+
+    def test_codon_usage_list_renders_tsv_download_link_with_filters(self):
+        self._set_repeat_call_codon_usages(
+            self.alpha,
+            rows=[
+                {"amino_acid": "Q", "codon": "CAG", "codon_count": 11, "codon_fraction": 1.0},
+            ],
+        )
+        url = reverse("browser:codon-usage-list")
+        response = self.client.get(
+            url,
+            {
+                "run": "run-alpha",
+                "protein": self.alpha["protein"].protein_id,
+                "method": RepeatCall.Method.PURE,
+                "residue": "Q",
+                "order_by": "length",
+                "page": "1",
+                "fragment": "virtual-scroll",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            (
+                f'href="{url}?run=run-alpha&amp;protein={self.alpha["protein"].protein_id}'
+                '&amp;method=pure&amp;residue=Q&amp;order_by=length&amp;download=tsv"'
+            ),
+        )
+        self.assertNotContains(response, "page=1&amp;download=tsv")
+        self.assertNotContains(response, "fragment=virtual-scroll&amp;download=tsv")
 
     def test_codon_usage_list_virtual_scroll_fragment_returns_profiles(self):
         self._set_repeat_call_codon_usages(

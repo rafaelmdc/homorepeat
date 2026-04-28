@@ -16,11 +16,13 @@
     <td>{{ codon_usage_profile.length }}</td>
     <td><code>{{ codon_usage_profile.repeat_pattern }}</code></td>
     <td>{{ codon_usage_profile.codon_coverage }}</td>
-    <td>{{ codon_usage_profile.codon_profile }}</td>
+    <td>
+      <a href="{% url 'browser:repeatcall-detail' codon_usage_profile.latest_repeat_call.pk %}" title="Open repeat details">
+        {{ codon_usage_profile.codon_profile }}
+      </a>
+    </td>
     <td>{{ codon_usage_profile.codon_counts }}</td>
     <td>{{ codon_usage_profile.dominant_codon }}</td>
-    <td>
-      <a href="{% url 'browser:repeatcall-detail' codon_usage_profile.latest_repeat_call.pk %}">{{ codon_usage_profile.method }}</a>
-    </td>
+    <td>{{ codon_usage_profile.method }}</td>
   </tr>
 {% endfor %}

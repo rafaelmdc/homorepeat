@@ -14,11 +14,13 @@
     </td>
     <td>{{ homorepeat.repeat_residue }}</td>
     <td>{{ homorepeat.length }}</td>
-    <td><code>{{ homorepeat.repeat_pattern }}</code></td>
+    <td>
+      <a href="{% url 'browser:repeatcall-detail' homorepeat.latest_repeat_call.pk %}" title="Open repeat details">
+        <code>{{ homorepeat.repeat_pattern }}</code>
+      </a>
+    </td>
     <td title="{{ homorepeat.purity }}">{{ homorepeat.purity|stringformat:"s"|slice:":4" }}</td>
     <td>{{ homorepeat.protein_position }}</td>
-    <td>
-      <a href="{% url 'browser:repeatcall-detail' homorepeat.latest_repeat_call.pk %}">{{ homorepeat.method }}</a>
-    </td>
+    <td>{{ homorepeat.method }}</td>
   </tr>
 {% endfor %}

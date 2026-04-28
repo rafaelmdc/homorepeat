@@ -37,8 +37,8 @@ def _nav_item(title: str, description: str, *, url_name: str, count: int | None 
 def _browser_directory_sections():
     return [
         {
-            "title": "Current catalog",
-            "description": "Start with the current canonical biology and use run pages only when you need provenance.",
+            "title": "Primary scientific tables",
+            "description": "Start here for biology-first row-level browsing of homorepeats and codon usage profiles.",
             "items": [
                 _nav_item(
                     "Homorepeats",
@@ -51,6 +51,12 @@ def _browser_directory_sections():
                     "Row-level repeat codon profiles with coverage, codon counts, profile percentages, and dominant codon.",
                     url_name="browser:codon-usage-list",
                 ),
+            ],
+        },
+        {
+            "title": "Supporting catalog",
+            "description": "Canonical entity browsers for accession, taxonomy, genome, sequence, protein, and technical repeat-call drill-down.",
+            "items": [
                 _nav_item(
                     "Accessions",
                     "Canonical accession records with current counts and supporting import history.",
@@ -83,10 +89,16 @@ def _browser_directory_sections():
                 ),
                 _nav_item(
                     "Repeat calls",
-                    "Current canonical repeat-call observations with direct links back to source evidence.",
+                    "Technical canonical repeat-call table with source identifiers and latest-run provenance.",
                     url_name="browser:repeatcall-list",
                     count=CanonicalRepeatCall.objects.count(),
                 ),
+            ],
+        },
+        {
+            "title": "Statistical explorers",
+            "description": "Taxon-level summaries and visual comparisons built from the current canonical repeat catalog.",
+            "items": [
                 _nav_item(
                     "Repeat lengths",
                     "Current-catalog repeat length explorer for lineage-aware browsing across grouped taxon summaries.",

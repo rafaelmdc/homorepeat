@@ -139,6 +139,13 @@ def _attach_codon_usage_display_fields(repeat_call):
     return repeat_call
 
 
+def _codon_usage_attr(name: str):
+    def accessor(repeat_call):
+        return getattr(_attach_codon_usage_display_fields(repeat_call), name)
+
+    return accessor
+
+
 class RepeatCallListView(BrowserTSVExportMixin, VirtualScrollListView):
     model = CanonicalRepeatCall
     template_name = "browser/repeatcall_list.html"
@@ -351,15 +358,15 @@ class CodonUsageListView(HomorepeatListView):
         TSVColumn("Repeat class", "repeat_residue"),
         TSVColumn("Length", "length"),
         TSVColumn("Pattern", lambda repeat_call: format_repeat_pattern(repeat_call.aa_sequence)),
-        TSVColumn("Codon coverage", lambda repeat_call: _attach_codon_usage_display_fields(repeat_call).codon_coverage),
-        TSVColumn("Codon profile", lambda repeat_call: _attach_codon_usage_display_fields(repeat_call).codon_profile),
-        TSVColumn("Codon counts", lambda repeat_call: _attach_codon_usage_display_fields(repeat_call).codon_counts),
-        TSVColumn("Dominant codon", lambda repeat_call: _attach_codon_usage_display_fields(repeat_call).dominant_codon),
+        TSVColumn("Codon coverage", _codon_usage_attr("codon_coverage")),
+        TSVColumn("Codon profile", _codon_usage_attr("codon_profile")),
+        TSVColumn("Codon counts", _codon_usage_attr("codon_counts")),
+        TSVColumn("Dominant codon", _codon_usage_attr("dominant_codon")),
         TSVColumn("Method", "method"),
         TSVColumn("Repeat sequence", "aa_sequence"),
         TSVColumn("Codon sequence", "codon_sequence"),
-        TSVColumn("Parseable codon counts", lambda repeat_call: _attach_codon_usage_display_fields(repeat_call).codon_counts_export),
-        TSVColumn("Parseable codon fractions", lambda repeat_call: _attach_codon_usage_display_fields(repeat_call).codon_fractions_export),
+        TSVColumn("Parseable codon counts", _codon_usage_attr("codon_counts_export")),
+        TSVColumn("Parseable codon fractions", _codon_usage_attr("codon_fractions_export")),
         TSVColumn("Target residue count", "repeat_count"),
         TSVColumn("Source call", repeat_call_source_id),
         TSVColumn("Latest run", "latest_pipeline_run.run_id"),
