@@ -157,3 +157,98 @@ ModuleNotFoundError: No module named 'celery'
   `/browser/codon-usage/` in a real browser with imported data.
 - Decide later whether a dedicated biology-first detail page is needed; the MVP
   still links to the existing repeat-call detail page for drill-down.
+
+---
+
+# Session Log
+
+**Date:** 2026-04-28
+
+## Objective
+
+- Continue polishing the biology-first scientific tables.
+- Add the missing codon usage supporting catalog surface.
+- Implement Homorepeats filtered downloads as TSV, AA FASTA, and DNA FASTA with
+  reusable export builders and efficient streaming.
+
+## What happened
+
+- Read the previous `docs/journal` session log for context.
+- Reordered the Homorepeats biological identity display so gene is primary and
+  bold, protein is secondary but still clickable, and TSV export puts gene
+  before protein.
+- Updated the Browser home cards so Codon Usage displays the same metadata count
+  as Homorepeats, then reordered the Browser directory so statistical explorers
+  appear above supporting catalog.
+- Added a canonical codon usage rows supporting catalog at
+  `/browser/codon-usage-rows/` and linked it from the main Browser directory.
+- Added Homorepeats download choices through the existing download control:
+  `Filtered TSV`, `AA FASTA`, and `DNA FASTA`.
+- Built reusable export helpers for download action URLs, FASTA records,
+  structured metadata, sequence wrapping, and streaming responses.
+- Optimized FASTA downloads so rows stream in primary-key order and only join the
+  sequence relation needed for the requested format.
+- Changed FASTA bodies to export full source sequences, not only the repeat or
+  codon window:
+  - AA FASTA uses `CanonicalProtein.amino_acid_sequence`.
+  - DNA FASTA uses `CanonicalSequence.nucleotide_sequence`.
+- Cleaned FASTA headers:
+  - Record ID is now `homorepeat=<canonical_repeat_call_pk>`.
+  - Removed `source_call` and duplicate pipe-delimited biological descriptors.
+  - Metadata uses readable quoted values where needed instead of URL encoding.
+  - Coordinate fields are format-local: AA headers use AA start/end/length, DNA
+    headers use nucleotide start/end/length.
+- Verified the coordinate conversion on real Docker data for row `pk=1`:
+  AA `87-93` maps to DNA `259-279`, and the DNA window translates to seven
+  alanine codons matching the AA repeat.
+
+## Files touched
+
+- `apps/browser/exports.py` - added shared download and FASTA helpers.
+- `apps/browser/views/explorer/repeat_calls.py` - updated Homorepeats display,
+  exports, FASTA streaming, and codon usage row catalog view.
+- `apps/browser/views/navigation.py` - updated Browser directory ordering,
+  counts, and catalog links.
+- `apps/browser/urls.py` - added the codon usage rows route.
+- `apps/browser/views/__init__.py` and
+  `apps/browser/views/explorer/__init__.py` - exported the new view.
+- `templates/browser/homorepeat_list.html` - connected the download dropdown.
+- `templates/browser/includes/homorepeat_list_rows.html` - adjusted gene/protein
+  ordering and links.
+- `templates/browser/includes/download_tsv_button.html` - generalized the
+  download control for multiple choices.
+- `templates/browser/codon_usage_row_list.html` and
+  `templates/browser/includes/codon_usage_row_list_rows.html` - added codon
+  usage row catalog templates.
+- `web_tests/_browser_views.py`,
+  `web_tests/test_browser_homorepeats.py`, and
+  `web_tests/test_browser_codon_usage_rows.py` - added and updated focused
+  browser tests.
+- `docs/usage.md` - documented the new browser/catalog route and downloads.
+
+## Validation
+
+- `python3 -m py_compile apps/browser/views/explorer/repeat_calls.py web_tests/test_browser_homorepeats.py`
+- `git diff --check`
+- `python3 manage.py test web_tests.test_browser_homorepeats` passed 11 tests.
+- `python3 manage.py test web_tests.test_browser_codon_usage_table web_tests.test_browser_codon_usage_rows` passed 12 tests.
+- `docker compose restart web` was used after server-side changes.
+- `docker compose exec web python manage.py shell -c ...` verified the real-data
+  AA-to-DNA coordinate mapping for Homorepeat row `pk=1`.
+
+## Current status
+
+- Implemented and validated.
+- Docker web should be restarted after pulling these local changes into the
+  running app process.
+
+## Open issues
+
+- Manual browser/download inspection with real filters is still useful before
+  treating the FASTA header shape as final.
+- FASTA field names may still need product/biology naming tweaks after review.
+
+## Next step
+
+- Manually download filtered AA FASTA and DNA FASTA from `/browser/homorepeats/`
+  in the running app and inspect representative headers and sequence windows.

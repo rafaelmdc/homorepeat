@@ -2435,6 +2435,14 @@ class BrowserViewTests(TestCase):
             length=85,
             purity=1.0,
         )
+        matched["protein"].amino_acid_sequence = "M" * 300
+        matched["protein"].save(update_fields=["amino_acid_sequence"])
+        sync_canonical_catalog_for_run(
+            matched["repeat_call"].pipeline_run,
+            import_batch=matched["repeat_call"].pipeline_run.canonical_sync_batch,
+            last_seen_at=timezone.now(),
+            replace_all_repeat_call_methods=True,
+        )
         self._create_repeat_call(
             self.alpha,
             suffix="homorepeat_fasta_split",
@@ -2469,18 +2477,30 @@ class BrowserViewTests(TestCase):
         self.assertIn("protein=NP_homorepeat_fasta_match", header)
         self.assertIn("method=pure", header)
         self.assertIn("repeat_class=Q", header)
-        self.assertIn("protein_position=10-94", header)
+        self.assertIn("start=10", header)
+        self.assertIn("end=94", header)
+        self.assertIn("length=85", header)
+        self.assertIn("position=10-94", header)
+        self.assertIn("position_percent=17", header)
+        self.assertIn("sequence_length=300", header)
+        self.assertNotIn("aa_start", header)
+        self.assertNotIn("aa_end", header)
+        self.assertNotIn("aa_length", header)
+        self.assertNotIn("dna_start", header)
+        self.assertNotIn("dna_end", header)
+        self.assertNotIn("dna_length", header)
+        self.assertNotIn("protein_position", header)
         self.assertNotIn("source_call", body)
         self.assertNotIn("canonical_repeat_call", body)
-        self.assertIn("seq_type=aa_repeat", body)
+        self.assertIn("seq_type=aa_protein", body)
         self.assertIn('gene="LONG GENE"', body)
         self.assertIn("repeat_pattern=85Q", body)
-        self.assertIn("protein_percent=17", body)
-        self.assertIn("Q" * 80 + "\n" + "Q" * 5 + "\n", body)
+        self.assertIn("M" * 80 + "\n" + "M" * 80 + "\n" + "M" * 80 + "\n" + "M" * 60 + "\n", body)
+        self.assertNotIn("Q" * 80 + "\n" + "Q" * 5 + "\n", body)
         self.assertNotIn("SPLITGENE", body)
         self.assertNotIn("page=2", response["Content-Disposition"])
 
-    def test_homorepeat_list_dna_fasta_export_streams_codon_sequences(self):
+    def test_homorepeat_list_dna_fasta_export_streams_full_nucleotide_sequences(self):
         response = self.client.get(
             reverse("browser:homorepeat-list"),
             {
@@ -2494,13 +2514,26 @@ class BrowserViewTests(TestCase):
         self.assertEqual(response["Content-Type"], "text/x-fasta; charset=utf-8")
         self.assertEqual(response["Content-Disposition"], 'attachment; filename="homorepeat_homorepeats.fna"')
         body = b"".join(response.streaming_content).decode("utf-8")
-        self.assertIn("seq_type=dna_codon", body)
+        header = body.splitlines()[0]
+        self.assertIn("seq_type=dna_sequence", body)
         self.assertIn('organism="Homo sapiens"', body)
-        self.assertIn("protein_position=10-20", body)
-        self.assertIn("protein_percent=5", body)
+        self.assertIn("start=28", header)
+        self.assertIn("end=60", header)
+        self.assertIn("length=33", header)
+        self.assertIn("sequence_length=900", header)
+        self.assertNotIn("aa_start", header)
+        self.assertNotIn("aa_end", header)
+        self.assertNotIn("aa_length", header)
+        self.assertNotIn("dna_start", header)
+        self.assertNotIn("dna_end", header)
+        self.assertNotIn("dna_length", header)
+        self.assertNotIn("protein_position", header)
+        self.assertNotIn("repeat_length", header)
         self.assertNotIn("%20", body)
         self.assertNotIn("%28", body)
-        self.assertIn("CAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAG", body)
+        self.assertIn("CAG" * 26 + "CA\n", body)
+        self.assertIn("G" + "CAG" * 26 + "C\n", body)
+        self.assertNotEqual(body.count("CAG"), 11)
 
     def test_homorepeat_fasta_querysets_only_load_needed_sequence_fields_and_stream_by_pk(self):
         view = HomorepeatListView()
@@ -2513,12 +2546,14 @@ class BrowserViewTests(TestCase):
 
         self.assertIn("codon_sequence", aa_row.get_deferred_fields())
         self.assertNotIn("aa_sequence", aa_row.get_deferred_fields())
+        self.assertNotIn("amino_acid_sequence", aa_row.protein.get_deferred_fields())
         self.assertIn("aa_sequence", dna_row.get_deferred_fields())
-        self.assertNotIn("codon_sequence", dna_row.get_deferred_fields())
+        self.assertIn("codon_sequence", dna_row.get_deferred_fields())
+        self.assertNotIn("nucleotide_sequence", dna_row.sequence.get_deferred_fields())
         self.assertEqual(tuple(view.get_fasta_queryset("aa_fasta").query.order_by), ("pk",))
         self.assertEqual(tuple(view.get_fasta_queryset("dna_fasta").query.order_by), ("pk",))
 
-    def test_homorepeat_list_dna_fasta_skips_blank_codon_sequences(self):
+    def test_homorepeat_list_dna_fasta_skips_blank_nucleotide_sequences(self):
         blank = self._create_repeat_call(
             self.alpha,
             suffix="homorepeat_blank_dna",
@@ -2528,8 +2563,8 @@ class BrowserViewTests(TestCase):
             length=9,
             purity=1.0,
         )
-        blank["repeat_call"].codon_sequence = ""
-        blank["repeat_call"].save(update_fields=["codon_sequence"])
+        blank["sequence"].nucleotide_sequence = ""
+        blank["sequence"].save(update_fields=["nucleotide_sequence"])
         sync_canonical_catalog_for_run(
             blank["repeat_call"].pipeline_run,
             import_batch=blank["repeat_call"].pipeline_run.canonical_sync_batch,
