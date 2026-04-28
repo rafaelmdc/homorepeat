@@ -281,8 +281,8 @@ class HomorepeatListView(RepeatCallListView):
     tsv_columns = (
         TSVColumn("Organism", "taxon.taxon_name"),
         TSVColumn("Genome / Assembly", "accession"),
-        TSVColumn("Protein", "protein_name"),
         TSVColumn("Gene", "gene_symbol"),
+        TSVColumn("Protein", "protein_name"),
         TSVColumn("Repeat class", "repeat_residue"),
         TSVColumn("Length", "length"),
         TSVColumn("Pattern", lambda repeat_call: format_repeat_pattern(repeat_call.aa_sequence)),

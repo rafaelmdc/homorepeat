@@ -2247,7 +2247,7 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, "Homorepeats")
         self.assertContains(response, "Organism")
         self.assertContains(response, "Genome / Assembly")
-        self.assertContains(response, "Protein / Gene")
+        self.assertContains(response, "Gene / Protein")
         self.assertContains(response, "Repeat class")
         self.assertContains(response, "Pattern")
         self.assertContains(response, "Position")
@@ -2367,7 +2367,7 @@ class BrowserViewTests(TestCase):
         self.assertEqual(response["Content-Disposition"], 'attachment; filename="homorepeat_homorepeats.tsv"')
         body = b"".join(response.streaming_content).decode("utf-8")
         self.assertIn(
-            "Organism\tGenome / Assembly\tProtein\tGene\tRepeat class\tLength\tPattern\tPurity\tPosition\tMethod",
+            "Organism\tGenome / Assembly\tGene\tProtein\tRepeat class\tLength\tPattern\tPurity\tPosition\tMethod",
             body,
         )
         self.assertIn("Source call\tStart\tEnd\tRepeat count\tNon-repeat count\tRepeat sequence\tCodon sequence", body)

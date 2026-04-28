@@ -7,9 +7,11 @@
     </td>
     <td><a href="{% url 'browser:genome-detail' homorepeat.latest_repeat_call.genome_id %}">{{ homorepeat.accession }}</a></td>
     <td>
-      <a href="{% url 'browser:protein-detail' homorepeat.latest_repeat_call.protein_id %}">{{ homorepeat.protein_name }}</a>
       {% if homorepeat.gene_symbol %}
-        <span class="text-secondary d-block">{{ homorepeat.gene_symbol }}</span>
+        <a href="{% url 'browser:protein-detail' homorepeat.latest_repeat_call.protein_id %}">{{ homorepeat.gene_symbol }}</a>
+        <a class="text-secondary d-block" href="{% url 'browser:protein-detail' homorepeat.latest_repeat_call.protein_id %}">{{ homorepeat.protein_name }}</a>
+      {% else %}
+        <a href="{% url 'browser:protein-detail' homorepeat.latest_repeat_call.protein_id %}">{{ homorepeat.protein_name }}</a>
       {% endif %}
     </td>
     <td>{{ homorepeat.repeat_residue }}</td>
