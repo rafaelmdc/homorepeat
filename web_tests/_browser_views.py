@@ -196,6 +196,8 @@ class BrowserViewTests(TestCase):
         self.assertContains(response, reverse("browser:downloadmanifest-list"))
         self.assertContains(response, "run-alpha")
         self.assertContains(response, "run-beta")
+        section_titles = [section["title"] for section in response.context["directory_sections"]]
+        self.assertLess(section_titles.index("Statistical explorers"), section_titles.index("Supporting catalog"))
         primary_items = response.context["directory_sections"][0]["items"]
         self.assertEqual(primary_items[1]["count"], primary_items[0]["count"])
 

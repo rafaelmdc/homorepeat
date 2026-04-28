@@ -56,6 +56,27 @@ def _browser_directory_sections():
             ],
         },
         {
+            "title": "Statistical explorers",
+            "description": "Taxon-level summaries and visual comparisons built from the current canonical repeat catalog.",
+            "items": [
+                _nav_item(
+                    "Repeat lengths",
+                    "Current-catalog repeat length explorer for lineage-aware browsing across grouped taxon summaries.",
+                    url_name="browser:lengths",
+                ),
+                _nav_item(
+                    "Codon ratios",
+                    "Current-catalog codon-ratio explorer for lineage-aware browsing across residue-specific taxon summaries.",
+                    url_name="browser:codon-ratios",
+                ),
+                _nav_item(
+                    "Codon*length",
+                    "Current-catalog codon-composition-by-length explorer for lineage-aware browsing across codon trajectories and branch-scoped inspect views.",
+                    url_name="browser:codon-composition-length",
+                ),
+            ],
+        },
+        {
             "title": "Supporting catalog",
             "description": "Canonical entity browsers for accession, taxonomy, genome, sequence, protein, and technical repeat-call drill-down.",
             "items": [
@@ -94,27 +115,6 @@ def _browser_directory_sections():
                     "Technical canonical repeat-call table with source identifiers and latest-run provenance.",
                     url_name="browser:repeatcall-list",
                     count=CanonicalRepeatCall.objects.count(),
-                ),
-            ],
-        },
-        {
-            "title": "Statistical explorers",
-            "description": "Taxon-level summaries and visual comparisons built from the current canonical repeat catalog.",
-            "items": [
-                _nav_item(
-                    "Repeat lengths",
-                    "Current-catalog repeat length explorer for lineage-aware browsing across grouped taxon summaries.",
-                    url_name="browser:lengths",
-                ),
-                _nav_item(
-                    "Codon ratios",
-                    "Current-catalog codon-ratio explorer for lineage-aware browsing across residue-specific taxon summaries.",
-                    url_name="browser:codon-ratios",
-                ),
-                _nav_item(
-                    "Codon*length",
-                    "Current-catalog codon-composition-by-length explorer for lineage-aware browsing across codon trajectories and branch-scoped inspect views.",
-                    url_name="browser:codon-composition-length",
                 ),
             ],
         },
