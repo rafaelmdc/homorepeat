@@ -62,6 +62,7 @@ All tables support free-text search and column-level filtering. Downloads are av
 ## Documentation
 
 - [Usage](docs/usage.md) — local setup, imports, routes, and tests
+- [Configuration](docs/configuration.md) — all environment variables and their defaults
 - [Architecture](docs/architecture.md) — app structure, data model, and view hierarchy
 - [Statistics](docs/statistics.md) — filter definitions and biological semantics
 - [Operations](docs/operations.md) — management commands, cache behaviour, and maintenance
