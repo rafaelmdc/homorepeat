@@ -2398,6 +2398,9 @@ class BrowserViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Filtered TSV")
+        self.assertContains(response, "Repeat AA FASTA")
+        self.assertContains(response, "Codon DNA FASTA")
         self.assertContains(
             response,
             (
@@ -2405,8 +2408,115 @@ class BrowserViewTests(TestCase):
                 '&amp;method=pure&amp;residue=Q&amp;order_by=length&amp;download=tsv"'
             ),
         )
+        self.assertContains(
+            response,
+            (
+                f'href="{url}?run=run-alpha&amp;protein={self.alpha["protein"].protein_id}'
+                '&amp;method=pure&amp;residue=Q&amp;order_by=length&amp;download=aa_fasta"'
+            ),
+        )
+        self.assertContains(
+            response,
+            (
+                f'href="{url}?run=run-alpha&amp;protein={self.alpha["protein"].protein_id}'
+                '&amp;method=pure&amp;residue=Q&amp;order_by=length&amp;download=dna_fasta"'
+            ),
+        )
         self.assertNotContains(response, "page=1&amp;download=tsv")
         self.assertNotContains(response, "fragment=virtual-scroll&amp;download=tsv")
+
+    def test_homorepeat_list_aa_fasta_export_streams_filtered_sequences(self):
+        matched = self._create_repeat_call(
+            self.alpha,
+            suffix="homorepeat_fasta_match",
+            gene_symbol="LONG GENE",
+            method=RepeatCall.Method.PURE,
+            residue="Q",
+            length=85,
+            purity=1.0,
+        )
+        self._create_repeat_call(
+            self.alpha,
+            suffix="homorepeat_fasta_split",
+            gene_symbol="SPLITGENE",
+            method=RepeatCall.Method.PURE,
+            residue="A",
+            length=9,
+            purity=1.0,
+        )
+
+        response = self.client.get(
+            reverse("browser:homorepeat-list"),
+            {
+                "run": "run-alpha",
+                "gene_symbol": "LONG GENE",
+                "download": "aa_fasta",
+                "page": "2",
+                "fragment": "virtual-scroll",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/x-fasta; charset=utf-8")
+        self.assertEqual(response["Content-Disposition"], 'attachment; filename="homorepeat_homorepeats.faa"')
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn("source_call:call_homorepeat_fasta_match", body)
+        self.assertIn("seq_type=aa_repeat", body)
+        self.assertIn("gene=LONG%20GENE", body)
+        self.assertIn("repeat_pattern=85Q", body)
+        self.assertIn("Q" * 80 + "\n" + "Q" * 5 + "\n", body)
+        self.assertNotIn("SPLITGENE", body)
+        self.assertNotIn("page=2", response["Content-Disposition"])
+
+    def test_homorepeat_list_dna_fasta_export_streams_codon_sequences(self):
+        response = self.client.get(
+            reverse("browser:homorepeat-list"),
+            {
+                "run": "run-alpha",
+                "gene_symbol": "GENE1",
+                "download": "dna_fasta",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/x-fasta; charset=utf-8")
+        self.assertEqual(response["Content-Disposition"], 'attachment; filename="homorepeat_homorepeats.fna"')
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn("seq_type=dna_codon", body)
+        self.assertIn("CAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAG", body)
+
+    def test_homorepeat_list_dna_fasta_skips_blank_codon_sequences(self):
+        blank = self._create_repeat_call(
+            self.alpha,
+            suffix="homorepeat_blank_dna",
+            gene_symbol="BLANKDNA",
+            method=RepeatCall.Method.PURE,
+            residue="Q",
+            length=9,
+            purity=1.0,
+        )
+        blank["repeat_call"].codon_sequence = ""
+        blank["repeat_call"].save(update_fields=["codon_sequence"])
+        sync_canonical_catalog_for_run(
+            blank["repeat_call"].pipeline_run,
+            import_batch=blank["repeat_call"].pipeline_run.canonical_sync_batch,
+            last_seen_at=timezone.now(),
+            replace_all_repeat_call_methods=True,
+        )
+
+        response = self.client.get(
+            reverse("browser:homorepeat-list"),
+            {
+                "run": "run-alpha",
+                "gene_symbol": "BLANKDNA",
+                "download": "dna_fasta",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertEqual(body, "")
 
     def test_codon_usage_list_renders_row_level_profiles(self):
         self._set_repeat_call_codon_usages(

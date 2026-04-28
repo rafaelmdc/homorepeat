@@ -114,6 +114,10 @@ in `.env`; inside the container, import paths use
   `/browser/accession-call-counts/`, `/browser/download-manifest/`: operational
   provenance browsers.
 
+Filtered table downloads use `download=tsv`. Homorepeats also supports
+`download=aa_fasta` for repeat amino-acid FASTA and `download=dna_fasta` for
+repeat codon DNA FASTA.
+
 ## Common Checks
 
 Run all browser tests:

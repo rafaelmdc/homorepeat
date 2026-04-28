@@ -1,4 +1,15 @@
-{% if download_tsv_href %}
+{% if download_actions %}
+  <div class="dropdown">
+    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+      Download
+    </button>
+    <ul class="dropdown-menu dropdown-menu-end">
+      {% for action in download_actions %}
+        <li><a class="dropdown-item" href="{{ action.href }}">{{ action.label }}</a></li>
+      {% endfor %}
+    </ul>
+  </div>
+{% elif download_tsv_href %}
   <a class="btn btn-outline-secondary" href="{{ download_tsv_href }}">{{ download_tsv_label|default:"Download TSV" }}</a>
 {% elif download_tsv_url %}
   <a class="btn btn-outline-secondary" href="{{ download_tsv_url }}">{{ download_tsv_label|default:"Download TSV" }}</a>

@@ -16,7 +16,14 @@ from apps.browser.presentation import (
     summarize_target_codon_usage,
 )
 
-from ...exports import BrowserTSVExportMixin, TSVColumn
+from ...exports import (
+    BrowserTSVExportMixin,
+    FASTAMetadataField,
+    FASTARecordBuilder,
+    TSVColumn,
+    clean_fasta_metadata_value,
+    stream_fasta_response,
+)
 from ...models import CanonicalRepeatCall, CanonicalRepeatCallCodonUsage, PipelineRun, RepeatCall
 from ..filters import (
     _resolve_branch_scope,
@@ -80,6 +87,49 @@ BIOLOGICAL_REPEAT_TSV_FIELDS = BIOLOGICAL_REPEAT_LIST_FIELDS + (
 def repeat_call_source_id(repeat_call):
     latest_repeat_call = getattr(repeat_call, "latest_repeat_call", None)
     return repeat_call.source_call_id or getattr(latest_repeat_call, "call_id", "")
+
+
+def homorepeat_fasta_record_id(repeat_call):
+    source_call = clean_fasta_metadata_value(repeat_call_source_id(repeat_call) or repeat_call.pk)
+    return f"homorepeat|canonical_repeat_call:{repeat_call.pk}|source_call:{source_call}"
+
+
+HOMOREPEAT_FASTA_METADATA_FIELDS = (
+    FASTAMetadataField("organism", "taxon.taxon_name"),
+    FASTAMetadataField("taxon_id", "taxon.taxon_id"),
+    FASTAMetadataField("assembly", "accession"),
+    FASTAMetadataField("gene", "gene_symbol"),
+    FASTAMetadataField("protein", "protein_name"),
+    FASTAMetadataField("repeat_class", "repeat_residue"),
+    FASTAMetadataField("repeat_length", "length"),
+    FASTAMetadataField("repeat_pattern", lambda repeat_call: format_repeat_pattern(repeat_call.aa_sequence)),
+    FASTAMetadataField(
+        "protein_position",
+        lambda repeat_call: format_protein_position(
+            repeat_call.start,
+            repeat_call.end,
+            repeat_call.protein_length,
+        ),
+    ),
+    FASTAMetadataField("purity", "purity"),
+    FASTAMetadataField("start", "start"),
+    FASTAMetadataField("end", "end"),
+    FASTAMetadataField("method", "method"),
+    FASTAMetadataField("repeat_count", "repeat_count"),
+    FASTAMetadataField("non_repeat_count", "non_repeat_count"),
+    FASTAMetadataField("latest_run", "latest_pipeline_run.run_id"),
+)
+
+
+def homorepeat_fasta_builder(*, seq_type: str, sequence: str):
+    return FASTARecordBuilder(
+        record_id=homorepeat_fasta_record_id,
+        sequence=sequence,
+        metadata_fields=(
+            FASTAMetadataField("seq_type", lambda repeat_call: seq_type),
+            *HOMOREPEAT_FASTA_METADATA_FIELDS,
+        ),
+    )
 
 
 def _codon_usage_prefetch():
@@ -279,6 +329,19 @@ class HomorepeatListView(RepeatCallListView):
     virtual_scroll_colspan = 9
     tsv_filename_slug = "homorepeats"
     download_tsv_label = "Download Homorepeats TSV"
+    fasta_chunk_size = 2000
+    fasta_downloads = {
+        "aa_fasta": {
+            "label": "Repeat AA FASTA",
+            "filename": "homorepeat_homorepeats.faa",
+            "builder": homorepeat_fasta_builder(seq_type="aa_repeat", sequence="aa_sequence"),
+        },
+        "dna_fasta": {
+            "label": "Codon DNA FASTA",
+            "filename": "homorepeat_homorepeats.fna",
+            "builder": homorepeat_fasta_builder(seq_type="dna_codon", sequence="codon_sequence"),
+        },
+    }
     tsv_columns = (
         TSVColumn("Organism", "taxon.taxon_name"),
         TSVColumn("Genome / Assembly", "accession"),
@@ -328,6 +391,12 @@ class HomorepeatListView(RepeatCallListView):
     }
     default_ordering = ("accession", "protein_name", "start", "id")
 
+    def dispatch(self, request, *args, **kwargs):
+        requested_download = request.GET.get(self.download_param, "").strip()
+        if requested_download in self.fasta_downloads:
+            return self.render_fasta_response(requested_download)
+        return super().dispatch(request, *args, **kwargs)
+
     def get_queryset(self):
         queryset = super().get_queryset()
         return queryset.only(*BIOLOGICAL_REPEAT_LIST_FIELDS)
@@ -335,8 +404,41 @@ class HomorepeatListView(RepeatCallListView):
     def prepare_tsv_queryset(self, queryset):
         return queryset.only(*BIOLOGICAL_REPEAT_TSV_FIELDS)
 
+    def prepare_fasta_queryset(self, queryset, download_value):
+        return queryset.only(*BIOLOGICAL_REPEAT_TSV_FIELDS)
+
+    def get_fasta_queryset(self, download_value):
+        return self.prepare_fasta_queryset(self.get_queryset(), download_value)
+
+    def iter_fasta_records(self, download_value):
+        fasta_definition = self.fasta_downloads[download_value]
+        builder = fasta_definition["builder"]
+        rows = self.get_fasta_queryset(download_value)
+        if hasattr(rows, "iterator"):
+            rows = rows.iterator(chunk_size=self.fasta_chunk_size)
+        for obj in rows:
+            yield builder.build_record(obj)
+
+    def render_fasta_response(self, download_value):
+        fasta_definition = self.fasta_downloads[download_value]
+        return stream_fasta_response(
+            fasta_definition["filename"],
+            self.iter_fasta_records(download_value),
+        )
+
+    def get_download_actions(self):
+        return [
+            self.get_download_action(self.download_value, "Filtered TSV"),
+            *[
+                self.get_download_action(download_value, definition["label"])
+                for download_value, definition in self.fasta_downloads.items()
+            ],
+        ]
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        if not self.is_virtual_scroll_fragment_request():
+            context["download_actions"] = self.get_download_actions()
         homorepeats = context.get("homorepeats")
         if homorepeats is not None:
             for homorepeat in homorepeats:
@@ -351,6 +453,7 @@ class CodonUsageListView(HomorepeatListView):
     virtual_scroll_colspan = 11
     tsv_filename_slug = "codon_usage"
     download_tsv_label = "Download Codon Usage TSV"
+    fasta_downloads = {}
     tsv_columns = (
         TSVColumn("Organism", "taxon.taxon_name"),
         TSVColumn("Genome / Assembly", "accession"),

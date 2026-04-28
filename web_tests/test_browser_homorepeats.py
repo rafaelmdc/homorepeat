@@ -10,6 +10,9 @@ TEST_NAMES = [
     "test_homorepeat_list_virtual_scroll_fragment_returns_rows",
     "test_homorepeat_list_tsv_export_includes_full_sequences",
     "test_homorepeat_list_renders_tsv_download_link_with_filters",
+    "test_homorepeat_list_aa_fasta_export_streams_filtered_sequences",
+    "test_homorepeat_list_dna_fasta_export_streams_codon_sequences",
+    "test_homorepeat_list_dna_fasta_skips_blank_codon_sequences",
 ]
 
 
