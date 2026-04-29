@@ -141,6 +141,76 @@
   </div>
 </section>
 
+<section class="surface-card surface-card-wide mb-4">
+  <div class="section-header">
+    <div>
+      <p class="section-kicker mb-2">Upload zipped run</p>
+      <h2>Pipeline run upload</h2>
+    </div>
+  </div>
+
+  <form
+    class="row g-3 align-items-end mb-4"
+    data-import-upload-form
+    data-upload-start-url="{{ upload_start_url }}"
+    data-upload-chunk-url-template="{{ upload_chunk_url_template }}"
+    data-upload-complete-url-template="{{ upload_complete_url_template }}"
+    data-upload-chunk-size-bytes="{{ upload_chunk_size_bytes }}"
+  >
+    <div class="col-lg-6">
+      <label class="form-label" for="import-upload-file">Zip file</label>
+      <input class="form-control" id="import-upload-file" type="file" accept=".zip,application/zip" data-import-upload-file>
+    </div>
+    <div class="col-lg-3">
+      <label class="form-label" for="import-upload-progress">Progress</label>
+      <progress class="form-control p-0" id="import-upload-progress" value="0" max="100" data-import-upload-progress></progress>
+    </div>
+    <div class="col-lg-3">
+      <button class="btn btn-primary w-100" type="submit">Upload</button>
+    </div>
+    <div class="col-12">
+      <div class="small text-secondary" data-import-upload-status></div>
+    </div>
+  </form>
+
+  <div class="table-responsive">
+    <table class="table align-middle mb-0 data-table">
+      <thead>
+        <tr>
+          <th>File</th>
+          <th>Run</th>
+          <th>Status</th>
+          <th>Received</th>
+          <th>Import batch</th>
+          <th>Error</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for uploaded_run in uploaded_runs %}
+          <tr>
+            <td>{{ uploaded_run.original_filename }}</td>
+            <td>{{ uploaded_run.run_id|default:"-" }}</td>
+            <td>{{ uploaded_run.get_status_display }}</td>
+            <td>{{ uploaded_run.received_bytes }} / {{ uploaded_run.size_bytes }}</td>
+            <td>
+              {% if uploaded_run.import_batch %}
+                #{{ uploaded_run.import_batch.pk }} {{ uploaded_run.import_batch.status }}
+              {% else %}
+                -
+              {% endif %}
+            </td>
+            <td>{{ uploaded_run.error_message|default:"-" }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" class="empty-cell">No uploaded runs have been recorded yet.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
 <section class="surface-card surface-card-wide">
   <div class="section-header">
     <div>

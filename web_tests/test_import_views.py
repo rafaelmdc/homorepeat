@@ -9,7 +9,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from apps.browser.models import PipelineRun
-from apps.imports.models import ImportBatch
+from apps.imports.models import ImportBatch, UploadedRun
 from apps.imports.services import import_published_run
 from apps.imports.views import _discover_publish_runs_in
 
@@ -65,6 +65,34 @@ class ImportViewTests(TestCase):
             self.assertContains(response, "mounted-run")
             self.assertContains(response, "uploaded-run")
             self.assertContains(response, str((imports_root / "library" / "uploaded-run" / "publish").resolve()))
+
+    def test_staff_imports_home_renders_upload_controls_and_uploaded_run_status(self):
+        batch = ImportBatch.objects.create(
+            source_path="/tmp/run-alpha/publish",
+            status=ImportBatch.Status.PENDING,
+            phase="queued",
+        )
+        UploadedRun.objects.create(
+            original_filename="run-alpha.zip",
+            status=UploadedRun.Status.QUEUED,
+            size_bytes=100,
+            received_bytes=100,
+            total_chunks=1,
+            run_id="run-alpha",
+            import_batch=batch,
+        )
+
+        self.client.force_login(self.staff_user)
+        response = self.client.get(reverse("imports:home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "data-import-upload-form")
+        self.assertContains(response, reverse("imports:upload-start"))
+        self.assertContains(response, "/imports/uploads/__upload_id__/chunk/")
+        self.assertContains(response, "/imports/uploads/__upload_id__/complete/")
+        self.assertContains(response, "run-alpha.zip")
+        self.assertContains(response, "Queued")
+        self.assertContains(response, "#")
 
     def test_discover_publish_runs_in_scans_supplied_root(self):
         with TemporaryDirectory() as tempdir:

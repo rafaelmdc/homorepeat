@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import UUID
 
 from django.conf import settings
 from django.contrib import messages
@@ -82,9 +83,14 @@ class ImportsHomeView(StaffOnlyMixin, FormView):
         context["detected_publish_runs"] = _discover_publish_runs()
         context["runs_root"] = str(_runs_root())
         context["recent_batches"] = recent_batches
+        context["uploaded_runs"] = UploadedRun.objects.select_related("import_batch").order_by("-created_at")[:10]
         context["has_active_import_batches"] = has_active_import_batches
         context["enable_import_auto_refresh"] = has_active_import_batches and self.request.method == "GET"
         context["history_url"] = reverse("imports:history")
+        context["upload_start_url"] = reverse("imports:upload-start")
+        context["upload_chunk_url_template"] = _upload_url_template("imports:upload-chunk")
+        context["upload_complete_url_template"] = _upload_url_template("imports:upload-complete")
+        context["upload_chunk_size_bytes"] = settings.HOMOREPEAT_UPLOAD_CHUNK_BYTES
         return context
 
 
@@ -208,6 +214,14 @@ def _json_error(message: str, *, status: int = 400) -> JsonResponse:
             "error": message,
         },
         status=status,
+    )
+
+
+def _upload_url_template(route_name: str) -> str:
+    placeholder_uuid = UUID("00000000-0000-0000-0000-000000000000")
+    return reverse(route_name, kwargs={"upload_id": placeholder_uuid}).replace(
+        str(placeholder_uuid),
+        "__upload_id__",
     )
 
 
