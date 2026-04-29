@@ -44,7 +44,7 @@ def extract_uploaded_run(self, uploaded_run_id: int) -> None:
         extract_uploaded_zip(uploaded_run_id=uploaded_run_id)
     except UploadedRun.DoesNotExist:
         return
-    except UploadValidationError as exc:
+    except (ImportContractError, UploadValidationError) as exc:
         UploadedRun.objects.filter(pk=uploaded_run_id).update(
             status=UploadedRun.Status.FAILED,
             error_message=str(exc),

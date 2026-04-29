@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from io import BytesIO
+from pathlib import Path
 import stat
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -16,6 +17,7 @@ from apps.imports.models import ImportBatch, UploadedRun
 from apps.imports.services import dispatch_import_batch
 from apps.imports.services.published_run import ImportContractError
 from apps.imports.tasks import extract_uploaded_run, reset_stale_import_batches, run_import_batch
+from .support import build_minimal_v2_publish_root
 
 
 class RetryTriggered(Exception):
@@ -27,6 +29,15 @@ def _zip_bytes(files: dict[str, str]) -> bytes:
     with zipfile.ZipFile(payload, mode="w") as archive:
         for name, content in files.items():
             archive.writestr(name, content)
+    return payload.getvalue()
+
+
+def _zip_directory(root: Path) -> bytes:
+    payload = BytesIO()
+    with zipfile.ZipFile(payload, mode="w") as archive:
+        for path in sorted(root.rglob("*")):
+            if path.is_file():
+                archive.write(path, path.relative_to(root).as_posix())
     return payload.getvalue()
 
 
@@ -118,10 +129,12 @@ class ImportTaskTests(TestCase):
             with self.assertRaises(ImportContractError):
                 run_import_batch(batch.pk)
 
-    def test_extract_uploaded_run_assembles_zip_and_extracts_contents(self):
+    def test_extract_uploaded_run_assembles_zip_and_validates_publish_root(self):
         with TemporaryDirectory() as tempdir:
             with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
-                zip_payload = _zip_bytes({"publish/data.txt": "ok"})
+                source_root = Path(tempdir) / "source"
+                build_minimal_v2_publish_root(source_root, run_id="run-uploaded")
+                zip_payload = _zip_directory(source_root)
                 split_at = 10
                 uploaded_run = UploadedRun.objects.create(
                     original_filename="run-alpha.zip",
@@ -140,13 +153,16 @@ class ImportTaskTests(TestCase):
 
                 uploaded_run.refresh_from_db()
                 self.assertEqual(uploaded_run.status, UploadedRun.Status.EXTRACTING)
+                self.assertEqual(uploaded_run.run_id, "run-uploaded")
                 self.assertEqual(uploaded_run.zip_path.read_bytes(), zip_payload)
-                self.assertEqual((uploaded_run.extracted_root / "publish" / "data.txt").read_text(), "ok")
+                self.assertTrue((uploaded_run.extracted_root / "publish" / "metadata" / "run_manifest.json").is_file())
 
-    def test_extract_uploaded_run_uses_existing_assembled_zip(self):
+    def test_extract_uploaded_run_uses_existing_assembled_zip_and_validates_publish_root(self):
         with TemporaryDirectory() as tempdir:
             with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
-                zip_payload = _zip_bytes({"publish/data.txt": "already assembled"})
+                source_root = Path(tempdir) / "source"
+                build_minimal_v2_publish_root(source_root, run_id="already-assembled")
+                zip_payload = _zip_directory(source_root)
                 uploaded_run = UploadedRun.objects.create(
                     original_filename="run-alpha.zip",
                     status=UploadedRun.Status.EXTRACTING,
@@ -163,10 +179,8 @@ class ImportTaskTests(TestCase):
 
                 uploaded_run.refresh_from_db()
                 self.assertEqual(uploaded_run.status, UploadedRun.Status.EXTRACTING)
-                self.assertEqual(
-                    (uploaded_run.extracted_root / "publish" / "data.txt").read_text(),
-                    "already assembled",
-                )
+                self.assertEqual(uploaded_run.run_id, "already-assembled")
+                self.assertTrue((uploaded_run.extracted_root / "publish" / "metadata" / "run_manifest.json").is_file())
 
     def test_extract_uploaded_run_marks_invalid_upload_failed(self):
         with TemporaryDirectory() as tempdir:
@@ -189,7 +203,40 @@ class ImportTaskTests(TestCase):
                 self.assertEqual(uploaded_run.status, UploadedRun.Status.FAILED)
                 self.assertIn("missing chunk", uploaded_run.error_message)
 
-    def test_extract_uploaded_run_extracts_valid_zip(self):
+    def test_extract_uploaded_run_rejects_missing_publish_root(self):
+        with TemporaryDirectory() as tempdir:
+            with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
+                uploaded_run = _create_received_upload_from_zip_bytes(
+                    "run.zip",
+                    _zip_bytes({"data.txt": "ok"}),
+                )
+
+                extract_uploaded_run(uploaded_run.pk)
+
+                uploaded_run.refresh_from_db()
+                self.assertEqual(uploaded_run.status, UploadedRun.Status.FAILED)
+                self.assertIn("does not contain publish/metadata/run_manifest.json", uploaded_run.error_message)
+
+    def test_extract_uploaded_run_rejects_multiple_publish_roots(self):
+        with TemporaryDirectory() as tempdir:
+            with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
+                uploaded_run = _create_received_upload_from_zip_bytes(
+                    "run.zip",
+                    _zip_bytes(
+                        {
+                            "run-a/publish/metadata/run_manifest.json": "{}",
+                            "run-b/publish/metadata/run_manifest.json": "{}",
+                        }
+                    ),
+                )
+
+                extract_uploaded_run(uploaded_run.pk)
+
+                uploaded_run.refresh_from_db()
+                self.assertEqual(uploaded_run.status, UploadedRun.Status.FAILED)
+                self.assertIn("multiple publish/metadata/run_manifest.json", uploaded_run.error_message)
+
+    def test_extract_uploaded_run_rejects_invalid_publish_contract(self):
         with TemporaryDirectory() as tempdir:
             with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
                 uploaded_run = _create_received_upload_from_zip_bytes(
@@ -200,13 +247,8 @@ class ImportTaskTests(TestCase):
                 extract_uploaded_run(uploaded_run.pk)
 
                 uploaded_run.refresh_from_db()
-                self.assertEqual(uploaded_run.status, UploadedRun.Status.EXTRACTING)
-                self.assertEqual(
-                    (uploaded_run.extracted_root / "publish" / "metadata" / "run_manifest.json").read_text(
-                        encoding="utf-8"
-                    ),
-                    "{}",
-                )
+                self.assertEqual(uploaded_run.status, UploadedRun.Status.FAILED)
+                self.assertIn("Run manifest is missing required keys", uploaded_run.error_message)
 
     def test_extract_uploaded_run_rejects_path_traversal(self):
         with TemporaryDirectory() as tempdir:

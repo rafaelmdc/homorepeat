@@ -14,6 +14,7 @@ from django.core.files.uploadedfile import UploadedFile
 from django.db import transaction
 
 from apps.imports.models import UploadedRun
+from apps.imports.services.published_run import inspect_published_run
 
 
 class UploadValidationError(ValueError):
@@ -227,7 +228,24 @@ def extract_uploaded_zip(*, uploaded_run_id: int) -> UploadedRun:
         shutil.rmtree(uploaded_run.extracted_root, ignore_errors=True)
         raise
 
+    publish_root = find_publish_root(uploaded_run.extracted_root)
+    inspected = inspect_published_run(publish_root)
+    uploaded_run.run_id = str(inspected.pipeline_run["run_id"])
+    uploaded_run.save(update_fields=["run_id", "updated_at"])
     return uploaded_run
+
+
+def find_publish_root(extracted_root: Path) -> Path:
+    manifest_paths = [
+        path
+        for path in extracted_root.rglob("run_manifest.json")
+        if path.parent.name == "metadata" and path.parent.parent.name == "publish"
+    ]
+    if not manifest_paths:
+        raise UploadValidationError("Extracted upload does not contain publish/metadata/run_manifest.json.")
+    if len(manifest_paths) > 1:
+        raise UploadValidationError("Extracted upload contains multiple publish/metadata/run_manifest.json files.")
+    return manifest_paths[0].parent.parent
 
 
 def _validate_chunk(uploaded_run: UploadedRun, chunk_index: int, chunk: UploadedFile) -> None:
