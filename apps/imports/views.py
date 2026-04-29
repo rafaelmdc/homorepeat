@@ -117,6 +117,10 @@ def _runs_root() -> Path:
 
 def _discover_publish_runs() -> list[DetectedPublishRun]:
     runs_root = _runs_root()
+    return _discover_publish_runs_in(runs_root)
+
+
+def _discover_publish_runs_in(runs_root: Path) -> list[DetectedPublishRun]:
     if not runs_root.exists() or not runs_root.is_dir():
         return []
 

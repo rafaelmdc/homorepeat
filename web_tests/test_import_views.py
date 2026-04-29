@@ -10,6 +10,7 @@ from django.urls import reverse
 from apps.browser.models import PipelineRun
 from apps.imports.models import ImportBatch
 from apps.imports.services import import_published_run
+from apps.imports.views import _discover_publish_runs_in
 
 from .support import build_minimal_v2_publish_root as build_minimal_publish_root
 
@@ -43,6 +44,24 @@ class ImportViewTests(TestCase):
             self.assertContains(response, "run-alpha")
             self.assertContains(response, "run-beta")
             self.assertContains(response, "Latest import batches")
+
+    def test_discover_publish_runs_in_scans_supplied_root(self):
+        with TemporaryDirectory() as tempdir:
+            runs_root = Path(tempdir) / "runs"
+            build_minimal_publish_root(runs_root / "run-alpha", run_id="run-alpha")
+            build_minimal_publish_root(runs_root / "run-beta", run_id="run-beta")
+            (runs_root / "not-a-run").mkdir()
+
+            detected_runs = _discover_publish_runs_in(runs_root)
+
+            self.assertEqual([run.run_id for run in detected_runs], ["run-alpha", "run-beta"])
+            self.assertTrue(all(run.publish_root.endswith("/publish") for run in detected_runs))
+
+    def test_discover_publish_runs_in_returns_empty_for_missing_root(self):
+        with TemporaryDirectory() as tempdir:
+            missing_root = Path(tempdir) / "missing"
+
+            self.assertEqual(_discover_publish_runs_in(missing_root), [])
 
     def test_staff_can_import_detected_publish_root_from_home(self):
         with TemporaryDirectory() as tempdir:
