@@ -172,16 +172,6 @@ class ImportViewTests(TestCase):
                 self.assertEqual(response.status_code, 302)
                 self.assertIn(reverse("admin:login"), response["Location"])
 
-    def test_staff_upload_complete_endpoint_returns_json_placeholder_until_service_exists(self):
-        upload_id = uuid4()
-
-        self.client.force_login(self.staff_user)
-        response = self.client.post(reverse("imports:upload-complete", kwargs={"upload_id": upload_id}))
-
-        self.assertEqual(response.status_code, 501)
-        self.assertEqual(response["Content-Type"], "application/json")
-        self.assertFalse(response.json()["ok"])
-
     def test_imports_home_auto_refreshes_when_recent_batch_is_active(self):
         ImportBatch.objects.create(
             source_path="/tmp/run-alpha/publish",

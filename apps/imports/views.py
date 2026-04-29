@@ -16,7 +16,7 @@ from django.views.generic import FormView, ListView
 from .forms import ImportRunForm
 from .models import ImportBatch, UploadedRun
 from .services import dispatch_import_batch, enqueue_published_run
-from .services.uploads import UploadValidationError, start_upload, store_chunk
+from .services.uploads import UploadValidationError, complete_upload, start_upload, store_chunk
 
 
 @dataclass(frozen=True)
@@ -175,11 +175,24 @@ class UploadRunCompleteView(StaffOnlyMixin, View):
     http_method_names = ["post"]
 
     def post(self, request, upload_id):
-        return _upload_endpoint_not_implemented("Upload completion is not implemented yet.")
+        try:
+            uploaded_run = complete_upload(upload_id=upload_id)
+        except UploadedRun.DoesNotExist:
+            return _json_error("Upload was not found.", status=404)
+        except UploadValidationError as exc:
+            return _json_error(str(exc))
 
-
-def _upload_endpoint_not_implemented(message: str) -> JsonResponse:
-    return _json_error(message, status=501)
+        return JsonResponse(
+            {
+                "ok": True,
+                "upload_id": str(uploaded_run.upload_id),
+                "received_chunks": uploaded_run.received_chunks,
+                "received_count": len(uploaded_run.received_chunks),
+                "total_chunks": uploaded_run.total_chunks,
+                "received_bytes": uploaded_run.received_bytes,
+                "status": uploaded_run.status,
+            }
+        )
 
 
 def _json_error(message: str, *, status: int = 400) -> JsonResponse:

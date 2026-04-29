@@ -154,3 +154,97 @@ class ImportUploadApiTests(TestCase):
                 self.assertEqual(response.status_code, 400)
                 self.assertFalse(response.json()["ok"])
                 self.assertFalse(Path(uploaded_run.chunks_root / "3.part").exists())
+
+    def test_complete_upload_rejects_missing_chunks(self):
+        with TemporaryDirectory() as tempdir:
+            with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
+                uploaded_run = UploadedRun.objects.create(
+                    original_filename="run-alpha.zip",
+                    size_bytes=11,
+                    chunk_size_bytes=10,
+                    total_chunks=2,
+                )
+                uploaded_run.chunks_root.mkdir(parents=True)
+                (uploaded_run.chunks_root / "0.part").write_bytes(b"abcdefghij")
+
+                response = self.client.post(
+                    reverse("imports:upload-complete", kwargs={"upload_id": uploaded_run.upload_id})
+                )
+
+                self.assertEqual(response.status_code, 400)
+                self.assertFalse(response.json()["ok"])
+                self.assertIn("missing chunk", response.json()["error"])
+                uploaded_run.refresh_from_db()
+                self.assertEqual(uploaded_run.status, UploadedRun.Status.RECEIVING)
+
+    def test_complete_upload_marks_received_from_filesystem_chunks(self):
+        with TemporaryDirectory() as tempdir:
+            with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
+                uploaded_run = UploadedRun.objects.create(
+                    original_filename="run-alpha.zip",
+                    size_bytes=11,
+                    chunk_size_bytes=10,
+                    total_chunks=2,
+                    received_chunks=[],
+                )
+                uploaded_run.chunks_root.mkdir(parents=True)
+                (uploaded_run.chunks_root / "0.part").write_bytes(b"abcdefghij")
+                (uploaded_run.chunks_root / "1.part").write_bytes(b"k")
+
+                response = self.client.post(
+                    reverse("imports:upload-complete", kwargs={"upload_id": uploaded_run.upload_id})
+                )
+
+                self.assertEqual(response.status_code, 200)
+                payload = response.json()
+                self.assertTrue(payload["ok"])
+                self.assertEqual(payload["status"], UploadedRun.Status.RECEIVED)
+                uploaded_run.refresh_from_db()
+                self.assertEqual(uploaded_run.status, UploadedRun.Status.RECEIVED)
+                self.assertEqual(uploaded_run.received_chunks, [0, 1])
+                self.assertEqual(uploaded_run.received_bytes, 11)
+
+    def test_complete_upload_is_idempotent_when_already_received(self):
+        with TemporaryDirectory() as tempdir:
+            with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
+                uploaded_run = UploadedRun.objects.create(
+                    original_filename="run-alpha.zip",
+                    status=UploadedRun.Status.RECEIVED,
+                    size_bytes=11,
+                    received_bytes=11,
+                    chunk_size_bytes=10,
+                    total_chunks=2,
+                    received_chunks=[0, 1],
+                )
+
+                response = self.client.post(
+                    reverse("imports:upload-complete", kwargs={"upload_id": uploaded_run.upload_id})
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.json()["ok"])
+                self.assertEqual(response.json()["status"], UploadedRun.Status.RECEIVED)
+                self.assertEqual(response.json()["received_chunks"], [0, 1])
+
+    def test_complete_upload_rejects_byte_total_mismatch(self):
+        with TemporaryDirectory() as tempdir:
+            with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
+                uploaded_run = UploadedRun.objects.create(
+                    original_filename="run-alpha.zip",
+                    size_bytes=11,
+                    chunk_size_bytes=10,
+                    total_chunks=2,
+                )
+                uploaded_run.chunks_root.mkdir(parents=True)
+                (uploaded_run.chunks_root / "0.part").write_bytes(b"abc")
+                (uploaded_run.chunks_root / "1.part").write_bytes(b"def")
+
+                response = self.client.post(
+                    reverse("imports:upload-complete", kwargs={"upload_id": uploaded_run.upload_id})
+                )
+
+                self.assertEqual(response.status_code, 400)
+                self.assertFalse(response.json()["ok"])
+                self.assertIn("expected 11", response.json()["error"])
+                uploaded_run.refresh_from_db()
+                self.assertEqual(uploaded_run.status, UploadedRun.Status.RECEIVING)

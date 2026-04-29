@@ -78,6 +78,41 @@ def store_chunk(
         return locked_upload
 
 
+def complete_upload(*, upload_id: UUID) -> UploadedRun:
+    with transaction.atomic():
+        uploaded_run = UploadedRun.objects.select_for_update().get(upload_id=upload_id)
+        if uploaded_run.status in {
+            UploadedRun.Status.RECEIVED,
+            UploadedRun.Status.EXTRACTING,
+            UploadedRun.Status.READY,
+            UploadedRun.Status.QUEUED,
+            UploadedRun.Status.IMPORTED,
+        }:
+            return uploaded_run
+        if uploaded_run.status != UploadedRun.Status.RECEIVING:
+            raise UploadValidationError("Upload cannot be completed from its current status.")
+
+        received_chunks = _received_chunk_indexes(uploaded_run.chunks_root)
+        expected_chunks = list(range(uploaded_run.total_chunks))
+        if received_chunks != expected_chunks:
+            missing_chunks = sorted(set(expected_chunks) - set(received_chunks))
+            raise UploadValidationError(
+                f"Upload is missing chunk(s): {', '.join(str(index) for index in missing_chunks)}"
+            )
+
+        received_bytes = _received_chunk_bytes(uploaded_run.chunks_root, received_chunks)
+        if received_bytes != uploaded_run.size_bytes:
+            raise UploadValidationError(
+                f"Uploaded chunk bytes total {received_bytes}, expected {uploaded_run.size_bytes}."
+            )
+
+        uploaded_run.received_chunks = received_chunks
+        uploaded_run.received_bytes = received_bytes
+        uploaded_run.status = UploadedRun.Status.RECEIVED
+        uploaded_run.save(update_fields=["received_chunks", "received_bytes", "status", "updated_at"])
+        return uploaded_run
+
+
 def _validate_chunk(uploaded_run: UploadedRun, chunk_index: int, chunk: UploadedFile) -> None:
     if uploaded_run.status != UploadedRun.Status.RECEIVING:
         raise UploadValidationError("Upload is not accepting chunks.")
