@@ -66,7 +66,6 @@ services:
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0}
       DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-}
       DJANGO_TIME_ZONE: ${DJANGO_TIME_ZONE:-UTC}
-      no_admin: ${no_admin:-0}
       DATABASE_ENGINE: ${DATABASE_ENGINE:-django.db.backends.postgresql}
       DATABASE_NAME: ${POSTGRES_DB:-homorepeat}
       DATABASE_USER: ${POSTGRES_USER:-homorepeat}
@@ -108,6 +107,7 @@ services:
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0}
       DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-}
       DJANGO_TIME_ZONE: ${DJANGO_TIME_ZONE:-UTC}
+      no_admin: ${no_admin:-0}
       DATABASE_ENGINE: ${DATABASE_ENGINE:-django.db.backends.postgresql}
       DATABASE_NAME: ${POSTGRES_DB:-homorepeat}
       DATABASE_USER: ${POSTGRES_USER:-homorepeat}
