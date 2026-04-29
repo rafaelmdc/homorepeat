@@ -14,8 +14,9 @@ from django.views import View
 from django.views.generic import FormView, ListView
 
 from .forms import ImportRunForm
-from .models import ImportBatch
+from .models import ImportBatch, UploadedRun
 from .services import dispatch_import_batch, enqueue_published_run
+from .services.uploads import UploadValidationError, start_upload, store_chunk
 
 
 @dataclass(frozen=True)
@@ -108,14 +109,66 @@ class UploadRunStartView(StaffOnlyMixin, View):
     http_method_names = ["post"]
 
     def post(self, request):
-        return _upload_endpoint_not_implemented("Upload start is not implemented yet.")
+        try:
+            payload = json.loads(request.body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return _json_error("Request body must be valid JSON.")
+
+        try:
+            uploaded_run = start_upload(
+                filename=str(payload.get("filename", "")),
+                size_bytes=int(payload.get("size_bytes", 0)),
+                total_chunks=int(payload.get("total_chunks", 0)),
+            )
+        except (TypeError, ValueError, UploadValidationError) as exc:
+            return _json_error(str(exc))
+
+        return JsonResponse(
+            {
+                "ok": True,
+                "upload_id": str(uploaded_run.upload_id),
+                "chunk_size_bytes": uploaded_run.chunk_size_bytes,
+                "received_chunks": uploaded_run.received_chunks,
+                "status": uploaded_run.status,
+            }
+        )
 
 
 class UploadRunChunkView(StaffOnlyMixin, View):
     http_method_names = ["post"]
 
     def post(self, request, upload_id):
-        return _upload_endpoint_not_implemented("Upload chunk storage is not implemented yet.")
+        try:
+            chunk_index = int(request.POST.get("chunk_index", ""))
+        except ValueError:
+            return _json_error("chunk_index must be an integer.")
+
+        chunk = request.FILES.get("chunk")
+        if chunk is None:
+            return _json_error("Missing uploaded chunk file.")
+
+        try:
+            uploaded_run = store_chunk(
+                upload_id=upload_id,
+                chunk_index=chunk_index,
+                chunk=chunk,
+            )
+        except UploadedRun.DoesNotExist:
+            return _json_error("Upload was not found.", status=404)
+        except UploadValidationError as exc:
+            return _json_error(str(exc))
+
+        return JsonResponse(
+            {
+                "ok": True,
+                "upload_id": str(uploaded_run.upload_id),
+                "received_chunks": uploaded_run.received_chunks,
+                "received_count": len(uploaded_run.received_chunks),
+                "total_chunks": uploaded_run.total_chunks,
+                "received_bytes": uploaded_run.received_bytes,
+                "status": uploaded_run.status,
+            }
+        )
 
 
 class UploadRunCompleteView(StaffOnlyMixin, View):
@@ -126,12 +179,16 @@ class UploadRunCompleteView(StaffOnlyMixin, View):
 
 
 def _upload_endpoint_not_implemented(message: str) -> JsonResponse:
+    return _json_error(message, status=501)
+
+
+def _json_error(message: str, *, status: int = 400) -> JsonResponse:
     return JsonResponse(
         {
             "ok": False,
             "error": message,
         },
-        status=501,
+        status=status,
     )
 
 
