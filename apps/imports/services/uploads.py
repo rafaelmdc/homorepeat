@@ -3,6 +3,8 @@ from __future__ import annotations
 import math
 import os
 import shutil
+import stat
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID
@@ -168,6 +170,66 @@ def assemble_uploaded_zip(*, uploaded_run_id: int) -> UploadedRun:
     return uploaded_run
 
 
+def extract_uploaded_zip(*, uploaded_run_id: int) -> UploadedRun:
+    uploaded_run = assemble_uploaded_zip(uploaded_run_id=uploaded_run_id)
+    if uploaded_run.status in {
+        UploadedRun.Status.READY,
+        UploadedRun.Status.QUEUED,
+        UploadedRun.Status.IMPORTED,
+    }:
+        return uploaded_run
+    if uploaded_run.status != UploadedRun.Status.EXTRACTING:
+        raise UploadValidationError("Upload is not ready for extraction.")
+    if not zipfile.is_zipfile(uploaded_run.zip_path):
+        raise UploadValidationError("Uploaded file is not a valid zip archive.")
+
+    if uploaded_run.extracted_root.exists():
+        shutil.rmtree(uploaded_run.extracted_root)
+    uploaded_run.extracted_root.mkdir(parents=True)
+
+    total_extracted_bytes = 0
+    extracted_files = 0
+    extracted_root = uploaded_run.extracted_root.resolve()
+
+    try:
+        with zipfile.ZipFile(uploaded_run.zip_path) as archive:
+            members = archive.infolist()
+            if len(members) > settings.HOMOREPEAT_UPLOAD_MAX_FILES:
+                raise UploadValidationError(
+                    f"Zip contains {len(members)} entries; maximum is {settings.HOMOREPEAT_UPLOAD_MAX_FILES}."
+                )
+
+            for member in members:
+                _validate_zip_member(member, extracted_root)
+                if member.is_dir():
+                    target_dir = (uploaded_run.extracted_root / member.filename).resolve()
+                    _ensure_within_root(target_dir, extracted_root)
+                    target_dir.mkdir(parents=True, exist_ok=True)
+                    continue
+
+                total_extracted_bytes += member.file_size
+                if total_extracted_bytes > settings.HOMOREPEAT_UPLOAD_MAX_EXTRACTED_BYTES:
+                    raise UploadValidationError("Zip extracted size exceeds the configured limit.")
+                extracted_files += 1
+                if extracted_files > settings.HOMOREPEAT_UPLOAD_MAX_FILES:
+                    raise UploadValidationError(
+                        f"Zip contains more than {settings.HOMOREPEAT_UPLOAD_MAX_FILES} files."
+                    )
+
+                target_path = (uploaded_run.extracted_root / member.filename).resolve()
+                _ensure_within_root(target_path, extracted_root)
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(member) as source, target_path.open("wb") as destination:
+                    shutil.copyfileobj(source, destination)
+    except zipfile.BadZipFile as exc:
+        raise UploadValidationError("Uploaded file is not a valid zip archive.") from exc
+    except UploadValidationError:
+        shutil.rmtree(uploaded_run.extracted_root, ignore_errors=True)
+        raise
+
+    return uploaded_run
+
+
 def _validate_chunk(uploaded_run: UploadedRun, chunk_index: int, chunk: UploadedFile) -> None:
     if uploaded_run.status != UploadedRun.Status.RECEIVING:
         raise UploadValidationError("Upload is not accepting chunks.")
@@ -191,3 +253,23 @@ def _received_chunk_indexes(chunks_root: Path) -> list[int]:
 
 def _received_chunk_bytes(chunks_root: Path, received_chunks: list[int]) -> int:
     return sum((chunks_root / f"{index}.part").stat().st_size for index in received_chunks)
+
+
+def _validate_zip_member(member: zipfile.ZipInfo, extracted_root: Path) -> None:
+    member_path = Path(member.filename)
+    if member_path.is_absolute():
+        raise UploadValidationError("Zip archive contains an absolute path.")
+    if ".." in member_path.parts:
+        raise UploadValidationError("Zip archive contains path traversal.")
+
+    file_type = stat.S_IFMT(member.external_attr >> 16)
+    if file_type in {stat.S_IFLNK, stat.S_IFCHR, stat.S_IFBLK, stat.S_IFIFO, stat.S_IFSOCK}:
+        raise UploadValidationError("Zip archive contains a symlink or special file.")
+
+    target_path = (extracted_root / member.filename).resolve()
+    _ensure_within_root(target_path, extracted_root)
+
+
+def _ensure_within_root(path: Path, root: Path) -> None:
+    if path != root and root not in path.parents:
+        raise UploadValidationError("Zip archive contains a path outside the extraction root.")

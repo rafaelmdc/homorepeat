@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from io import BytesIO
+import stat
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
+import zipfile
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -17,6 +20,39 @@ from apps.imports.tasks import extract_uploaded_run, reset_stale_import_batches,
 
 class RetryTriggered(Exception):
     pass
+
+
+def _zip_bytes(files: dict[str, str]) -> bytes:
+    payload = BytesIO()
+    with zipfile.ZipFile(payload, mode="w") as archive:
+        for name, content in files.items():
+            archive.writestr(name, content)
+    return payload.getvalue()
+
+
+def _zip_bytes_with_symlink(name: str, target: str) -> bytes:
+    payload = BytesIO()
+    info = zipfile.ZipInfo(name)
+    info.create_system = 3
+    info.external_attr = (stat.S_IFLNK | 0o777) << 16
+    with zipfile.ZipFile(payload, mode="w") as archive:
+        archive.writestr(info, target)
+    return payload.getvalue()
+
+
+def _create_received_upload_from_zip_bytes(original_filename: str, zip_payload: bytes) -> UploadedRun:
+    uploaded_run = UploadedRun.objects.create(
+        original_filename=original_filename,
+        status=UploadedRun.Status.RECEIVED,
+        size_bytes=len(zip_payload),
+        received_bytes=len(zip_payload),
+        chunk_size_bytes=max(len(zip_payload), 1),
+        total_chunks=1,
+        received_chunks=[0],
+    )
+    uploaded_run.chunks_root.mkdir(parents=True)
+    (uploaded_run.chunks_root / "0.part").write_bytes(zip_payload)
+    return uploaded_run
 
 
 class ImportTaskTests(TestCase):
@@ -82,48 +118,55 @@ class ImportTaskTests(TestCase):
             with self.assertRaises(ImportContractError):
                 run_import_batch(batch.pk)
 
-    def test_extract_uploaded_run_assembles_zip_and_marks_extracting(self):
+    def test_extract_uploaded_run_assembles_zip_and_extracts_contents(self):
         with TemporaryDirectory() as tempdir:
             with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
+                zip_payload = _zip_bytes({"publish/data.txt": "ok"})
+                split_at = 10
                 uploaded_run = UploadedRun.objects.create(
                     original_filename="run-alpha.zip",
                     status=UploadedRun.Status.RECEIVED,
-                    size_bytes=11,
-                    received_bytes=11,
+                    size_bytes=len(zip_payload),
+                    received_bytes=len(zip_payload),
                     chunk_size_bytes=10,
                     total_chunks=2,
                     received_chunks=[0, 1],
                 )
                 uploaded_run.chunks_root.mkdir(parents=True)
-                (uploaded_run.chunks_root / "0.part").write_bytes(b"abcdefghij")
-                (uploaded_run.chunks_root / "1.part").write_bytes(b"k")
+                (uploaded_run.chunks_root / "0.part").write_bytes(zip_payload[:split_at])
+                (uploaded_run.chunks_root / "1.part").write_bytes(zip_payload[split_at:])
 
                 extract_uploaded_run(uploaded_run.pk)
 
                 uploaded_run.refresh_from_db()
                 self.assertEqual(uploaded_run.status, UploadedRun.Status.EXTRACTING)
-                self.assertEqual(uploaded_run.zip_path.read_bytes(), b"abcdefghijk")
+                self.assertEqual(uploaded_run.zip_path.read_bytes(), zip_payload)
+                self.assertEqual((uploaded_run.extracted_root / "publish" / "data.txt").read_text(), "ok")
 
-    def test_extract_uploaded_run_is_idempotent_when_zip_already_assembled(self):
+    def test_extract_uploaded_run_uses_existing_assembled_zip(self):
         with TemporaryDirectory() as tempdir:
             with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
+                zip_payload = _zip_bytes({"publish/data.txt": "already assembled"})
                 uploaded_run = UploadedRun.objects.create(
                     original_filename="run-alpha.zip",
                     status=UploadedRun.Status.EXTRACTING,
-                    size_bytes=11,
-                    received_bytes=11,
+                    size_bytes=len(zip_payload),
+                    received_bytes=len(zip_payload),
                     chunk_size_bytes=10,
-                    total_chunks=2,
-                    received_chunks=[0, 1],
+                    total_chunks=1,
+                    received_chunks=[0],
                 )
                 uploaded_run.upload_root.mkdir(parents=True)
-                uploaded_run.zip_path.write_bytes(b"already assembled")
+                uploaded_run.zip_path.write_bytes(zip_payload)
 
                 extract_uploaded_run(uploaded_run.pk)
 
                 uploaded_run.refresh_from_db()
                 self.assertEqual(uploaded_run.status, UploadedRun.Status.EXTRACTING)
-                self.assertEqual(uploaded_run.zip_path.read_bytes(), b"already assembled")
+                self.assertEqual(
+                    (uploaded_run.extracted_root / "publish" / "data.txt").read_text(),
+                    "already assembled",
+                )
 
     def test_extract_uploaded_run_marks_invalid_upload_failed(self):
         with TemporaryDirectory() as tempdir:
@@ -145,6 +188,91 @@ class ImportTaskTests(TestCase):
                 uploaded_run.refresh_from_db()
                 self.assertEqual(uploaded_run.status, UploadedRun.Status.FAILED)
                 self.assertIn("missing chunk", uploaded_run.error_message)
+
+    def test_extract_uploaded_run_extracts_valid_zip(self):
+        with TemporaryDirectory() as tempdir:
+            with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
+                uploaded_run = _create_received_upload_from_zip_bytes(
+                    "run.zip",
+                    _zip_bytes({"publish/metadata/run_manifest.json": "{}"}),
+                )
+
+                extract_uploaded_run(uploaded_run.pk)
+
+                uploaded_run.refresh_from_db()
+                self.assertEqual(uploaded_run.status, UploadedRun.Status.EXTRACTING)
+                self.assertEqual(
+                    (uploaded_run.extracted_root / "publish" / "metadata" / "run_manifest.json").read_text(
+                        encoding="utf-8"
+                    ),
+                    "{}",
+                )
+
+    def test_extract_uploaded_run_rejects_path_traversal(self):
+        with TemporaryDirectory() as tempdir:
+            with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
+                uploaded_run = _create_received_upload_from_zip_bytes(
+                    "run.zip",
+                    _zip_bytes({"../evil.txt": "nope"}),
+                )
+
+                extract_uploaded_run(uploaded_run.pk)
+
+                uploaded_run.refresh_from_db()
+                self.assertEqual(uploaded_run.status, UploadedRun.Status.FAILED)
+                self.assertIn("path traversal", uploaded_run.error_message)
+                self.assertFalse((uploaded_run.upload_root / "evil.txt").exists())
+
+    @override_settings(HOMOREPEAT_UPLOAD_MAX_EXTRACTED_BYTES=5)
+    def test_extract_uploaded_run_rejects_extracted_size_over_limit(self):
+        with TemporaryDirectory() as tempdir:
+            with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
+                uploaded_run = _create_received_upload_from_zip_bytes(
+                    "run.zip",
+                    _zip_bytes({"publish/data.txt": "too-large"}),
+                )
+
+                extract_uploaded_run(uploaded_run.pk)
+
+                uploaded_run.refresh_from_db()
+                self.assertEqual(uploaded_run.status, UploadedRun.Status.FAILED)
+                self.assertIn("extracted size", uploaded_run.error_message)
+                self.assertFalse(uploaded_run.extracted_root.exists())
+
+    @override_settings(HOMOREPEAT_UPLOAD_MAX_FILES=1)
+    def test_extract_uploaded_run_rejects_file_count_over_limit(self):
+        with TemporaryDirectory() as tempdir:
+            with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
+                uploaded_run = _create_received_upload_from_zip_bytes(
+                    "run.zip",
+                    _zip_bytes(
+                        {
+                            "publish/one.txt": "one",
+                            "publish/two.txt": "two",
+                        }
+                    ),
+                )
+
+                extract_uploaded_run(uploaded_run.pk)
+
+                uploaded_run.refresh_from_db()
+                self.assertEqual(uploaded_run.status, UploadedRun.Status.FAILED)
+                self.assertIn("entries", uploaded_run.error_message)
+                self.assertFalse(uploaded_run.extracted_root.exists())
+
+    def test_extract_uploaded_run_rejects_symlink_member(self):
+        with TemporaryDirectory() as tempdir:
+            with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
+                uploaded_run = _create_received_upload_from_zip_bytes(
+                    "run.zip",
+                    _zip_bytes_with_symlink("publish/link", "target"),
+                )
+
+                extract_uploaded_run(uploaded_run.pk)
+
+                uploaded_run.refresh_from_db()
+                self.assertEqual(uploaded_run.status, UploadedRun.Status.FAILED)
+                self.assertIn("symlink or special file", uploaded_run.error_message)
 
     def test_reset_stale_import_batches_requeues_precommit_batch(self):
         batch = ImportBatch.objects.create(
