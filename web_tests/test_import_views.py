@@ -2,6 +2,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
+from uuid import uuid4
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -155,6 +156,38 @@ class ImportViewTests(TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertContains(response, "Publish root must contain metadata/run_manifest.json")
             self.assertEqual(ImportBatch.objects.count(), 0)
+
+    def test_upload_endpoints_require_staff_access(self):
+        upload_id = uuid4()
+        urls = [
+            reverse("imports:upload-start"),
+            reverse("imports:upload-chunk", kwargs={"upload_id": upload_id}),
+            reverse("imports:upload-complete", kwargs={"upload_id": upload_id}),
+        ]
+
+        for url in urls:
+            with self.subTest(url=url):
+                response = self.client.post(url)
+
+                self.assertEqual(response.status_code, 302)
+                self.assertIn(reverse("admin:login"), response["Location"])
+
+    def test_staff_upload_endpoints_return_json_placeholder_until_services_exist(self):
+        upload_id = uuid4()
+        endpoints = [
+            reverse("imports:upload-start"),
+            reverse("imports:upload-chunk", kwargs={"upload_id": upload_id}),
+            reverse("imports:upload-complete", kwargs={"upload_id": upload_id}),
+        ]
+
+        self.client.force_login(self.staff_user)
+        for endpoint in endpoints:
+            with self.subTest(endpoint=endpoint):
+                response = self.client.post(endpoint)
+
+                self.assertEqual(response.status_code, 501)
+                self.assertEqual(response["Content-Type"], "application/json")
+                self.assertFalse(response.json()["ok"])
 
     def test_imports_home_auto_refreshes_when_recent_batch_is_active(self):
         ImportBatch.objects.create(

@@ -7,9 +7,10 @@ from pathlib import Path
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, JsonResponse
 from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
+from django.views import View
 from django.views.generic import FormView, ListView
 
 from .forms import ImportRunForm
@@ -101,6 +102,37 @@ class ImportsHistoryView(StaffOnlyMixin, ListView):
         context["has_active_import_batches"] = has_active_import_batches
         context["enable_import_auto_refresh"] = has_active_import_batches
         return context
+
+
+class UploadRunStartView(StaffOnlyMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request):
+        return _upload_endpoint_not_implemented("Upload start is not implemented yet.")
+
+
+class UploadRunChunkView(StaffOnlyMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request, upload_id):
+        return _upload_endpoint_not_implemented("Upload chunk storage is not implemented yet.")
+
+
+class UploadRunCompleteView(StaffOnlyMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request, upload_id):
+        return _upload_endpoint_not_implemented("Upload completion is not implemented yet.")
+
+
+def _upload_endpoint_not_implemented(message: str) -> JsonResponse:
+    return JsonResponse(
+        {
+            "ok": False,
+            "error": message,
+        },
+        status=501,
+    )
 
 
 def _has_active_import_batches(import_batches) -> bool:
