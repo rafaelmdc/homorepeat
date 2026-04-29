@@ -45,6 +45,7 @@ class ImportViewTests(TestCase):
             self.assertContains(response, "run-alpha")
             self.assertContains(response, "run-beta")
             self.assertContains(response, "Latest import batches")
+            self.assertContains(response, "js/import_uploads.js")
 
     def test_discover_publish_runs_in_scans_supplied_root(self):
         with TemporaryDirectory() as tempdir:

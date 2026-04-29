@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Imports{% endblock %}
 {% block body_class %}imports-page{% endblock %}
@@ -199,4 +200,8 @@
     </table>
   </div>
 </section>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script src="{% static 'js/import_uploads.js' %}"></script>
 {% endblock %}
