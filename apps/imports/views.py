@@ -80,12 +80,16 @@ class ImportsHomeView(StaffOnlyMixin, FormView):
         context = super().get_context_data(**kwargs)
         recent_batches = list(ImportBatch.objects.select_related("pipeline_run")[:8])
         has_active_import_batches = _has_active_import_batches(recent_batches)
+        has_active_uploaded_runs = _has_active_uploaded_runs()
         context["detected_publish_runs"] = _discover_publish_runs()
         context["runs_root"] = str(_runs_root())
         context["recent_batches"] = recent_batches
         context["uploaded_runs"] = UploadedRun.objects.select_related("import_batch").order_by("-created_at")[:10]
         context["has_active_import_batches"] = has_active_import_batches
-        context["enable_import_auto_refresh"] = has_active_import_batches and self.request.method == "GET"
+        context["has_active_uploaded_runs"] = has_active_uploaded_runs
+        context["enable_import_auto_refresh"] = (
+            has_active_import_batches or has_active_uploaded_runs
+        ) and self.request.method == "GET"
         context["history_url"] = reverse("imports:history")
         context["upload_start_url"] = reverse("imports:upload-start")
         context["upload_chunk_url_template"] = _upload_url_template("imports:upload-chunk")
@@ -228,6 +232,16 @@ def _upload_url_template(route_name: str) -> str:
 def _has_active_import_batches(import_batches) -> bool:
     active_statuses = {ImportBatch.Status.PENDING, ImportBatch.Status.RUNNING}
     return any(batch.status in active_statuses for batch in import_batches)
+
+
+def _has_active_uploaded_runs() -> bool:
+    active_statuses = {
+        UploadedRun.Status.RECEIVING,
+        UploadedRun.Status.RECEIVED,
+        UploadedRun.Status.EXTRACTING,
+        UploadedRun.Status.QUEUED,
+    }
+    return UploadedRun.objects.filter(status__in=active_statuses).exists()
 
 
 def _runs_root() -> Path:

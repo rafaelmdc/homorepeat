@@ -251,6 +251,55 @@ class ImportViewTests(TestCase):
         self.assertContains(response, "import-stepper")
         self.assertContains(response, "10/20")
 
+    def test_imports_home_auto_refreshes_when_uploaded_run_is_active(self):
+        active_statuses = [
+            UploadedRun.Status.RECEIVING,
+            UploadedRun.Status.RECEIVED,
+            UploadedRun.Status.EXTRACTING,
+            UploadedRun.Status.QUEUED,
+        ]
+
+        for status in active_statuses:
+            UploadedRun.objects.all().delete()
+            UploadedRun.objects.create(
+                original_filename=f"{status}.zip",
+                status=status,
+                size_bytes=100,
+                received_bytes=50,
+                total_chunks=1,
+            )
+
+            self.client.force_login(self.staff_user)
+            response = self.client.get(reverse("imports:home"))
+
+            with self.subTest(status=status):
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, "data-import-auto-refresh")
+
+    def test_imports_home_does_not_auto_refresh_for_settled_uploaded_runs(self):
+        settled_statuses = [
+            UploadedRun.Status.READY,
+            UploadedRun.Status.IMPORTED,
+            UploadedRun.Status.FAILED,
+        ]
+
+        for status in settled_statuses:
+            UploadedRun.objects.all().delete()
+            UploadedRun.objects.create(
+                original_filename=f"{status}.zip",
+                status=status,
+                size_bytes=100,
+                received_bytes=100,
+                total_chunks=1,
+            )
+
+            self.client.force_login(self.staff_user)
+            response = self.client.get(reverse("imports:home"))
+
+            with self.subTest(status=status):
+                self.assertEqual(response.status_code, 200)
+                self.assertNotContains(response, "data-import-auto-refresh")
+
     def test_import_history_shows_completed_and_failed_batches(self):
         with TemporaryDirectory() as tempdir:
             publish_root = build_minimal_publish_root(Path(tempdir) / "run-alpha", run_id="run-alpha")
