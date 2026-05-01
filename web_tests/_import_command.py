@@ -4,7 +4,6 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django.core.management import CommandError, call_command
-from django.core.management.base import OutputWrapper
 from django.test import TestCase
 
 from apps.browser.models import (
@@ -255,58 +254,6 @@ class ImportRunCommandTests(TestCase):
                     ("call_1", "Q", "CAG", 0.9090909091),
                 ],
             )
-
-    def test_repeat_call_codon_usage_copy_resolves_refs_before_opening_copy(self):
-        from apps.imports.services.import_run.entities import _create_repeat_call_codon_usages_streamed
-
-        batch = ImportBatch.objects.create(
-            source_path="/tmp/publish",
-            status=ImportBatch.Status.RUNNING,
-            phase="importing_rows",
-        )
-        event_order: list[str] = []
-
-        def fake_load_repeat_call_refs(_pipeline_run, batch_rows):
-            event_order.append("load")
-            self.assertEqual(len(batch_rows), 1)
-            return {
-                "call_1": (1, "pure", "Q", "seq_1", "prot_1"),
-            }
-
-        def fake_copy_rows_to_model(_model, _field_names, rows, **_kwargs):
-            event_order.append("copy_start")
-            materialized_rows = list(rows)
-            event_order.append("copy_end")
-            self.assertEqual(len(materialized_rows), 1)
-            return len(materialized_rows)
-
-        with patch(
-            "apps.imports.services.import_run.entities._load_repeat_call_refs_for_codon_usage_rows",
-            side_effect=fake_load_repeat_call_refs,
-        ), patch(
-            "apps.imports.services.import_run.entities._copy_rows_to_model",
-            side_effect=fake_copy_rows_to_model,
-        ):
-            count = _create_repeat_call_codon_usages_streamed(
-                batch,
-                object(),
-                [
-                    {
-                        "call_id": "call_1",
-                        "method": "pure",
-                        "repeat_residue": "Q",
-                        "sequence_id": "seq_1",
-                        "protein_id": "prot_1",
-                        "amino_acid": "Q",
-                        "codon": "CAG",
-                        "codon_count": 10,
-                        "codon_fraction": "1.0",
-                    },
-                ],
-            )
-
-        self.assertEqual(count, 1)
-        self.assertEqual(event_order, ["load", "copy_start", "copy_end"])
 
     def test_import_run_keeps_matched_sequences_and_proteins_but_counts_all_batch_proteins(self):
         with TemporaryDirectory() as tempdir:
@@ -860,20 +807,6 @@ class ImportRunCommandTests(TestCase):
         call_command("import_run", next_pending=True, stdout=stdout)
 
         self.assertIn("No pending import batches were available.", stdout.getvalue())
-
-    def test_import_run_does_not_depend_on_fully_materialized_parser(self):
-        with TemporaryDirectory() as tempdir:
-            publish_root = build_minimal_publish_root(Path(tempdir), run_id="run-streamed")
-            stdout = StringIO()
-
-            with patch(
-                "apps.imports.services.import_run.load_published_run",
-                side_effect=AssertionError("full parser should not be used by runtime import"),
-            ):
-                call_command("import_run", publish_root=str(publish_root), stdout=stdout)
-
-            self.assertIn("Imported run run-streamed", stdout.getvalue())
-            self.assertTrue(PipelineRun.objects.filter(run_id="run-streamed").exists())
 
     def test_import_run_reports_progress_during_transactional_import_phase(self):
         recorded_payloads: list[dict[str, object]] = []

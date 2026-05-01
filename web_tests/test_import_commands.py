@@ -9,5 +9,5 @@ TEST_NAMES = [
 ]
 
 
-def load_tests(loader, tests, pattern):
+def load_tests(_loader, _tests, _pattern):
     return build_named_test_suite(ImportRunCommandTests, TEST_NAMES)

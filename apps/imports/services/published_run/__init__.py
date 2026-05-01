@@ -35,7 +35,7 @@ from .iterators import (
     iter_run_parameter_rows,
     iter_taxonomy_rows,
 )
-from .load import inspect_published_run, load_published_run
+from .load import inspect_published_run
 
 __all__ = [
     "ACCESSION_CALL_COUNT_REQUIRED_COLUMNS",
@@ -71,6 +71,5 @@ __all__ = [
     "iter_run_level_normalization_warning_rows",
     "iter_run_parameter_rows",
     "iter_taxonomy_rows",
-    "load_published_run",
     "resolve_v2_artifacts",
 ]

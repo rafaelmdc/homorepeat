@@ -9,7 +9,6 @@ from apps.browser.models import (
     AccessionStatus,
     AcquisitionBatch,
     CanonicalRepeatCall,
-    CanonicalRepeatCallCodonUsage,
     DownloadManifestEntry,
     Genome,
     NormalizationWarning,

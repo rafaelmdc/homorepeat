@@ -7,7 +7,6 @@ from typing import Iterable
 from django.db import DEFAULT_DB_ALIAS, connections
 
 
-BULK_CREATE_BATCH_SIZE = 5000
 COPY_FLUSH_ROW_COUNT = 10000
 COPY_FLUSH_BYTE_COUNT = 8 * 1024 * 1024
 
@@ -68,20 +67,6 @@ def copy_rows_to_model(
             flush_buffer(copy)
 
     return count
-
-
-def analyze_models(models: Iterable[type]) -> bool:
-    """Run ANALYZE on each model's table. No-op and returns False on non-PostgreSQL."""
-    connection = connections[DEFAULT_DB_ALIAS]
-    if connection.vendor != "postgresql":
-        return False
-    try:
-        with connection.cursor() as cursor:
-            for model in models:
-                cursor.execute(f"ANALYZE {connection.ops.quote_name(model._meta.db_table)}")
-    except Exception:
-        return False
-    return True
 
 
 def _serialize_copy_row(row: tuple[object, ...]) -> tuple[str, ...]:

@@ -26,13 +26,13 @@ class NoAdminUser:
     def get_short_name(self):
         return self.username
 
-    def has_perm(self, perm, obj=None):
+    def has_perm(self, _perm, obj=None):
         return True
 
-    def has_perms(self, perm_list, obj=None):
+    def has_perms(self, _perm_list, obj=None):
         return True
 
-    def has_module_perms(self, app_label):
+    def has_module_perms(self, _app_label):
         return True
 
     def get_all_permissions(self, obj=None):

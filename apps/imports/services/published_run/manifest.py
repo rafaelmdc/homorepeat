@@ -5,8 +5,6 @@ from pathlib import Path
 from typing import Any
 
 from .contracts import (
-    ACQUISITION_VALIDATION_COUNT_KEYS,
-    ACQUISITION_VALIDATION_REQUIRED_KEYS,
     ImportContractError,
     MANIFEST_REQUIRED_KEYS,
     V2ArtifactPaths,
@@ -63,39 +61,6 @@ def _ensure_v2_contract(manifest: dict[str, Any]) -> None:
         raise ImportContractError(
             f"Unsupported publish_contract_version={value!r}; expected 2."
         )
-
-
-def _read_acquisition_validation_payload(path: Path) -> dict[str, Any]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ImportContractError(f"Malformed acquisition validation JSON: {path}") from exc
-
-    if not isinstance(payload, dict):
-        raise ImportContractError(f"Acquisition validation must contain a top-level JSON object: {path}")
-
-    missing = [key for key in ACQUISITION_VALIDATION_REQUIRED_KEYS if key not in payload]
-    if missing:
-        raise ImportContractError(
-            f"Acquisition validation is missing required keys: {', '.join(missing)}"
-        )
-
-    counts = payload.get("counts")
-    if not isinstance(counts, dict):
-        raise ImportContractError(f"Acquisition validation counts must be a JSON object: {path}")
-
-    missing_count_keys = [key for key in ACQUISITION_VALIDATION_COUNT_KEYS if key not in counts]
-    if missing_count_keys:
-        raise ImportContractError(
-            f"Acquisition validation counts are missing required keys: {', '.join(missing_count_keys)}"
-        )
-
-    scope = _string_value(payload.get("scope"))
-    if scope != "run":
-        raise ImportContractError(
-            f"Acquisition validation scope must be 'run' for publish contract v2: {path}"
-        )
-    return payload
 
 
 def _require_manifest_value(manifest: dict[str, Any], key: str) -> str:

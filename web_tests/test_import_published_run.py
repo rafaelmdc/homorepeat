@@ -16,7 +16,6 @@ from apps.imports.services.published_run import (
     iter_codon_usage_rows,
     iter_run_level_genome_rows,
     iter_run_parameter_rows,
-    load_published_run,
 )
 
 from .support import (
@@ -264,10 +263,3 @@ class PublishedRunImportServiceTests(SimpleTestCase):
             self.assertEqual(run_parameter_rows[0]["method"], "seed_extend")
             self.assertEqual(run_parameter_rows[0]["repeat_residue"], "Q")
             self.assertEqual(repeat_call_rows[0]["method"], "seed_extend")
-
-    def test_load_published_run_is_retired_to_avoid_materializing_large_runs(self):
-        with TemporaryDirectory() as tempdir:
-            publish_root = build_minimal_v2_publish_root(Path(tempdir))
-
-            with self.assertRaisesRegex(ImportContractError, "retired"):
-                load_published_run(publish_root)

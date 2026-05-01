@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from itertools import chain
 
+from apps.imports.models import ImportBatch
+
 from .import_batches import latest_completed_import_batch_for_run
 from .models import PipelineRun
 

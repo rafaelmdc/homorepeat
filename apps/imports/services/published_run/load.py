@@ -3,10 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .artifacts import resolve_v2_artifacts
-from .contracts import (
-    ImportContractError,
-    InspectedPublishedRun,
-)
+from .contracts import InspectedPublishedRun
 from .manifest import (
     _ensure_v2_contract,
     _normalize_pipeline_run,
@@ -23,11 +20,4 @@ def inspect_published_run(publish_root: Path | str) -> InspectedPublishedRun:
         artifact_paths=artifact_paths,
         manifest=manifest,
         pipeline_run=_normalize_pipeline_run(manifest, artifact_paths),
-    )
-
-
-def load_published_run(publish_root: Path | str):
-    raise ImportContractError(
-        "load_published_run() is retired because it materializes large published-run artifacts in memory. "
-        "Use inspect_published_run() and the iter_* row helpers instead."
     )

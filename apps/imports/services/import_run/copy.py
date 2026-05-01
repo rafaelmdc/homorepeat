@@ -6,94 +6,10 @@ from typing import Iterable
 
 from django.db import DEFAULT_DB_ALIAS, connections
 
-from apps.imports.models import ImportBatch
-
-from .state import ImportPhase, _ImportBatchStateReporter, _set_batch_state
-
 
 BULK_CREATE_BATCH_SIZE = 5000
 COPY_FLUSH_ROW_COUNT = 10000
 COPY_FLUSH_BYTE_COUNT = 8 * 1024 * 1024
-
-
-def _copy_rows_to_model(
-    model,
-    field_names: list[str],
-    rows: Iterable[tuple[object, ...]],
-    *,
-    batch: ImportBatch | None = None,
-    reporter: _ImportBatchStateReporter | None = None,
-    progress_message: str = "",
-    progress_key: str = "rows",
-    extra_progress: dict[str, object] | None = None,
-) -> int | None:
-    connection = connections[DEFAULT_DB_ALIAS]
-    if connection.vendor != "postgresql":
-        return None
-
-    connection.ensure_connection()
-    with connection.cursor() as cursor_wrapper:
-        raw_cursor = getattr(cursor_wrapper, "cursor", None)
-        if raw_cursor is None or not hasattr(raw_cursor, "copy"):
-            return None
-
-        quoted_table = connection.ops.quote_name(model._meta.db_table)
-        quoted_columns = ", ".join(
-            connection.ops.quote_name(model._meta.get_field(field_name).column)
-            for field_name in field_names
-        )
-        count = 0
-        buffer = StringIO()
-        writer = csv.writer(
-            buffer,
-            delimiter="\t",
-            quotechar='"',
-            lineterminator="\n",
-            quoting=csv.QUOTE_MINIMAL,
-        )
-
-        def flush_buffer(copy) -> None:
-            payload = buffer.getvalue()
-            if not payload:
-                return
-            copy.write(payload)
-            buffer.seek(0)
-            buffer.truncate(0)
-
-        with raw_cursor.copy(
-            f"COPY {quoted_table} ({quoted_columns}) FROM STDIN WITH (FORMAT CSV, DELIMITER E'\\t', NULL '\\N')"
-        ) as copy:
-            for row in rows:
-                writer.writerow(_serialize_copy_row(row))
-                count += 1
-                if count % COPY_FLUSH_ROW_COUNT == 0 or buffer.tell() >= COPY_FLUSH_BYTE_COUNT:
-                    flush_buffer(copy)
-                if batch is not None and reporter is not None and count % BULK_CREATE_BATCH_SIZE == 0:
-                    progress_payload = {progress_key: count}
-                    if extra_progress:
-                        progress_payload.update(extra_progress)
-                    progress_payload["message"] = progress_message
-                    _set_batch_state(
-                        batch,
-                        phase=ImportPhase.IMPORTING,
-                        progress_payload=progress_payload,
-                        reporter=reporter,
-                    )
-            flush_buffer(copy)
-
-    if batch is not None and reporter is not None:
-        progress_payload = {progress_key: count}
-        if extra_progress:
-            progress_payload.update(extra_progress)
-        progress_payload["message"] = progress_message
-        _set_batch_state(
-            batch,
-            phase=ImportPhase.IMPORTING,
-            progress_payload=progress_payload,
-            reporter=reporter,
-            force=True,
-        )
-    return count
 
 
 def _copy_rows_to_table(

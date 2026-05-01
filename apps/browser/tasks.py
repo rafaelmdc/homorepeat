@@ -2,7 +2,7 @@
 
 Queue routing (declared in CELERY_TASK_ROUTES in config/settings.py):
   payload_graph — run_post_import_warmup, warm_stats_bundle
-  downloads     — generate_download_artifact, expire_stale_download_builds
+  downloads     — expire_stale_download_builds
 """
 import logging
 from datetime import timedelta
@@ -164,18 +164,3 @@ def expire_stale_download_builds() -> dict[str, int]:
     if stuck or aged:
         logger.info("download_builds expired: stuck=%d aged=%d", stuck, aged)
     return {"stuck": stuck, "aged": aged}
-
-
-@shared_task(bind=True, max_retries=3)
-def generate_download_artifact(self, download_build_id: int) -> None:
-    """Build a download artifact file on the downloads queue.
-
-    Not yet activated for any download type. To activate: add a DownloadBuildType
-    to _ASYNC_ARTIFACT_TYPES in apps/browser/downloads.py, implement the
-    artifact generation logic below, and wire the task dispatch in the view.
-    """
-    raise NotImplementedError(
-        "generate_download_artifact is not yet wired to any download type. "
-        "Activate by adding a DownloadBuildType to _ASYNC_ARTIFACT_TYPES in "
-        "apps/browser/downloads.py and implementing artifact generation here."
-    )

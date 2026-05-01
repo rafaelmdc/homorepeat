@@ -1,7 +1,6 @@
 from .published_run import (
     ImportContractError,
     V2ArtifactPaths,
-    load_published_run,
     resolve_v2_artifacts,
 )
 from .import_run import (
@@ -22,7 +21,6 @@ __all__ = [
     "dispatch_import_batch",
     "enqueue_published_run",
     "import_published_run",
-    "load_published_run",
     "process_import_batch",
     "process_next_pending_import_batch",
     "resolve_v2_artifacts",

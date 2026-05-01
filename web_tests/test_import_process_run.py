@@ -19,11 +19,10 @@ TEST_NAMES = [
     "test_import_run_still_validates_unreferenced_inventory_rows",
     "test_import_run_preserves_full_taxonomy_before_storing_closure",
     "test_import_run_stores_residue_scoped_run_params",
-    "test_import_run_does_not_depend_on_fully_materialized_parser",
     "test_import_run_reports_progress_during_transactional_import_phase",
     "test_import_run_triggers_post_load_analyze_hook",
 ]
 
 
-def load_tests(loader, tests, pattern):
+def load_tests(_loader, _tests, _pattern):
     return build_named_test_suite(ImportRunCommandTests, TEST_NAMES)

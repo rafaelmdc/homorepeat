@@ -21,7 +21,6 @@ from apps.browser.stats import (
     build_codon_overview_payload,
     build_group_codon_species_call_fraction_queryset,
     build_group_length_counts_queryset,
-    build_filtered_repeat_call_queryset,
     build_group_length_values_queryset,
     build_length_inspect_bundle,
     build_length_inspect_payload,

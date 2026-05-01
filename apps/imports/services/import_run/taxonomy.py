@@ -128,14 +128,3 @@ def _require_taxon(
             f"{label.capitalize()} row references missing taxon_id {natural_taxon_id!r}"
         )
     return taxon
-
-
-def _resolve_optional_taxon_pk(
-    natural_taxon_id: object,
-    fallback_taxon_pk: int,
-    taxon_by_taxon_id: dict[int, Taxon],
-    label: str,
-) -> int:
-    if natural_taxon_id is None:
-        return fallback_taxon_pk
-    return _require_taxon(natural_taxon_id, taxon_by_taxon_id, label).pk

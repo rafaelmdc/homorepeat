@@ -139,7 +139,6 @@ CELERY_TASK_ROUTES = {
     # All remaining imports tasks (run_import_batch, reset_stale_import_batches, …)
     "apps.imports.tasks.*": {"queue": "imports"},
     # Explicit downloads-queue tasks before the wildcard (wildcard → payload_graph).
-    "apps.browser.tasks.generate_download_artifact": {"queue": "downloads"},
     "apps.browser.tasks.expire_stale_download_builds": {"queue": "downloads"},
     "apps.browser.tasks.*": {"queue": "payload_graph"},
 }

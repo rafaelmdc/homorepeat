@@ -1,75 +1,19 @@
-"""Tests for Phase 5 and Phase 8: download service boundary and DownloadBuild model."""
+"""Tests for download build status and expiry bookkeeping."""
 
 import json
 from datetime import timedelta
 
-from django.test import TestCase, SimpleTestCase
+from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.browser.downloads import (
-    DownloadBuildType,
-    DownloadClassification,
-    classify_download,
-    get_or_create_download_build,
-)
 from apps.browser.models import DownloadBuild
-
-
-class DownloadClassificationTests(SimpleTestCase):
-    def test_all_list_page_types_are_sync(self):
-        list_types = [
-            DownloadBuildType.RUN_LIST,
-            DownloadBuildType.ACCESSION_LIST,
-            DownloadBuildType.GENOME_LIST,
-            DownloadBuildType.SEQUENCE_LIST,
-            DownloadBuildType.REPEAT_CALL_LIST,
-        ]
-        for build_type in list_types:
-            with self.subTest(build_type=build_type):
-                self.assertEqual(classify_download(build_type), DownloadClassification.SYNC)
-
-    def test_all_stats_types_are_sync(self):
-        stats_types = [
-            DownloadBuildType.LENGTH_SUMMARY,
-            DownloadBuildType.LENGTH_OVERVIEW_TYPICAL,
-            DownloadBuildType.LENGTH_OVERVIEW_TAIL,
-            DownloadBuildType.LENGTH_INSPECT,
-            DownloadBuildType.CODON_RATIO_SUMMARY,
-            DownloadBuildType.CODON_RATIO_OVERVIEW,
-            DownloadBuildType.CODON_RATIO_BROWSE,
-            DownloadBuildType.CODON_RATIO_INSPECT,
-            DownloadBuildType.CODON_LENGTH_SUMMARY,
-            DownloadBuildType.CODON_LENGTH_PREFERENCE,
-            DownloadBuildType.CODON_LENGTH_DOMINANCE,
-            DownloadBuildType.CODON_LENGTH_SHIFT,
-            DownloadBuildType.CODON_LENGTH_SIMILARITY,
-            DownloadBuildType.CODON_LENGTH_BROWSE,
-            DownloadBuildType.CODON_LENGTH_INSPECT,
-            DownloadBuildType.CODON_LENGTH_COMPARISON,
-        ]
-        for build_type in stats_types:
-            with self.subTest(build_type=build_type):
-                self.assertEqual(classify_download(build_type), DownloadClassification.SYNC)
-
-    def test_download_build_type_covers_all_payload_inventory_entries(self):
-        # Every download listed in payload_inventory.md must have a DownloadBuildType entry.
-        expected_values = {
-            "run_list", "accession_list", "genome_list", "sequence_list", "repeat_call_list",
-            "length.summary", "length.overview_typical", "length.overview_tail", "length.inspect",
-            "codon_ratio.summary", "codon_ratio.overview", "codon_ratio.browse", "codon_ratio.inspect",
-            "codon_length.summary", "codon_length.preference", "codon_length.dominance",
-            "codon_length.shift", "codon_length.similarity", "codon_length.browse",
-            "codon_length.inspect", "codon_length.comparison",
-        }
-        actual_values = {t.value for t in DownloadBuildType}
-        self.assertEqual(actual_values, expected_values)
 
 
 class DownloadBuildModelTests(TestCase):
     def _make_build(self, **kwargs):
         defaults = {
-            "build_type": DownloadBuildType.GENOME_LIST,
+            "build_type": "genome_list",
             "scope_key": "abc123",
             "catalog_version": 1,
         }
@@ -113,80 +57,6 @@ class DownloadBuildModelTests(TestCase):
         self.assertIn("5", str(build))
 
 
-class GetOrCreateDownloadBuildTests(TestCase):
-    def test_creates_new_build_when_none_exists(self):
-        build, created = get_or_create_download_build(
-            DownloadBuildType.GENOME_LIST, "scope-a", catalog_version=1
-        )
-        self.assertTrue(created)
-        self.assertEqual(build.status, DownloadBuild.Status.PENDING)
-        self.assertEqual(build.build_type, DownloadBuildType.GENOME_LIST)
-        self.assertEqual(build.scope_key, "scope-a")
-        self.assertEqual(build.catalog_version, 1)
-
-    def test_reuses_existing_pending_build(self):
-        existing = DownloadBuild.objects.create(
-            build_type=DownloadBuildType.GENOME_LIST,
-            scope_key="scope-b",
-            catalog_version=2,
-            status=DownloadBuild.Status.PENDING,
-        )
-        build, created = get_or_create_download_build(
-            DownloadBuildType.GENOME_LIST, "scope-b", catalog_version=2
-        )
-        self.assertFalse(created)
-        self.assertEqual(build.pk, existing.pk)
-
-    def test_reuses_existing_ready_build(self):
-        existing = DownloadBuild.objects.create(
-            build_type=DownloadBuildType.SEQUENCE_LIST,
-            scope_key="scope-c",
-            catalog_version=3,
-            status=DownloadBuild.Status.READY,
-        )
-        build, created = get_or_create_download_build(
-            DownloadBuildType.SEQUENCE_LIST, "scope-c", catalog_version=3
-        )
-        self.assertFalse(created)
-        self.assertEqual(build.pk, existing.pk)
-
-    def test_does_not_reuse_failed_build(self):
-        DownloadBuild.objects.create(
-            build_type=DownloadBuildType.GENOME_LIST,
-            scope_key="scope-d",
-            catalog_version=4,
-            status=DownloadBuild.Status.FAILED,
-        )
-        build, created = get_or_create_download_build(
-            DownloadBuildType.GENOME_LIST, "scope-d", catalog_version=4
-        )
-        self.assertTrue(created)
-
-    def test_does_not_reuse_expired_build(self):
-        DownloadBuild.objects.create(
-            build_type=DownloadBuildType.GENOME_LIST,
-            scope_key="scope-e",
-            catalog_version=4,
-            status=DownloadBuild.Status.EXPIRED,
-        )
-        build, created = get_or_create_download_build(
-            DownloadBuildType.GENOME_LIST, "scope-e", catalog_version=4
-        )
-        self.assertTrue(created)
-
-    def test_does_not_reuse_build_from_different_catalog_version(self):
-        DownloadBuild.objects.create(
-            build_type=DownloadBuildType.GENOME_LIST,
-            scope_key="scope-f",
-            catalog_version=1,
-            status=DownloadBuild.Status.READY,
-        )
-        build, created = get_or_create_download_build(
-            DownloadBuildType.GENOME_LIST, "scope-f", catalog_version=2
-        )
-        self.assertTrue(created)
-
-
 class DownloadBuildStatusViewTests(TestCase):
     def test_returns_404_for_unknown_pk(self):
         response = self.client.get(reverse("browser:downloadbuild-status", kwargs={"pk": 9999}))
@@ -194,7 +64,7 @@ class DownloadBuildStatusViewTests(TestCase):
 
     def test_returns_json_status_for_pending_build(self):
         build = DownloadBuild.objects.create(
-            build_type=DownloadBuildType.GENOME_LIST,
+            build_type="genome_list",
             scope_key="scope-test",
             catalog_version=1,
             status=DownloadBuild.Status.PENDING,
@@ -210,11 +80,9 @@ class DownloadBuildStatusViewTests(TestCase):
         self.assertIsNone(data["error_message"])
 
     def test_returns_json_status_for_ready_build(self):
-        from django.utils import timezone
-
         now = timezone.now()
         build = DownloadBuild.objects.create(
-            build_type=DownloadBuildType.SEQUENCE_LIST,
+            build_type="sequence_list",
             scope_key="scope-ready",
             catalog_version=2,
             status=DownloadBuild.Status.READY,
@@ -232,7 +100,7 @@ class DownloadBuildStatusViewTests(TestCase):
 
     def test_returns_json_status_for_failed_build(self):
         build = DownloadBuild.objects.create(
-            build_type=DownloadBuildType.GENOME_LIST,
+            build_type="genome_list",
             scope_key="scope-fail",
             catalog_version=1,
             status=DownloadBuild.Status.FAILED,
@@ -248,7 +116,7 @@ class DownloadBuildStatusViewTests(TestCase):
 class ExpireStaleDownloadBuildsTaskTests(TestCase):
     def _make_build(self, **kwargs):
         return DownloadBuild.objects.create(
-            build_type=DownloadBuildType.GENOME_LIST,
+            build_type="genome_list",
             scope_key="scope-expire",
             catalog_version=1,
             **kwargs,
@@ -330,18 +198,3 @@ class ExpireStaleDownloadBuildsTaskTests(TestCase):
         result = expire_stale_download_builds()
 
         self.assertEqual(result, {"stuck": 0, "aged": 0})
-
-
-class DownloadServiceBoundaryTests(SimpleTestCase):
-    """Verify that downloads.py does not import from the view layer."""
-
-    def test_downloads_module_has_no_view_layer_imports(self):
-        import apps.browser.downloads as mod
-        import sys
-
-        view_modules = [k for k in sys.modules if "apps.browser.views" in k]
-        for view_mod in view_modules:
-            self.assertFalse(
-                hasattr(mod, view_mod.split(".")[-1]),
-                f"downloads.py must not import from view layer ({view_mod})",
-            )

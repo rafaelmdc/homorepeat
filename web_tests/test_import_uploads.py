@@ -1,6 +1,5 @@
 import hashlib
 import json
-import shutil
 import uuid
 from collections import namedtuple
 from pathlib import Path
@@ -1319,7 +1318,7 @@ class UploadRunRecoveryViewTests(TestCase):
     def test_home_page_shows_import_button_for_ready_run(self):
         with TemporaryDirectory() as tempdir:
             with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
-                uploaded_run = UploadedRun.objects.create(
+                UploadedRun.objects.create(
                     original_filename="run.zip",
                     status=UploadedRun.Status.READY,
                     size_bytes=10,
