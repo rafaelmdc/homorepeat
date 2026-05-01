@@ -74,8 +74,9 @@ Set `HOMOREPEAT_RUNS_ROOT` in `.env` to the host directory containing run folder
 **Import queue UI for zipped runs:**
 
 Use **http://localhost:8000/imports/** to upload a zipped pipeline run when the
-run is not already mounted under `HOMOREPEAT_RUNS_ROOT`. The upload flow is
-intended for smaller zipped outputs; the default maximum zip size is 5 GB.
+run is not already mounted under `HOMOREPEAT_RUNS_ROOT`. The upload flow is a
+staff-only local-app protocol for zipped PAASTA publish outputs; the default
+maximum zip size is 5 GB.
 
 The zip must contain exactly one publish root with:
 
@@ -83,8 +84,9 @@ The zip must contain exactly one publish root with:
 publish/metadata/run_manifest.json
 ```
 
-The worker assembles uploaded chunks, safely extracts the zip, validates the
-publish contract, and copies the validated run into app-managed storage:
+The browser sends the file in chunks to the Django app. The upload worker then
+assembles the chunks, safely extracts the zip, validates the publish contract,
+and copies the validated run into app-managed storage:
 
 ```text
 /data/imports/library/<run-id>/publish
@@ -94,18 +96,35 @@ When the uploaded run reaches **Ready**, it appears in the detected-runs list on
 `/imports/`. Select that run and submit the import form to create an import
 batch. Import progress is shown on the same page and in `/imports/history/`.
 
-**Upload integrity and resume:**
+**Upload protocol and integrity:**
 
-Each chunk is verified server-side using SHA-256. The browser computes a per-chunk
-hash and sends it with every chunk; mismatches are rejected before the chunk is
-written to disk. The assembled zip is re-hashed end-to-end at extraction time.
-If you supplied a `file_sha256` at upload start, the assembled hash must match
-before extraction begins.
+1. The browser starts an upload with the filename, byte size, and expected chunk
+   count. The server rejects non-zip files, files over the configured size cap,
+   over-quota users, and uploads that fail the disk-space preflight.
+2. The browser slices the file into `HOMOREPEAT_UPLOAD_CHUNK_BYTES` chunks
+   (8 MiB by default). Each chunk is posted with its chunk index and SHA-256.
+3. The server writes each chunk to a temporary file, verifies the SHA-256, then
+   atomically replaces the final `.part` file. Re-sending the same chunk is
+   idempotent when the checksum matches; a conflicting checksum is rejected.
+4. Completing the upload verifies that every chunk from `0..total_chunks-1` is
+   present and that the received byte count equals the declared file size.
+5. The upload worker streams the chunks into `source.zip`, records the assembled
+   SHA-256, and optionally compares it with a client-supplied `file_sha256`.
+6. Extraction rejects invalid zip files, absolute paths, `..` traversal,
+   symlinks, special files, too many entries, and excessive extracted size before
+   the run is accepted into the library.
+
+Upload requests use same-origin browser requests with Django CSRF protection.
+The protocol is not `tus`, S3 multipart upload, or another external upload
+standard; it is designed for trusted staff users operating this app.
+
+**Resume behavior:**
 
 If your browser tab closes mid-upload, refreshing the page resumes from where
 the server left off. The status API (`GET /imports/uploads/<id>/status/`) returns
 the list of accepted chunks with their hashes; the browser skips chunks already
-confirmed by the server and uploads only what is missing.
+confirmed by the server and uploads only what is missing. Resume state is tied
+to the same browser session and selected file name, size, and modified time.
 
 **Upload cleanup runs from Celery Beat.** Stale incomplete uploads are marked
 failed and their working files are removed. Failed upload working files are
@@ -124,9 +143,12 @@ then re-upload.
 
 - Keep enough free space for the source zip, chunk files, extracted data, and
   the final library copy during extraction.
-- A conservative rule is **zip size × 3 + 1 GB headroom**.
-- Defaults allow a 5 GB zip and up to 50 GB extracted content, so large uploads
-  can temporarily require substantially more than 55 GB.
+- A conservative rule is
+  **2 × zip size + 2 × estimated extracted size + 1 GiB headroom**.
+- With the default extraction estimate (`zip size × 3`), this is about
+  **zip size × 8 + 1 GiB** per upload in flight. Highly compressible data can
+  require more; increase `HOMOREPEAT_UPLOAD_EXTRACTION_SPACE_MULTIPLIER` for
+  those deployments.
 - The disk preflight check is enabled by default. It rejects new uploads and
   extractions that would leave less than `HOMOREPEAT_UPLOAD_MIN_FREE_BYTES` free.
 - For very large uncompressed outputs, prefer the mounted-run path through
@@ -142,10 +164,10 @@ canonical catalog sync).
 
 **Upload scope:**
 
-The upload protocol is a focused local-app implementation, not `tus`, S3
-multipart upload, or another external standard. Uploads are intended for trusted
-staff users. Broader deployments should consider malware scanning and enhanced
-audit controls.
+Uploaded zips are validated for path and size safety, but they are not malware
+scanned. For internet-facing or untrusted-user deployments, put the app behind a
+trusted reverse proxy, enforce quotas, use HTTPS, and add malware scanning or an
+external object-store upload path before accepting arbitrary files.
 
 **Process the oldest queued import manually:**
 

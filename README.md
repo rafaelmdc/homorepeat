@@ -45,8 +45,13 @@ cp .env.example .env
 ```
 
 Then visit **http://localhost:8000/imports/** to queue and monitor imports.
-The same page also accepts smaller zipped pipeline runs, validates them in the
-background, and stores ready uploaded runs in the app-managed import library.
+
+The same page also accepts zipped pipeline runs when the run directory is not
+mounted on the server. Uploads are staff-only, chunked in the browser, verified
+with SHA-256 per chunk, resumable after tab or network interruption, extracted
+by the upload worker, and validated before the run is copied into the
+app-managed import library. When an uploaded run reaches **Ready**, queue it for
+import from the same `/imports/` page.
 
 ## Browsing
 

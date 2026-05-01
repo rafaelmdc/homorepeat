@@ -73,11 +73,43 @@ The `homorepeat_imports` Docker volume holds three categories of data:
 - **Working files** — chunk `.part` files, assembled `source.zip`, extracted scratch dir. These are cleaned up automatically after the retention window.
 - **Library** — `library/<run-id>/publish/` — the validated, extracted run used by the importer. Retained until removed manually.
 
-A safe capacity formula per upload in flight: `zip_size × 5 + 1 GiB`.
+A safe capacity formula per upload in flight is:
 
-Example: 10 concurrent 5 GB uploads → at least **260 GB** free.
+```text
+2 × zip_size + 2 × estimated_extracted_size + 1 GiB
+```
+
+The first `2 × zip_size` covers chunk files plus the assembled `source.zip`.
+The extracted data can temporarily exist twice: once in the extraction scratch
+directory and once in the final `library/<run-id>/publish/` copy. With the
+default extraction estimate of `zip_size × 3`, plan for about
+`zip_size × 8 + 1 GiB` per upload in flight.
+
+Example: 10 concurrent 5 GB uploads → at least **410 GB** free.
 
 For large deployments, increase the extraction space multiplier and confirm the disk preflight settings reflect the actual available capacity.
+
+### Upload Protocol Safety
+
+The browser upload path is intended for authenticated staff users. It is safer
+than a raw file drop, but it is not a general-purpose public upload service.
+
+- Requests are same-origin and CSRF-protected.
+- Upload start validates filename extension, declared size, chunk count, global
+  size cap, optional per-user quotas, and disk preflight.
+- Chunks are verified with SHA-256 before acceptance and are committed with an
+  atomic replace from a temporary file.
+- Re-uploading an already accepted chunk is idempotent when the checksum
+  matches; conflicting content is rejected.
+- Completion requires every expected chunk and the exact declared byte total.
+- Extraction rejects invalid zips, absolute paths, path traversal, symlinks,
+  special files, excessive entry counts, and excessive extracted size.
+- Ready/imported library data is never removed by stale-upload cleanup.
+
+For untrusted or internet-facing deployments, use HTTPS, strict reverse-proxy
+header handling, non-zero per-user quotas, monitoring, and malware scanning.
+Consider an external object-store multipart protocol if uploads need to be
+public, very large, or independently resumable across browsers.
 
 ### Choosing Upload Worker Concurrency
 

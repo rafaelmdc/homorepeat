@@ -91,13 +91,18 @@ All limits default to `0` (unlimited). When non-zero, they apply to authenticate
 Uploaded-run storage uses two subdirectories under `HOMOREPEAT_IMPORTS_ROOT`:
 
 ```text
-uploads/<upload-id>/     # chunks, assembled zip, extracted scratch data
-library/<run-id>/publish # validated uploaded run used by the importer
+uploads/<upload-id>/chunks/*.part # verified chunk files
+uploads/<upload-id>/source.zip    # assembled source archive
+uploads/<upload-id>/extracted/    # temporary extraction scratch data
+library/<run-id>/publish          # validated uploaded run used by the importer
 ```
 
 Plan disk capacity for the source zip, chunk files, extracted files, and final
-library copy. Ready/imported library data is retained until removed manually.
-The cleanup task removes stale working directories only; it does not delete
+library copy. A conservative formula is
+`2 × zip_size + 2 × estimated_extracted_size + 1 GiB`; with the default
+extraction multiplier of `3.0`, this is about `zip_size × 8 + 1 GiB` per upload
+in flight. Ready/imported library data is retained until removed manually. The
+cleanup task removes stale working directories only; it does not delete
 ready/imported library data.
 
 ---
