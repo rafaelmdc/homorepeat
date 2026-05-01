@@ -282,3 +282,120 @@ The upload flow is now production-grade for a trusted staff-only deployment:
 - Investigate and fix the 2 pre-existing browser test failures on this branch.
 - Run a Docker end-to-end smoke test with a real small zipped pipeline run.
 - Merge to main once the smoke test passes.
+
+---
+
+## Session continuation — dead-code audit and cleanup
+
+### Request
+
+After the upload refactor review/fix, user asked for a read-only dead-code report,
+then approved installing tooling and removing the identified dead code.
+
+### Tooling Added Locally
+
+- Installed `ruff` and `vulture` into the current Python environment:
+
+```text
+python -m pip install ruff vulture
+```
+
+These were used for audit/verification only; no project dependency file was changed.
+
+### Initial Audit
+
+Commands used:
+
+```text
+ruff check .
+vulture apps config web_tests --min-confidence 80
+vulture apps config --min-confidence 60
+```
+
+The audit found a mix of real dead code and Django/unittest false positives. The
+real candidates were:
+
+- Unused PostgreSQL helper `apps.browser.db.copy.analyze_models()`.
+- Obsolete `_copy_rows_to_model()` in `apps.imports.services.import_run.copy`;
+  current import code uses `_copy_rows_to_table()`.
+- Unused `_resolve_optional_taxon_pk()` in import taxonomy code.
+- Unused `_read_acquisition_validation_payload()` in published-run manifest code.
+- Retired `load_published_run()` compatibility function that only raised.
+- Unused placeholder template `templates/browser/section_placeholder.html`.
+- Inactive async-download scaffold:
+  - `apps/browser/downloads.py`
+  - `generate_download_artifact`
+  - Celery route for `generate_download_artifact`
+- Local generated Python bytecode caches under `apps/`, `config/`, and `web_tests/`.
+
+### Cleanup Performed
+
+Removed:
+
+- `apps/browser/db.copy.analyze_models()`.
+- `apps/imports/services/import_run/copy._copy_rows_to_model()`.
+- `apps/imports/services/import_run/taxonomy._resolve_optional_taxon_pk()`.
+- `apps/imports/services/published_run/manifest._read_acquisition_validation_payload()`
+  and its now-unused validation constant imports.
+- `load_published_run()` and stale exports from:
+  - `apps/imports/services/published_run/__init__.py`
+  - `apps/imports/services/import_run/__init__.py`
+  - `apps/imports/services/__init__.py`
+- `apps/browser/downloads.py`.
+- `apps/browser.tasks.generate_download_artifact`.
+- `apps.browser.tasks.generate_download_artifact` Celery route.
+- `templates/browser/section_placeholder.html`.
+- Local `__pycache__` / `.pyc` files.
+
+Kept:
+
+- `DownloadBuild` model/table and `DownloadBuildStatusView`, because that is
+  migrated persisted schema. Only the inactive future async-download policy/task
+  scaffold around it was removed.
+- Django admin/app config/model metadata that Vulture reported as unused but is
+  framework-owned.
+- Management commands, URL configs, Celery beat tasks, and model fields that are
+  invoked dynamically by Django/Celery.
+
+### Related Fixes While Cleaning
+
+- Fixed `ImportBatch` type annotation in `apps/browser/metadata.py` by importing
+  it from `apps.imports.models`.
+- Removed stale tests that only covered deleted compatibility/scaffold paths.
+- Trimmed `web_tests/test_browser_downloads.py` to live `DownloadBuild` status
+  and expiry behavior.
+- Removed unused imports/test locals flagged by Ruff.
+- Renamed required-but-unused callback parameters in no-admin and test
+  `load_tests()` hooks to underscore-prefixed names so Vulture no longer reports
+  them as dead variables.
+
+### Validation
+
+Passed:
+
+```text
+ruff check .
+vulture apps config web_tests --min-confidence 80
+git diff --check
+docker compose config
+docker compose run --rm web python manage.py test web_tests.test_browser_downloads web_tests.test_import_published_run web_tests.test_import_uploads web_tests.test_models web_tests.test_browser_stats
+docker compose run --rm web python manage.py test web_tests.test_import_commands
+```
+
+The first Docker test command passed 214 tests. The import-command test command
+passed 3 tests.
+
+One broader combined test invocation including `web_tests.test_import_process_run`
+still showed existing PostgreSQL import-process failures unrelated to the removed
+dead-code surface:
+
+- `test_import_run_fails_on_duplicate_v2_entity_keys`
+- `test_import_run_reports_progress_during_transactional_import_phase`
+
+Those were not patched in this cleanup because they relate to import-process
+behavior, not dead-code removal.
+
+### Current Status
+
+Dead-code cleanup is complete for the identified safe candidates. Ruff is clean,
+Vulture at 80% confidence is clean, and the affected live tests listed above pass.
