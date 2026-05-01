@@ -65,6 +65,9 @@ def start_upload(
             "file_sha256 must be a 64-character lowercase hex string."
         )
 
+    Path(settings.HOMOREPEAT_IMPORTS_ROOT).mkdir(parents=True, exist_ok=True)
+    _check_disk_space_for_upload(size_bytes)
+
     uploaded_run = UploadedRun.objects.create(
         original_filename=original_filename,
         size_bytes=size_bytes,
@@ -254,6 +257,8 @@ def assemble_uploaded_zip(*, uploaded_run_id: int) -> UploadedRun:
             raise UploadValidationError(
                 f"Uploaded chunk bytes total {received_bytes}, expected {uploaded_run.size_bytes}."
             )
+
+        _check_disk_space_for_extraction(uploaded_run)
 
         uploaded_run.received_chunks = received_chunks
         uploaded_run.received_bytes = received_bytes
@@ -458,6 +463,53 @@ def _ensure_within_root(path: Path, root: Path) -> None:
 
 def _is_valid_sha256(value: str) -> bool:
     return bool(_SHA256_RE.match(value))
+
+
+def _imports_root_disk_usage():
+    """Return disk usage for the imports root, walking up to find an existing ancestor."""
+    path = Path(settings.HOMOREPEAT_IMPORTS_ROOT)
+    while not path.exists():
+        path = path.parent
+    return shutil.disk_usage(path)
+
+
+def _check_disk_space_for_upload(size_bytes: int) -> None:
+    if not settings.HOMOREPEAT_UPLOAD_DISK_PREFLIGHT_ENABLED:
+        return
+    usage = _imports_root_disk_usage()
+    min_free = settings.HOMOREPEAT_UPLOAD_MIN_FREE_BYTES
+    # Peak during upload: all chunks present + zip temp being assembled in parallel
+    required = size_bytes * 2 + min_free
+    if usage.free < required:
+        raise UploadValidationError(
+            f"Insufficient disk space to accept this upload: "
+            f"{required:,} bytes required ({size_bytes:,} chunks + "
+            f"{size_bytes:,} assembled zip + {min_free:,} reserved), "
+            f"but only {usage.free:,} bytes are free."
+        )
+
+
+def _check_disk_space_for_extraction(uploaded_run: UploadedRun) -> None:
+    if not settings.HOMOREPEAT_UPLOAD_DISK_PREFLIGHT_ENABLED:
+        return
+    usage = _imports_root_disk_usage()
+    min_free = settings.HOMOREPEAT_UPLOAD_MIN_FREE_BYTES
+    multiplier = settings.HOMOREPEAT_UPLOAD_EXTRACTION_SPACE_MULTIPLIER
+    extraction_estimate = int(
+        min(
+            uploaded_run.size_bytes * multiplier,
+            settings.HOMOREPEAT_UPLOAD_MAX_EXTRACTED_BYTES,
+        )
+    )
+    # Need space for: extracted working dir + final library copy + safety margin
+    required = extraction_estimate * 2 + min_free
+    if usage.free < required:
+        raise UploadValidationError(
+            f"Insufficient disk space to extract this upload: "
+            f"{required:,} bytes required ({extraction_estimate:,} extracted + "
+            f"{extraction_estimate:,} library copy + {min_free:,} reserved), "
+            f"but only {usage.free:,} bytes are free."
+        )
 
 
 def get_upload_status(*, upload_id: UUID) -> dict:

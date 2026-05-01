@@ -3,7 +3,8 @@
     "allow": [
       "Bash(python3 -m py_compile apps/imports/models.py apps/imports/services/uploads.py apps/imports/views.py web_tests/test_import_uploads.py)",
       "Bash(python3 -m py_compile apps/imports/services/uploads.py apps/imports/views.py apps/imports/urls.py web_tests/test_import_uploads.py)",
-      "Bash(docker compose run *)"
+      "Bash(docker compose run *)",
+      "Bash(python3 -m py_compile config/settings.py apps/imports/services/uploads.py web_tests/test_import_uploads.py)"
     ]
   }
 }

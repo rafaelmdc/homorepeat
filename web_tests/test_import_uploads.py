@@ -1,6 +1,8 @@
 import hashlib
 import json
+import shutil
 import uuid
+from collections import namedtuple
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -741,3 +743,121 @@ class UploadStatusApiTests(TestCase):
         ):
             self.assertIn(field, payload, msg=f"missing field: {field}")
         self.assertEqual(payload["file_sha256"], "a" * 64)
+
+
+_DiskUsage = namedtuple("DiskUsage", ["total", "used", "free"])
+_DISK_USAGE_PATCH = "apps.imports.services.uploads.shutil.disk_usage"
+
+
+class DiskPreflightTests(TestCase):
+    def setUp(self):
+        self.user_model = get_user_model()
+        self.staff_user = self.user_model.objects.create_user(
+            username="staff",
+            password="password",
+            is_staff=True,
+        )
+        self.client.force_login(self.staff_user)
+
+    @override_settings(
+        HOMOREPEAT_UPLOAD_CHUNK_BYTES=10,
+        HOMOREPEAT_UPLOAD_DISK_PREFLIGHT_ENABLED=True,
+        HOMOREPEAT_UPLOAD_MIN_FREE_BYTES=1000,
+    )
+    def test_start_rejects_when_free_space_below_threshold(self):
+        # size_bytes=10 requires 10*2 + 1000 = 1020 free; mock returns only 100
+        with TemporaryDirectory() as tempdir:
+            with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
+                with patch(_DISK_USAGE_PATCH, return_value=_DiskUsage(10000, 9900, 100)):
+                    response = self.client.post(
+                        reverse("imports:upload-start"),
+                        data=json.dumps({
+                            "filename": "run-alpha.zip",
+                            "size_bytes": 10,
+                            "total_chunks": 1,
+                        }),
+                        content_type="application/json",
+                    )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()["ok"])
+        self.assertIn("Insufficient disk space", response.json()["error"])
+        self.assertEqual(UploadedRun.objects.count(), 0)
+
+    @override_settings(
+        HOMOREPEAT_UPLOAD_CHUNK_BYTES=10,
+        HOMOREPEAT_UPLOAD_DISK_PREFLIGHT_ENABLED=True,
+        HOMOREPEAT_UPLOAD_MIN_FREE_BYTES=1000,
+    )
+    def test_start_error_message_includes_required_and_available_bytes(self):
+        with TemporaryDirectory() as tempdir:
+            with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
+                with patch(_DISK_USAGE_PATCH, return_value=_DiskUsage(10000, 9900, 42)):
+                    response = self.client.post(
+                        reverse("imports:upload-start"),
+                        data=json.dumps({
+                            "filename": "run-alpha.zip",
+                            "size_bytes": 10,
+                            "total_chunks": 1,
+                        }),
+                        content_type="application/json",
+                    )
+
+        error = response.json()["error"]
+        self.assertIn("42", error)   # available bytes
+        self.assertIn("1,020", error)  # required bytes (10*2 + 1000)
+
+    @override_settings(
+        HOMOREPEAT_UPLOAD_CHUNK_BYTES=10,
+        HOMOREPEAT_UPLOAD_DISK_PREFLIGHT_ENABLED=False,
+        HOMOREPEAT_UPLOAD_MIN_FREE_BYTES=1000,
+    )
+    def test_disk_preflight_disabled_allows_upload_despite_low_space(self):
+        with TemporaryDirectory() as tempdir:
+            with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
+                with patch(_DISK_USAGE_PATCH, return_value=_DiskUsage(10000, 9999, 1)):
+                    response = self.client.post(
+                        reverse("imports:upload-start"),
+                        data=json.dumps({
+                            "filename": "run-alpha.zip",
+                            "size_bytes": 10,
+                            "total_chunks": 1,
+                        }),
+                        content_type="application/json",
+                    )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
+
+    @override_settings(
+        HOMOREPEAT_UPLOAD_DISK_PREFLIGHT_ENABLED=True,
+        HOMOREPEAT_UPLOAD_MIN_FREE_BYTES=1000,
+        HOMOREPEAT_UPLOAD_EXTRACTION_SPACE_MULTIPLIER=3.0,
+        HOMOREPEAT_UPLOAD_MAX_EXTRACTED_BYTES=50 * 1024 * 1024 * 1024,
+    )
+    def test_extraction_rejects_when_free_space_drops_before_extraction(self):
+        chunk_data = b"abcdefghij"
+        with TemporaryDirectory() as tempdir:
+            with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
+                uploaded_run = UploadedRun.objects.create(
+                    original_filename="run-alpha.zip",
+                    status=UploadedRun.Status.RECEIVED,
+                    size_bytes=10,
+                    chunk_size_bytes=10,
+                    total_chunks=1,
+                    received_chunks=[0],
+                    received_bytes=10,
+                )
+                uploaded_run.chunks_root.mkdir(parents=True)
+                (uploaded_run.chunks_root / "0.part").write_bytes(chunk_data)
+
+                from apps.imports.services.uploads import assemble_uploaded_zip
+
+                # 10 bytes * 3 multiplier = 30 extracted; 30*2 + 1000 = 1060 required; 50 free
+                with patch(_DISK_USAGE_PATCH, return_value=_DiskUsage(10000, 9950, 50)):
+                    with self.assertRaises(UploadValidationError) as ctx:
+                        assemble_uploaded_zip(uploaded_run_id=uploaded_run.pk)
+
+        self.assertIn("Insufficient disk space", str(ctx.exception))
+        uploaded_run.refresh_from_db()
+        self.assertEqual(uploaded_run.status, UploadedRun.Status.RECEIVED)
