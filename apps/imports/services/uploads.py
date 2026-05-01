@@ -13,7 +13,7 @@ from django.conf import settings
 from django.core.files.uploadedfile import UploadedFile
 from django.db import transaction
 
-from apps.imports.models import UploadedRun
+from apps.imports.models import ImportBatch, UploadedRun
 from apps.imports.services.published_run import inspect_published_run
 
 
@@ -25,6 +25,13 @@ class UploadValidationError(ValueError):
 class CompletedUpload:
     uploaded_run: UploadedRun
     completed_now: bool
+
+
+@dataclass(frozen=True)
+class QueuedUploadedRunImport:
+    uploaded_run: UploadedRun
+    import_batch: ImportBatch
+    queued_now: bool
 
 
 def start_upload(
@@ -122,6 +129,57 @@ def complete_upload(*, upload_id: UUID) -> CompletedUpload:
         uploaded_run.status = UploadedRun.Status.RECEIVED
         uploaded_run.save(update_fields=["received_chunks", "received_bytes", "status", "updated_at"])
         return CompletedUpload(uploaded_run=uploaded_run, completed_now=True)
+
+
+def queue_uploaded_run_import(
+    *,
+    upload_id: UUID,
+    replace_existing: bool = False,
+) -> QueuedUploadedRunImport:
+    queued_now = False
+
+    with transaction.atomic():
+        uploaded_run = UploadedRun.objects.select_for_update().get(upload_id=upload_id)
+        if uploaded_run.status in {
+            UploadedRun.Status.QUEUED,
+            UploadedRun.Status.IMPORTED,
+        }:
+            if uploaded_run.import_batch_id is None:
+                raise UploadValidationError("Uploaded run is marked queued but has no linked import batch.")
+            import_batch = ImportBatch.objects.get(pk=uploaded_run.import_batch_id)
+            return QueuedUploadedRunImport(
+                uploaded_run=uploaded_run,
+                import_batch=import_batch,
+                queued_now=False,
+            )
+        if uploaded_run.status != UploadedRun.Status.READY:
+            raise UploadValidationError("Uploaded run is not ready for import.")
+        if not uploaded_run.publish_root:
+            raise UploadValidationError("Uploaded run does not have a validated publish root.")
+
+        from apps.imports.services.import_run.api import enqueue_published_run
+
+        import_batch = enqueue_published_run(
+            uploaded_run.publish_root,
+            replace_existing=replace_existing,
+        )
+        uploaded_run.import_batch = import_batch
+        uploaded_run.status = UploadedRun.Status.QUEUED
+        uploaded_run.save(update_fields=["import_batch", "status", "updated_at"])
+        queued_now = True
+
+    if queued_now:
+        from apps.imports.services.import_run.api import dispatch_import_batch
+
+        dispatch_import_batch(import_batch)
+        import_batch.refresh_from_db()
+        uploaded_run.refresh_from_db()
+
+    return QueuedUploadedRunImport(
+        uploaded_run=uploaded_run,
+        import_batch=import_batch,
+        queued_now=queued_now,
+    )
 
 
 def assemble_uploaded_zip(*, uploaded_run_id: int) -> UploadedRun:

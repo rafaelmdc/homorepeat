@@ -220,6 +220,7 @@ class ImportViewTests(TestCase):
             reverse("imports:upload-start"),
             reverse("imports:upload-chunk", kwargs={"upload_id": upload_id}),
             reverse("imports:upload-complete", kwargs={"upload_id": upload_id}),
+            reverse("imports:upload-import", kwargs={"upload_id": upload_id}),
         ]
 
         for url in urls:

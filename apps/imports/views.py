@@ -17,7 +17,13 @@ from django.views.generic import FormView, ListView
 from .forms import ImportRunForm
 from .models import ImportBatch, UploadedRun
 from .services import dispatch_import_batch, enqueue_published_run
-from .services.uploads import UploadValidationError, complete_upload, start_upload, store_chunk
+from .services.uploads import (
+    UploadValidationError,
+    complete_upload,
+    queue_uploaded_run_import,
+    start_upload,
+    store_chunk,
+)
 
 
 @dataclass(frozen=True)
@@ -209,6 +215,43 @@ class UploadRunCompleteView(StaffOnlyMixin, View):
                 "status": uploaded_run.status,
             }
         )
+
+
+class UploadedRunImportView(StaffOnlyMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request, upload_id):
+        try:
+            queued_import = queue_uploaded_run_import(
+                upload_id=upload_id,
+                replace_existing=_request_bool(request, "replace_existing"),
+            )
+        except UploadedRun.DoesNotExist:
+            return _json_error("Upload was not found.", status=404)
+        except UploadValidationError as exc:
+            return _json_error(str(exc))
+
+        uploaded_run = queued_import.uploaded_run
+        import_batch = queued_import.import_batch
+        return JsonResponse(
+            {
+                "ok": True,
+                "upload_id": str(uploaded_run.upload_id),
+                "status": uploaded_run.status,
+                "queued_now": queued_import.queued_now,
+                "import_batch": {
+                    "id": import_batch.pk,
+                    "status": import_batch.status,
+                    "phase": import_batch.phase,
+                    "celery_task_id": import_batch.celery_task_id,
+                },
+            }
+        )
+
+
+def _request_bool(request, key: str) -> bool:
+    value = request.POST.get(key, "")
+    return str(value).lower() in {"1", "true", "yes", "on"}
 
 
 def _json_error(message: str, *, status: int = 400) -> JsonResponse:
