@@ -61,6 +61,25 @@ If `REDIS_URL` is not set, Celery uses an in-memory broker and the cache uses Dj
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `HOMOREPEAT_RUNS_ROOT` | _(empty)_ | Host path to the directory containing published pipeline run folders. Compose mounts this read-only at `/workspace/homorepeat_pipeline/runs` inside the web and worker containers. When set, the import queue UI at `/imports/` will auto-detect runs in that directory. |
+| `HOMOREPEAT_IMPORTS_ROOT` | `/data/imports` | App-managed import storage root. Compose mounts the persistent `homorepeat_imports` volume here in `web` and `celery-import-worker`. Uploaded chunks, temporary extraction files, and validated uploaded library runs live under this root. |
+| `HOMOREPEAT_UPLOAD_MAX_ZIP_BYTES` | `5368709120` | Maximum uploaded zip size in bytes. Default is 5 GB. |
+| `HOMOREPEAT_UPLOAD_CHUNK_BYTES` | `8388608` | Browser upload chunk size in bytes. Default is 8 MiB. |
+| `HOMOREPEAT_UPLOAD_MAX_EXTRACTED_BYTES` | `53687091200` | Maximum total extracted file bytes from one uploaded zip. Default is 50 GB. |
+| `HOMOREPEAT_UPLOAD_MAX_FILES` | `200000` | Maximum number of entries/files accepted from one uploaded zip. |
+| `HOMOREPEAT_UPLOAD_INCOMPLETE_RETENTION_HOURS` | `24` | Age after which incomplete uploads (`receiving`, `received`, `extracting`) are marked failed and their working directory is removed by Celery Beat cleanup. |
+| `HOMOREPEAT_UPLOAD_FAILED_RETENTION_HOURS` | `168` | Age after which failed upload working directories are removed. The database row is kept for troubleshooting. |
+
+Uploaded-run storage uses two subdirectories under `HOMOREPEAT_IMPORTS_ROOT`:
+
+```text
+uploads/<upload-id>/     # chunks, assembled zip, extracted scratch data
+library/<run-id>/publish # validated uploaded run used by the importer
+```
+
+Plan disk capacity for the source zip, chunk files, extracted files, and final
+library copy. Ready/imported library data is retained until removed manually.
+The cleanup task removes stale working directories only; it does not delete
+ready/imported library data.
 
 ---
 

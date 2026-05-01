@@ -45,6 +45,8 @@ cp .env.example .env
 ```
 
 Then visit **http://localhost:8000/imports/** to queue and monitor imports.
+The same page also accepts smaller zipped pipeline runs, validates them in the
+background, and stores ready uploaded runs in the app-managed import library.
 
 ## Browsing
 

@@ -67,9 +67,60 @@ docker compose exec web python manage.py import_run \
   --publish-root /workspace/homorepeat_pipeline/runs/<run-id>/publish
 ```
 
-**Import queue UI:**
+**Import queue UI for mounted runs:**
 
 Set `HOMOREPEAT_RUNS_ROOT` in `.env` to the host directory containing run folders. Compose mounts it read-only at `/workspace/homorepeat_pipeline/runs`. Then use **http://localhost:8000/imports/** to queue runs for the worker to process.
+
+**Import queue UI for zipped runs:**
+
+Use **http://localhost:8000/imports/** to upload a zipped pipeline run when the
+run is not already mounted under `HOMOREPEAT_RUNS_ROOT`. The upload flow is
+intended for smaller zipped outputs; the default maximum zip size is 5 GB.
+
+The zip must contain exactly one publish root with:
+
+```text
+publish/metadata/run_manifest.json
+```
+
+The worker assembles uploaded chunks, safely extracts the zip, validates the
+publish contract, and copies the validated run into app-managed storage:
+
+```text
+/data/imports/library/<run-id>/publish
+```
+
+When the uploaded run reaches **Ready**, it appears in the detected-runs list on
+`/imports/`. Select that run and submit the import form to create an import
+batch. Import progress is shown on the same page and in `/imports/history/`.
+
+Upload cleanup runs from Celery Beat. Stale incomplete uploads are marked failed
+and their working files are removed. Failed upload working files are removed
+after the configured retention window. Ready/imported library data is kept.
+
+Disk planning for zipped uploads:
+
+- Keep enough free space for the source zip, chunk files, extracted data, and
+  the final library copy during extraction.
+- A conservative rule is **zip size + extracted size + final publish size**.
+- Defaults allow a 5 GB zip and up to 50 GB extracted content, so large uploads
+  can temporarily require substantially more than 55 GB.
+- For very large uncompressed outputs, prefer the mounted-run path through
+  `HOMOREPEAT_RUNS_ROOT`.
+
+Current upload limitations:
+
+- The upload protocol is a focused local-app implementation, not `tus`, S3
+  multipart upload, or another external standard.
+- The app validates zip structure and publish-contract contents, but it does
+  not currently verify per-chunk checksums or a full-file checksum.
+- The app enforces configured size limits, but it does not currently run a
+  disk-space preflight before upload or extraction.
+- Zip extraction and import batches share the `imports` Celery queue in the
+  MVP. This keeps deployment simple, but very large extractions can delay
+  import jobs.
+- Uploads are intended for trusted staff users. Broader deployments should add
+  quota/rate limiting, stronger audit/ownership controls, and malware scanning.
 
 **Process the oldest queued import manually:**
 
