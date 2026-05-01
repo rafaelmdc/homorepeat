@@ -98,6 +98,8 @@ HOMOREPEAT_UPLOAD_MAX_EXTRACTED_BYTES = _env_int(
     50 * 1024 * 1024 * 1024,
 )
 HOMOREPEAT_UPLOAD_MAX_FILES = _env_int("HOMOREPEAT_UPLOAD_MAX_FILES", 200000)
+HOMOREPEAT_UPLOAD_INCOMPLETE_RETENTION_HOURS = _env_int("HOMOREPEAT_UPLOAD_INCOMPLETE_RETENTION_HOURS", 24)
+HOMOREPEAT_UPLOAD_FAILED_RETENTION_HOURS = _env_int("HOMOREPEAT_UPLOAD_FAILED_RETENTION_HOURS", 168)
 HOMOREPEAT_BROWSER_STATS_CACHE_TTL = _env_int("HOMOREPEAT_BROWSER_STATS_CACHE_TTL", 60)
 
 _REDIS_URL = os.getenv("REDIS_URL", "").strip()
@@ -132,6 +134,10 @@ CELERY_BEAT_SCHEDULE = {
     "reset-stale-import-batches": {
         "task": "apps.imports.tasks.reset_stale_import_batches",
         "schedule": timedelta(minutes=5),
+    },
+    "cleanup-stale-uploaded-runs": {
+        "task": "apps.imports.tasks.cleanup_stale_uploaded_runs",
+        "schedule": timedelta(hours=1),
     },
     "expire-stale-download-builds": {
         "task": "apps.browser.tasks.expire_stale_download_builds",

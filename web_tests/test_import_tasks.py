@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 import zipfile
 
+from django.conf import settings
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
@@ -16,7 +17,12 @@ from apps.browser.models import PipelineRun
 from apps.imports.models import ImportBatch, UploadedRun
 from apps.imports.services import dispatch_import_batch
 from apps.imports.services.published_run import ImportContractError
-from apps.imports.tasks import extract_uploaded_run, reset_stale_import_batches, run_import_batch
+from apps.imports.tasks import (
+    cleanup_stale_uploaded_runs,
+    extract_uploaded_run,
+    reset_stale_import_batches,
+    run_import_batch,
+)
 from .support import build_minimal_v2_publish_root
 
 
@@ -338,6 +344,110 @@ class ImportTaskTests(TestCase):
                 uploaded_run.refresh_from_db()
                 self.assertEqual(uploaded_run.status, UploadedRun.Status.FAILED)
                 self.assertIn("symlink or special file", uploaded_run.error_message)
+
+    @override_settings(
+        HOMOREPEAT_UPLOAD_INCOMPLETE_RETENTION_HOURS=1,
+        HOMOREPEAT_UPLOAD_FAILED_RETENTION_HOURS=2,
+    )
+    def test_cleanup_stale_uploaded_runs_removes_incomplete_and_failed_working_dirs(self):
+        with TemporaryDirectory() as tempdir:
+            with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
+                stale_receiving = UploadedRun.objects.create(
+                    original_filename="stale-receiving.zip",
+                    status=UploadedRun.Status.RECEIVING,
+                    size_bytes=10,
+                    total_chunks=1,
+                )
+                stale_receiving.upload_root.mkdir(parents=True)
+                (stale_receiving.upload_root / "chunk.tmp").write_text("old", encoding="utf-8")
+                UploadedRun.objects.filter(pk=stale_receiving.pk).update(
+                    updated_at=timezone.now() - timedelta(hours=3)
+                )
+
+                stale_failed = UploadedRun.objects.create(
+                    original_filename="stale-failed.zip",
+                    status=UploadedRun.Status.FAILED,
+                    size_bytes=10,
+                    total_chunks=1,
+                    error_message="bad zip",
+                )
+                stale_failed.upload_root.mkdir(parents=True)
+                (stale_failed.upload_root / "source.zip").write_bytes(b"bad")
+                UploadedRun.objects.filter(pk=stale_failed.pk).update(
+                    updated_at=timezone.now() - timedelta(hours=4)
+                )
+
+                fresh_receiving = UploadedRun.objects.create(
+                    original_filename="fresh-receiving.zip",
+                    status=UploadedRun.Status.RECEIVING,
+                    size_bytes=10,
+                    total_chunks=1,
+                )
+                fresh_receiving.upload_root.mkdir(parents=True)
+
+                result = cleanup_stale_uploaded_runs()
+
+                self.assertEqual(
+                    result,
+                    {
+                        "incomplete_failed": 1,
+                        "incomplete_dirs_removed": 1,
+                        "failed_dirs_removed": 1,
+                    },
+                )
+                stale_receiving.refresh_from_db()
+                stale_failed.refresh_from_db()
+                self.assertEqual(stale_receiving.status, UploadedRun.Status.FAILED)
+                self.assertIn("expired", stale_receiving.error_message)
+                self.assertEqual(stale_failed.status, UploadedRun.Status.FAILED)
+                self.assertFalse(stale_receiving.upload_root.exists())
+                self.assertFalse(stale_failed.upload_root.exists())
+                self.assertTrue(fresh_receiving.upload_root.exists())
+
+    @override_settings(
+        HOMOREPEAT_UPLOAD_INCOMPLETE_RETENTION_HOURS=1,
+        HOMOREPEAT_UPLOAD_FAILED_RETENTION_HOURS=1,
+    )
+    def test_cleanup_stale_uploaded_runs_preserves_ready_imported_library_data(self):
+        with TemporaryDirectory() as tempdir:
+            with override_settings(HOMOREPEAT_IMPORTS_ROOT=tempdir):
+                for status in (UploadedRun.Status.READY, UploadedRun.Status.IMPORTED):
+                    uploaded_run = UploadedRun.objects.create(
+                        original_filename=f"{status}.zip",
+                        status=status,
+                        size_bytes=10,
+                        received_bytes=10,
+                        total_chunks=1,
+                        run_id=f"run-{status}",
+                        publish_root=str(Path(tempdir) / "library" / f"run-{status}" / "publish"),
+                    )
+                    uploaded_run.upload_root.mkdir(parents=True)
+                    uploaded_run.library_root.mkdir(parents=True)
+                    (uploaded_run.library_root / "publish").mkdir()
+                    (uploaded_run.library_root / "publish" / "data.txt").write_text("keep", encoding="utf-8")
+                    UploadedRun.objects.filter(pk=uploaded_run.pk).update(
+                        updated_at=timezone.now() - timedelta(hours=3)
+                    )
+
+                result = cleanup_stale_uploaded_runs()
+
+                self.assertEqual(
+                    result,
+                    {
+                        "incomplete_failed": 0,
+                        "incomplete_dirs_removed": 0,
+                        "failed_dirs_removed": 0,
+                    },
+                )
+                for uploaded_run in UploadedRun.objects.all():
+                    self.assertTrue(uploaded_run.upload_root.exists())
+                    self.assertTrue((uploaded_run.library_root / "publish" / "data.txt").is_file())
+
+    def test_cleanup_stale_uploaded_runs_is_scheduled(self):
+        self.assertEqual(
+            settings.CELERY_BEAT_SCHEDULE["cleanup-stale-uploaded-runs"]["task"],
+            "apps.imports.tasks.cleanup_stale_uploaded_runs",
+        )
 
     def test_reset_stale_import_batches_requeues_precommit_batch(self):
         batch = ImportBatch.objects.create(
