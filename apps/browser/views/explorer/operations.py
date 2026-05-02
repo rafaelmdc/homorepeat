@@ -112,7 +112,7 @@ class NormalizationWarningListView(BrowserTSVExportMixin, VirtualScrollListView)
         context["current_accession"] = getattr(self, "current_accession", "")
         context["current_warning_code"] = getattr(self, "current_warning_code", "")
         context["current_warning_scope"] = getattr(self, "current_warning_scope", "")
-        context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
+        context["run_choices"] = PipelineRun.objects.active().order_by("-imported_at", "run_id")
         context["batch_choices"] = batch_choices.order_by("pipeline_run__run_id", "batch_id")
         context["warning_code_choices"] = filter_choices.order_by("warning_code").values_list(
             "warning_code",
@@ -231,7 +231,7 @@ class AccessionStatusListView(BrowserTSVExportMixin, VirtualScrollListView):
         context["current_terminal_status"] = getattr(self, "current_terminal_status", "")
         context["current_detect_status"] = getattr(self, "current_detect_status", "")
         context["current_finalize_status"] = getattr(self, "current_finalize_status", "")
-        context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
+        context["run_choices"] = PipelineRun.objects.active().order_by("-imported_at", "run_id")
         context["batch_choices"] = batch_choices.order_by("pipeline_run__run_id", "batch_id")
         context["terminal_status_choices"] = (
             filter_choices.exclude(terminal_status="")
@@ -352,7 +352,7 @@ class AccessionCallCountListView(BrowserTSVExportMixin, VirtualScrollListView):
         context["current_residue"] = getattr(self, "current_residue", "")
         context["current_detect_status"] = getattr(self, "current_detect_status", "")
         context["current_finalize_status"] = getattr(self, "current_finalize_status", "")
-        context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
+        context["run_choices"] = PipelineRun.objects.active().order_by("-imported_at", "run_id")
         context["batch_choices"] = batch_choices.order_by("pipeline_run__run_id", "batch_id")
         context["method_choices"] = filter_choices.order_by("method").values_list("method", flat=True).distinct()
         context["residue_choices"] = (
@@ -474,7 +474,7 @@ class DownloadManifestEntryListView(BrowserTSVExportMixin, VirtualScrollListView
         context["current_accession"] = getattr(self, "current_accession", "")
         context["current_download_status"] = getattr(self, "current_download_status", "")
         context["current_package_mode"] = getattr(self, "current_package_mode", "")
-        context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
+        context["run_choices"] = PipelineRun.objects.active().order_by("-imported_at", "run_id")
         context["batch_choices"] = batch_choices.order_by("pipeline_run__run_id", "batch_id")
         context["download_status_choices"] = (
             filter_choices.exclude(download_status="")

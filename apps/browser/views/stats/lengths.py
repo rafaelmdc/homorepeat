@@ -288,7 +288,7 @@ class RepeatLengthExplorerView(StatsTSVExportMixin, TemplateView):
         )
         context["chart_payload_id"] = "repeat-length-chart-payload"
         context["chart_container_id"] = "repeat-length-chart"
-        context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
+        context["run_choices"] = PipelineRun.objects.active().order_by("-imported_at", "run_id")
         context["rank_choices"] = [
             {"value": rank, "label": rank}
             for rank in ALLOWED_STATS_RANKS

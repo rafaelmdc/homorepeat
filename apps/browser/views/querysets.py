@@ -24,7 +24,7 @@ from ..models import (
 
 def _annotated_runs(queryset=None):
     if queryset is None:
-        queryset = PipelineRun.objects.all()
+        queryset = PipelineRun.objects.active()
     return queryset.annotate(
         acquisition_batches_count=Coalesce(_count_subquery(AcquisitionBatch, "pipeline_run"), Value(0)),
         current_accessions_count=Coalesce(_count_subquery(CanonicalGenome, "latest_pipeline_run"), Value(0)),
@@ -45,7 +45,7 @@ def _annotated_runs(queryset=None):
 
 def _summary_runs(queryset=None):
     if queryset is None:
-        queryset = PipelineRun.objects.all()
+        queryset = PipelineRun.objects.active()
     return queryset.annotate(
         genomes_count=_run_summary_count_annotation("genomes"),
         sequences_count=_run_summary_count_annotation("sequences"),

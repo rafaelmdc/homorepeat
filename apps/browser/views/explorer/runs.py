@@ -69,7 +69,7 @@ class RunListView(BrowserTSVExportMixin, VirtualScrollListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["current_status"] = self.request.GET.get("status", "").strip()
-        context["status_choices"] = PipelineRun.objects.order_by("status").values_list("status", flat=True).distinct()
+        context["status_choices"] = PipelineRun.objects.active().order_by("status").values_list("status", flat=True).distinct()
         return context
 
 

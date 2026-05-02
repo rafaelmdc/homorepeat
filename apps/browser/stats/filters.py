@@ -114,7 +114,7 @@ def build_stats_filter_state_from_params(params: dict) -> StatsFilterState:
     from apps.browser.views.filters import _resolve_branch_scope_from_params
 
     current_run_id = str(params.get("run") or "")
-    current_run = PipelineRun.objects.filter(run_id=current_run_id).first() if current_run_id else None
+    current_run = PipelineRun.objects.active().filter(run_id=current_run_id).first() if current_run_id else None
 
     branch = str(params.get("branch") or "")
     branch_q = str(params.get("branch_q") or "")

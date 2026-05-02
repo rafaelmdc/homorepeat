@@ -99,7 +99,7 @@ class GenomeListView(BrowserTSVExportMixin, VirtualScrollListView):
         current_run = getattr(self, "current_run", None)
         context["current_run"] = current_run
         context["current_run_id"] = current_run.run_id if current_run else ""
-        context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
+        context["run_choices"] = PipelineRun.objects.active().order_by("-imported_at", "run_id")
         _update_branch_scope_context(context, getattr(self, "branch_scope", _resolve_branch_scope(self.request)))
         context["current_accession"] = getattr(self, "current_accession", "")
         context["current_genome_name"] = getattr(self, "current_genome_name", "")

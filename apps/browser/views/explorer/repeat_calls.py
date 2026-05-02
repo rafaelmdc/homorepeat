@@ -349,7 +349,7 @@ class RepeatCallListView(BrowserTSVExportMixin, VirtualScrollListView):
         if self.is_virtual_scroll_fragment_request():
             return context
         current_run = getattr(self, "current_run", None)
-        run_choices = PipelineRun.objects.order_by("-imported_at", "run_id")
+        run_choices = PipelineRun.objects.active().order_by("-imported_at", "run_id")
         facet_choices = resolve_browser_facets(
             pipeline_run=current_run,
             pipeline_runs=run_choices,
@@ -742,7 +742,7 @@ class CodonUsageRowListView(BrowserTSVExportMixin, VirtualScrollListView):
         if self.is_virtual_scroll_fragment_request():
             return context
         current_run = getattr(self, "current_run", None)
-        run_choices = PipelineRun.objects.order_by("-imported_at", "run_id")
+        run_choices = PipelineRun.objects.active().order_by("-imported_at", "run_id")
         facet_choices = resolve_browser_facets(
             pipeline_run=current_run,
             pipeline_runs=run_choices,

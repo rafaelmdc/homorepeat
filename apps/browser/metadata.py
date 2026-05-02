@@ -61,7 +61,7 @@ def resolve_browser_facets(
         return resolve_run_browser_metadata(pipeline_run)["facets"]
 
     if pipeline_runs is None:
-        pipeline_runs = PipelineRun.objects.order_by("run_id")
+        pipeline_runs = PipelineRun.objects.active().order_by("run_id")
 
     if hasattr(pipeline_runs, "prefetch_related"):
         pipeline_runs = pipeline_runs.prefetch_related("run_parameters", "accession_call_count_rows")

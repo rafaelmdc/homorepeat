@@ -10,7 +10,7 @@ def _resolve_current_run(request):
     run_id = request.GET.get("run", "").strip()
     if not run_id:
         return None
-    return PipelineRun.objects.filter(run_id=run_id).first()
+    return PipelineRun.objects.active().filter(run_id=run_id).first()
 
 
 def _match_branch_taxa(branch_q: str):

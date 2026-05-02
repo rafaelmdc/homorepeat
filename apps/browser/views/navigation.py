@@ -133,7 +133,7 @@ def _browser_directory_sections():
                     "Imported runs",
                     "Run history view for provenance, import activity, and operator workflows.",
                     url_name="browser:run-list",
-                    count=PipelineRun.objects.count(),
+                    count=PipelineRun.objects.active().count(),
                 ),
             ],
         },
