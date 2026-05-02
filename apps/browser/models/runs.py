@@ -3,6 +3,11 @@ from django.db import models
 from .base import TimestampedModel
 
 
+class PipelineRunQuerySet(models.QuerySet):
+    def active(self):
+        return self.filter(lifecycle_status="active")
+
+
 class PipelineRun(TimestampedModel):
     class LifecycleStatus(models.TextChoices):
         ACTIVE = "active", "Active"
@@ -39,6 +44,8 @@ class PipelineRun(TimestampedModel):
     deleted_at = models.DateTimeField(blank=True, null=True)
     delete_failed_at = models.DateTimeField(blank=True, null=True)
     deletion_reason = models.TextField(blank=True)
+
+    objects = PipelineRunQuerySet.as_manager()
 
     class Meta:
         ordering = ["-imported_at", "run_id"]
