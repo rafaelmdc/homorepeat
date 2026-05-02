@@ -9,7 +9,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from apps.imports.models import ImportBatch, UploadedRun
+from apps.imports.models import DeletionJob, ImportBatch, UploadedRun
 from apps.imports.services.import_run.api import dispatch_import_batch, process_import_batch
 from apps.imports.services.import_run.state import _mark_batch_stale_failed, _reset_batch_to_pending
 from apps.imports.services.published_run import ImportContractError
@@ -159,6 +159,12 @@ def cleanup_stale_uploaded_runs() -> dict[str, int]:
         "incomplete_dirs_removed": incomplete_dirs_removed,
         "failed_dirs_removed": failed_dirs_removed,
     }
+
+
+@shared_task(bind=True, name="imports.delete_pipeline_run_job")
+def delete_pipeline_run_job(self, job_id: int) -> None:
+    """Execute async deletion for a DeletionJob. Implemented in Slice 5.1."""
+    raise NotImplementedError(f"Deletion task not yet implemented (job_id={job_id})")
 
 
 def _remove_upload_working_directory(uploaded_run: UploadedRun) -> bool:
