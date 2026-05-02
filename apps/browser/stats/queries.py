@@ -469,7 +469,7 @@ def build_codon_length_inspect_bundle(filter_state: StatsFilterState) -> dict[st
 
 
 def build_filtered_repeat_call_queryset(filter_state: StatsFilterState):
-    queryset = CanonicalRepeatCall.objects.order_by()
+    queryset = CanonicalRepeatCall.objects.filter(latest_pipeline_run__lifecycle_status="active").order_by()
 
     if filter_state.current_run is not None:
         queryset = queryset.filter(latest_pipeline_run=filter_state.current_run)

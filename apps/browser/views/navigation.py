@@ -36,7 +36,7 @@ def _nav_item(title: str, description: str, *, url_name: str, count: int | None 
 
 
 def _browser_directory_sections():
-    homorepeat_count = CanonicalRepeatCall.objects.count()
+    homorepeat_count = CanonicalRepeatCall.objects.filter(latest_pipeline_run__lifecycle_status="active").count()
     return [
         {
             "title": "Primary scientific tables",
@@ -85,7 +85,7 @@ def _browser_directory_sections():
                     "Accessions",
                     "Canonical accession records with current counts and supporting import history.",
                     url_name="browser:accession-list",
-                    count=CanonicalGenome.objects.count(),
+                    count=CanonicalGenome.objects.filter(latest_pipeline_run__lifecycle_status="active").count(),
                 ),
                 _nav_item(
                     "Taxa",
@@ -97,31 +97,31 @@ def _browser_directory_sections():
                     "Genomes",
                     "Current canonical genome catalog with links back to latest-run evidence.",
                     url_name="browser:genome-list",
-                    count=CanonicalGenome.objects.count(),
+                    count=CanonicalGenome.objects.filter(latest_pipeline_run__lifecycle_status="active").count(),
                 ),
                 _nav_item(
                     "Sequences",
                     "Current canonical sequence records with explicit genome and run provenance.",
                     url_name="browser:sequence-list",
-                    count=CanonicalSequence.objects.count(),
+                    count=CanonicalSequence.objects.filter(latest_pipeline_run__lifecycle_status="active").count(),
                 ),
                 _nav_item(
                     "Proteins",
                     "Current canonical proteins with genome, sequence, and taxon context.",
                     url_name="browser:protein-list",
-                    count=CanonicalProtein.objects.count(),
+                    count=CanonicalProtein.objects.filter(latest_pipeline_run__lifecycle_status="active").count(),
                 ),
                 _nav_item(
                     "Repeat calls",
                     "Technical canonical repeat-call table with source identifiers and latest-run provenance.",
                     url_name="browser:repeatcall-list",
-                    count=CanonicalRepeatCall.objects.count(),
+                    count=CanonicalRepeatCall.objects.filter(latest_pipeline_run__lifecycle_status="active").count(),
                 ),
                 _nav_item(
                     "Codon usage rows",
                     "Canonical per-codon rows behind repeat-level codon usage profiles.",
                     url_name="browser:codonusage-row-list",
-                    count=CanonicalRepeatCallCodonUsage.objects.count(),
+                    count=CanonicalRepeatCallCodonUsage.objects.filter(repeat_call__latest_pipeline_run__lifecycle_status="active").count(),
                 ),
             ],
         },
