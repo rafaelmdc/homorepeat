@@ -392,6 +392,6 @@ def _latest_completed_batch(pipeline_run: PipelineRun | None) -> ImportBatch | N
         return None
     return (
         ImportBatch.objects.filter(pipeline_run=pipeline_run, status=ImportBatch.Status.COMPLETED)
-        .order_by("-created_at")
+        .order_by("-started_at")
         .first()
     )
