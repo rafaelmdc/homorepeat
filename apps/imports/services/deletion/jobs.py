@@ -98,7 +98,7 @@ def claim_deletion_job(job_id: int) -> DeletionJob | None:
     with transaction.atomic():
         job = (
             DeletionJob.objects.select_related("pipeline_run")
-            .select_for_update()
+            .select_for_update(of=("self",))
             .filter(pk=job_id)
             .first()
         )

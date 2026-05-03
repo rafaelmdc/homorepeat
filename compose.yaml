@@ -265,6 +265,37 @@ services:
       retries: 3
       start_period: 20s
 
+  # Sequential deletion worker — single concurrency so runs are deleted one at a time.
+  celery-deletion-worker:
+    image: homorepeat-web:dev
+    working_dir: /app
+    command: celery -A config.celery worker -Q deletions -c 1 --prefetch-multiplier 1 --loglevel=info
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-secret-key}
+      DJANGO_TIME_ZONE: ${DJANGO_TIME_ZONE:-UTC}
+      DATABASE_ENGINE: ${DATABASE_ENGINE:-django.db.backends.postgresql}
+      DATABASE_NAME: ${POSTGRES_DB:-homorepeat}
+      DATABASE_USER: ${POSTGRES_USER:-homorepeat}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-homorepeat}
+      DATABASE_HOST: ${DATABASE_HOST:-postgres}
+      DATABASE_PORT: ${DATABASE_PORT:-5432}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config.celery inspect ping -d celery@$$HOSTNAME --timeout 5 2>&1 | grep -q pong"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 20s
+
   celery-beat:
     image: homorepeat-web:dev
     working_dir: /app

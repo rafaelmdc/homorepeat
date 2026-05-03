@@ -76,7 +76,8 @@ def _repair_postgresql(pipeline_run: PipelineRun) -> dict[str, int]:
         """, [run_pk, run_pk])
         counts["canonical_genomes_promoted"] = cursor.rowcount
 
-        # Delete orphans (cascade removes all child sequences, proteins, repeat calls).
+        # Delete orphans — DB-level CASCADE removes all child sequences, proteins,
+        # repeat calls, and codon usages automatically.
         cursor.execute("""
             DELETE FROM browser_canonicalgenome
             WHERE latest_pipeline_run_id = %s
@@ -219,7 +220,7 @@ def _repair_postgresql(pipeline_run: PipelineRun) -> dict[str, int]:
         """, [run_pk, run_pk])
         counts["canonical_repeat_calls_promoted"] = cursor.rowcount
 
-        # Delete orphan repeat calls (CanonicalRepeatCallCodonUsage cascades).
+        # Delete orphan repeat calls (codon usages cascade via DB-level FK).
         cursor.execute("""
             DELETE FROM browser_canonicalrepeatcall
             WHERE latest_pipeline_run_id = %s
