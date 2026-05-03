@@ -9,7 +9,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from apps.imports.models import ImportBatch, UploadedRun
+from apps.imports.models import DeletionJob, ImportBatch, UploadedRun
 from apps.imports.services.import_run.api import dispatch_import_batch, process_import_batch
 from apps.imports.services.import_run.state import _mark_batch_stale_failed, _reset_batch_to_pending
 from apps.imports.services.published_run import ImportContractError
@@ -159,6 +159,21 @@ def cleanup_stale_uploaded_runs() -> dict[str, int]:
         "incomplete_dirs_removed": incomplete_dirs_removed,
         "failed_dirs_removed": failed_dirs_removed,
     }
+
+
+@shared_task(bind=True, name="imports.delete_pipeline_run_job")
+def delete_pipeline_run_job(self, job_id: int) -> None:
+    """Claim and execute async deletion for a DeletionJob."""
+    from apps.imports.services.deletion.jobs import claim_deletion_job, execute_deletion_phases, mark_job_failed
+
+    job = claim_deletion_job(job_id)
+    if job is None:
+        return
+
+    try:
+        execute_deletion_phases(job)
+    except Exception as exc:
+        mark_job_failed(job, exc)
 
 
 def _remove_upload_working_directory(uploaded_run: UploadedRun) -> bool:

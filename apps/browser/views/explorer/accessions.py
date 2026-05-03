@@ -103,7 +103,7 @@ class AccessionsListView(BrowserTSVExportMixin, VirtualScrollListView):
         current_run = getattr(self, "current_run", None)
         context["current_run"] = current_run
         context["current_run_id"] = current_run.run_id if current_run else ""
-        context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
+        context["run_choices"] = PipelineRun.objects.active().order_by("-imported_at", "run_id")
         context["ordering_options"] = [
             {"value": value, "label": _ordering_label(value)}
             for value in self.ordering_map.keys()

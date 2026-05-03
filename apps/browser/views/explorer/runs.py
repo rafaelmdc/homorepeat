@@ -69,7 +69,7 @@ class RunListView(BrowserTSVExportMixin, VirtualScrollListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["current_status"] = self.request.GET.get("status", "").strip()
-        context["status_choices"] = PipelineRun.objects.order_by("status").values_list("status", flat=True).distinct()
+        context["status_choices"] = PipelineRun.objects.active().order_by("status").values_list("status", flat=True).distinct()
         return context
 
 
@@ -79,7 +79,8 @@ class RunDetailView(DetailView):
     context_object_name = "pipeline_run"
 
     def get_queryset(self):
-        return _annotated_runs()
+        # Include all lifecycle states so the page works for deleting/deleted/failed runs.
+        return _annotated_runs(PipelineRun.objects.all())
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -221,4 +222,22 @@ class RunDetailView(DetailView):
         )
         context["recent_import_batches"] = list(import_batches.order_by("-started_at", "-pk")[:5])
         context["imports_history_url"] = reverse("imports:history")
+
+        # Deletion context — most recent job (any status) for this run.
+        from apps.imports.models import DeletionJob
+        deletion_job = (
+            DeletionJob.objects.filter(pipeline_run=pipeline_run)
+            .order_by("-created_at")
+            .first()
+        )
+        context["deletion_job"] = deletion_job
+        context["deletion_job_is_active"] = bool(
+            deletion_job and deletion_job.status in (DeletionJob.Status.PENDING, DeletionJob.Status.RUNNING)
+        )
+        if self.request.user.is_staff:
+            context["run_delete_url"] = reverse("imports:run-delete", kwargs={"pk": pipeline_run.pk})
+            if deletion_job and deletion_job.status == DeletionJob.Status.FAILED:
+                context["deletion_retry_url"] = reverse(
+                    "imports:deletion-retry", kwargs={"job_pk": deletion_job.pk}
+                )
         return context

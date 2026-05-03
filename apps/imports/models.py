@@ -258,3 +258,76 @@ class UploadedRunChunk(models.Model):
 
     class Meta:
         unique_together = [("uploaded_run", "chunk_index")]
+
+
+class DeletionJob(models.Model):
+    class TargetType(models.TextChoices):
+        PIPELINE_RUN = "pipeline_run", "Pipeline Run"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        RUNNING = "running", "Running"
+        DONE = "done", "Done"
+        FAILED = "failed", "Failed"
+
+    target_type = models.CharField(
+        max_length=32,
+        choices=TargetType.choices,
+        default=TargetType.PIPELINE_RUN,
+    )
+    pipeline_run = models.ForeignKey(
+        "browser.PipelineRun",
+        on_delete=models.SET_NULL,
+        related_name="deletion_jobs",
+        blank=True,
+        null=True,
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+    phase = models.CharField(max_length=64, blank=True)
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="deletion_jobs",
+        blank=True,
+        null=True,
+    )
+    requested_by_label = models.CharField(max_length=255, blank=True)
+    reason = models.TextField(blank=True)
+    idempotency_key = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    started_at = models.DateTimeField(blank=True, null=True)
+    finished_at = models.DateTimeField(blank=True, null=True)
+    last_heartbeat_at = models.DateTimeField(blank=True, null=True)
+    last_error_at = models.DateTimeField(blank=True, null=True)
+    error_message = models.TextField(blank=True)
+    error_debug = models.JSONField(default=dict, blank=True)
+    rows_planned = models.PositiveIntegerField(default=0)
+    rows_deleted = models.PositiveIntegerField(default=0)
+    artifacts_planned = models.PositiveIntegerField(default=0)
+    artifacts_deleted = models.PositiveIntegerField(default=0)
+    catalog_versions = models.JSONField(default=list, blank=True)
+    current_table = models.CharField(max_length=128, blank=True)
+    current_chunk_size = models.PositiveIntegerField(blank=True, null=True)
+    retry_count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["pipeline_run", "status"], name="imports_djob_run_status_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["pipeline_run"],
+                condition=Q(status__in=["pending", "running"]),
+                name="imports_djob_unique_active_per_run",
+            ),
+        ]
+
+    def __str__(self):
+        run_label = str(self.pipeline_run_id or "?")
+        return f"DeletionJob({self.pk}) {self.target_type}:{run_label} [{self.status}]"

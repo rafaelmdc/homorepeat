@@ -76,7 +76,7 @@ class TaxonListView(BrowserTSVExportMixin, VirtualScrollListView):
         current_run = getattr(self, "current_run", None)
         context["current_run"] = current_run
         context["current_run_id"] = current_run.run_id if current_run else ""
-        context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
+        context["run_choices"] = PipelineRun.objects.active().order_by("-imported_at", "run_id")
         context["current_rank"] = getattr(self, "current_rank", "")
         context["rank_choices"] = (
             Taxon.objects.exclude(rank="")

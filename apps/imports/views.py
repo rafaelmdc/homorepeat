@@ -10,13 +10,19 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import HttpResponseRedirect, JsonResponse
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import FormView, ListView
 
+from apps.browser.models import PipelineRun
+from apps.imports.services.deletion.jobs import queue_deletion, retry_deletion
+from apps.imports.services.deletion.planning import build_deletion_plan
+from apps.imports.services.deletion.safety import DeletionTargetError, validate_deletion_target
+
 from .forms import ImportRunForm
-from .models import ImportBatch, UploadedRun
+from .models import DeletionJob, ImportBatch, UploadedRun
 from .policy import UploadPolicyError, check_active_upload_limit, check_daily_bytes_limit, check_zip_size_limit
 from .services import dispatch_import_batch, enqueue_published_run
 from .services.uploads import (
@@ -332,6 +338,81 @@ class UploadRunClearView(StaffOnlyMixin, View):
             messages.error(request, str(exc))
         else:
             messages.success(request, "Working files cleared.")
+        return HttpResponseRedirect(reverse("imports:home"))
+
+
+class RunDeleteView(StaffOnlyMixin, View):
+    """GET shows the impact plan; POST (with confirm) queues the deletion job."""
+
+    http_method_names = ["get", "post"]
+
+    def get(self, request, pk):
+        run = get_object_or_404(PipelineRun, pk=pk)
+        try:
+            validate_deletion_target(run)
+        except DeletionTargetError as exc:
+            messages.error(request, str(exc))
+            return HttpResponseRedirect(reverse("browser:run-detail", kwargs={"pk": pk}))
+        plan = build_deletion_plan(run)
+        return render(request, "imports/run_delete_confirm.html", {
+            "pipeline_run": run,
+            "plan": plan,
+        })
+
+    def post(self, request, pk):
+        run = get_object_or_404(PipelineRun, pk=pk)
+        if not request.POST.get("confirm"):
+            messages.error(request, "Check the confirmation box to proceed with deletion.")
+            return HttpResponseRedirect(reverse("imports:run-delete", kwargs={"pk": pk}))
+
+        existing_active_job_pk = (
+            DeletionJob.objects.filter(
+                pipeline_run=run,
+                status__in=[DeletionJob.Status.PENDING, DeletionJob.Status.RUNNING],
+            )
+            .values_list("pk", flat=True)
+            .first()
+        )
+
+        try:
+            job = queue_deletion(
+                run,
+                reason=request.POST.get("reason", "").strip(),
+                requested_by=_database_user(request),
+                requested_by_label=_actor_label(request),
+            )
+        except DeletionTargetError as exc:
+            messages.error(request, str(exc))
+        else:
+            if existing_active_job_pk == job.pk:
+                messages.warning(
+                    request,
+                    f"An active deletion job (id={job.pk}) already exists for this run.",
+                )
+            else:
+                messages.success(
+                    request,
+                    f"Deletion queued (job id={job.pk}). The run will be removed in the background.",
+                )
+        return HttpResponseRedirect(reverse("browser:run-detail", kwargs={"pk": pk}))
+
+
+class RunDeletionRetryView(StaffOnlyMixin, View):
+    """POST retries a failed DeletionJob and redirects back to the run detail page."""
+
+    http_method_names = ["post"]
+
+    def post(self, request, job_pk):
+        job = get_object_or_404(DeletionJob.objects.select_related("pipeline_run"), pk=job_pk)
+        run_pk = job.pipeline_run_id
+        try:
+            retry_deletion(job)
+        except DeletionTargetError as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(request, f"Deletion job {job.pk} re-queued.")
+        if run_pk:
+            return HttpResponseRedirect(reverse("browser:run-detail", kwargs={"pk": run_pk}))
         return HttpResponseRedirect(reverse("imports:home"))
 
 

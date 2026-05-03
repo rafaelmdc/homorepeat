@@ -3,7 +3,18 @@ from django.db import models
 from .base import TimestampedModel
 
 
+class PipelineRunQuerySet(models.QuerySet):
+    def active(self):
+        return self.filter(lifecycle_status="active")
+
+
 class PipelineRun(TimestampedModel):
+    class LifecycleStatus(models.TextChoices):
+        ACTIVE = "active", "Active"
+        DELETING = "deleting", "Deleting"
+        DELETED = "deleted", "Deleted"
+        DELETE_FAILED = "delete_failed", "Delete Failed"
+
     run_id = models.CharField(max_length=255, unique=True)
     status = models.CharField(max_length=32, db_index=True)
     profile = models.CharField(max_length=64, blank=True)
@@ -24,9 +35,26 @@ class PipelineRun(TimestampedModel):
     )
     canonical_synced_at = models.DateTimeField(blank=True, null=True, db_index=True)
     imported_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    lifecycle_status = models.CharField(
+        max_length=16,
+        choices=LifecycleStatus.choices,
+        default=LifecycleStatus.ACTIVE,
+    )
+    deleting_at = models.DateTimeField(blank=True, null=True)
+    deleted_at = models.DateTimeField(blank=True, null=True)
+    delete_failed_at = models.DateTimeField(blank=True, null=True)
+    deletion_reason = models.TextField(blank=True)
+
+    objects = PipelineRunQuerySet.as_manager()
 
     class Meta:
         ordering = ["-imported_at", "run_id"]
+        indexes = [
+            models.Index(
+                fields=["lifecycle_status", "imported_at", "id"],
+                name="brw_run_lifecycle_imported_idx",
+            ),
+        ]
 
     def __str__(self):
         return self.run_id

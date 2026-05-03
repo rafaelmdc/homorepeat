@@ -35,6 +35,7 @@ class CanonicalGenome(TimestampedModel):
     class Meta:
         ordering = ["accession"]
         indexes = [
+            models.Index(fields=["latest_pipeline_run"], name="brw_cgenome_run_idx"),
             models.Index(fields=["genome_name"], name="brw_cgenome_name_idx"),
             models.Index(fields=["taxon"], name="brw_cgenome_tax_idx"),
         ]
@@ -89,6 +90,7 @@ class CanonicalSequence(TimestampedModel):
             ),
         ]
         indexes = [
+            models.Index(fields=["latest_pipeline_run"], name="brw_cseq_run_idx"),
             models.Index(
                 fields=["assembly_accession", "sequence_name", "id"],
                 name="brw_cseq_acc_name_id",
@@ -151,6 +153,7 @@ class CanonicalProtein(TimestampedModel):
             ),
         ]
         indexes = [
+            models.Index(fields=["latest_pipeline_run"], name="brw_cprot_run_idx"),
             models.Index(
                 fields=["accession", "protein_name", "id"],
                 name="brw_cprot_acc_name_id",

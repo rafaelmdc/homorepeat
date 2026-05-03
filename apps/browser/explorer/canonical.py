@@ -22,7 +22,9 @@ def scoped_canonical_genomes(
     genome_name: str = "",
     branch_taxa_ids=None,
 ):
-    queryset = CanonicalGenome.objects.exclude(accession="").select_related(
+    queryset = CanonicalGenome.objects.filter(
+        latest_pipeline_run__lifecycle_status="active"
+    ).exclude(accession="").select_related(
         "latest_pipeline_run",
         "latest_import_batch",
         "taxon",
@@ -179,7 +181,8 @@ def scoped_canonical_sequences(
     branch_taxa_ids=None,
 ):
     queryset = (
-        CanonicalSequence.objects.select_related("latest_pipeline_run", "taxon")
+        CanonicalSequence.objects.filter(latest_pipeline_run__lifecycle_status="active")
+        .select_related("latest_pipeline_run", "taxon")
         .defer("nucleotide_sequence")
         .only(
             "id",
@@ -340,7 +343,8 @@ def scoped_canonical_proteins(
     purity_max=None,
 ):
     queryset = (
-        CanonicalProtein.objects.select_related("latest_pipeline_run", "taxon")
+        CanonicalProtein.objects.filter(latest_pipeline_run__lifecycle_status="active")
+        .select_related("latest_pipeline_run", "taxon")
         .defer("amino_acid_sequence")
         .only(
             "id",
@@ -502,7 +506,8 @@ def scoped_canonical_repeat_calls(
     purity_max=None,
 ):
     queryset = (
-        CanonicalRepeatCall.objects.select_related("latest_pipeline_run", "taxon", "latest_repeat_call")
+        CanonicalRepeatCall.objects.filter(latest_pipeline_run__lifecycle_status="active")
+        .select_related("latest_pipeline_run", "taxon", "latest_repeat_call")
         .defer("aa_sequence", "codon_sequence")
         .only(
             "id",

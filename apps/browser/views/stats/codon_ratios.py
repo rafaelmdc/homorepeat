@@ -323,7 +323,7 @@ class CodonRatioExplorerView(StatsTSVExportMixin, TemplateView):
             ),
         )
         context["chart_taxonomy_gutter_payload_id"] = "codon-composition-chart-taxonomy-gutter-payload"
-        context["run_choices"] = PipelineRun.objects.order_by("-imported_at", "run_id")
+        context["run_choices"] = PipelineRun.objects.active().order_by("-imported_at", "run_id")
         context["rank_choices"] = [
             {"value": rank, "label": rank}
             for rank in ALLOWED_STATS_RANKS

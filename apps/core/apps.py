@@ -15,7 +15,7 @@ class CoreConfig(AppConfig):
 
         original_log_addition = admin.ModelAdmin.log_addition
         original_log_change = admin.ModelAdmin.log_change
-        original_log_deletion = admin.ModelAdmin.log_deletion
+        original_log_deletions = admin.ModelAdmin.log_deletions
 
         def log_addition(self, request, obj, message):
             if getattr(settings, "NO_ADMIN", False):
@@ -27,12 +27,12 @@ class CoreConfig(AppConfig):
                 return None
             return original_log_change(self, request, obj, message)
 
-        def log_deletion(self, request, obj, object_repr):
+        def log_deletions(self, request, queryset):
             if getattr(settings, "NO_ADMIN", False):
                 return None
-            return original_log_deletion(self, request, obj, object_repr)
+            return original_log_deletions(self, request, queryset)
 
         admin.ModelAdmin.log_addition = log_addition
         admin.ModelAdmin.log_change = log_change
-        admin.ModelAdmin.log_deletion = log_deletion
+        admin.ModelAdmin.log_deletions = log_deletions
         admin.ModelAdmin._homorepeat_no_admin_log_patch = True

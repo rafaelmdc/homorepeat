@@ -136,6 +136,8 @@ CELERY_TASK_ROUTES = {
     # Explicit upload-queue tasks must come before the imports wildcard.
     "apps.imports.tasks.extract_uploaded_run": {"queue": "uploads"},
     "apps.imports.tasks.cleanup_stale_uploaded_runs": {"queue": "uploads"},
+    # Deletion task uses a short registered name; must be explicit before the wildcard.
+    "imports.delete_pipeline_run_job": {"queue": "deletions"},
     # All remaining imports tasks (run_import_batch, reset_stale_import_batches, …)
     "apps.imports.tasks.*": {"queue": "imports"},
     # Explicit downloads-queue tasks before the wildcard (wildcard → payload_graph).
