@@ -295,6 +295,8 @@ class RetryDeletionTests(TestCase):
         self.assertEqual(updated.retry_count, 1)
         self.assertEqual(updated.error_message, "")
         self.assertEqual(updated.error_debug, {})
+        self.run.refresh_from_db()
+        self.assertEqual(self.run.lifecycle_status, PipelineRun.LifecycleStatus.DELETING)
 
     @patch("apps.imports.services.deletion.jobs._enqueue")
     def test_retry_calls_enqueue(self, mock_enqueue):

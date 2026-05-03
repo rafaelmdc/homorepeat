@@ -54,27 +54,33 @@ _CASCADE_FKS = [
     ),
 ]
 
-_forward_sql = "\n".join(
-    f"""
-    ALTER TABLE {table}
-        DROP CONSTRAINT {constraint},
-        ADD CONSTRAINT {constraint}
-            FOREIGN KEY ({col}) REFERENCES {ref_table}({ref_col})
-            ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
-    """
-    for table, col, constraint, ref_table, ref_col in _CASCADE_FKS
-)
 
-_reverse_sql = "\n".join(
-    f"""
-    ALTER TABLE {table}
-        DROP CONSTRAINT {constraint},
-        ADD CONSTRAINT {constraint}
-            FOREIGN KEY ({col}) REFERENCES {ref_table}({ref_col})
-            DEFERRABLE INITIALLY DEFERRED;
-    """
-    for table, col, constraint, ref_table, ref_col in _CASCADE_FKS
-)
+def _apply_cascade(apps, schema_editor):
+    if schema_editor.connection.vendor != "postgresql":
+        return
+    with schema_editor.connection.cursor() as cursor:
+        for table, col, constraint, ref_table, ref_col in _CASCADE_FKS:
+            cursor.execute(f"""
+                ALTER TABLE {table}
+                    DROP CONSTRAINT {constraint},
+                    ADD CONSTRAINT {constraint}
+                        FOREIGN KEY ({col}) REFERENCES {ref_table}({ref_col})
+                        ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+            """)
+
+
+def _remove_cascade(apps, schema_editor):
+    if schema_editor.connection.vendor != "postgresql":
+        return
+    with schema_editor.connection.cursor() as cursor:
+        for table, col, constraint, ref_table, ref_col in _CASCADE_FKS:
+            cursor.execute(f"""
+                ALTER TABLE {table}
+                    DROP CONSTRAINT {constraint},
+                    ADD CONSTRAINT {constraint}
+                        FOREIGN KEY ({col}) REFERENCES {ref_table}({ref_col})
+                        DEFERRABLE INITIALLY DEFERRED
+            """)
 
 
 class Migration(migrations.Migration):
@@ -84,8 +90,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            sql=_forward_sql,
-            reverse_sql=_reverse_sql,
-        ),
+        migrations.RunPython(_apply_cascade, reverse_code=_remove_cascade),
     ]

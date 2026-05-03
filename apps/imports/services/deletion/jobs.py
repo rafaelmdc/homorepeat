@@ -231,6 +231,10 @@ def retry_deletion(job: DeletionJob) -> DeletionJob:
             "last_error_at", "retry_count",
         ])
 
+        PipelineRun.objects.filter(pk=locked_job.pipeline_run_id).update(
+            lifecycle_status=PipelineRun.LifecycleStatus.DELETING,
+        )
+
         job_pk = locked_job.pk
         transaction.on_commit(lambda: _enqueue(job_pk))
 
