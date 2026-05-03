@@ -3,6 +3,8 @@ from django.urls import path
 from .views import (
     ImportsHistoryView,
     ImportsHomeView,
+    RunDeleteView,
+    RunDeletionRetryView,
     UploadRunChunkView,
     UploadRunClearView,
     UploadRunCompleteView,
@@ -19,6 +21,8 @@ app_name = "imports"
 urlpatterns = [
     path("", ImportsHomeView.as_view(), name="home"),
     path("history/", ImportsHistoryView.as_view(), name="history"),
+    path("runs/<int:pk>/delete/", RunDeleteView.as_view(), name="run-delete"),
+    path("jobs/<int:job_pk>/retry/", RunDeletionRetryView.as_view(), name="deletion-retry"),
     path("uploads/start/", UploadRunStartView.as_view(), name="upload-start"),
     path("uploads/<uuid:upload_id>/chunk/", UploadRunChunkView.as_view(), name="upload-chunk"),
     path("uploads/<uuid:upload_id>/complete/", UploadRunCompleteView.as_view(), name="upload-complete"),

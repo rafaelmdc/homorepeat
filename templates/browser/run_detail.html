@@ -8,6 +8,45 @@
   <div data-import-auto-refresh data-refresh-interval-ms="5000" hidden></div>
 {% endif %}
 
+{# --- Slice 12.3: Direct URL lifecycle banners --- #}
+{% if pipeline_run.lifecycle_status == "deleting" %}
+  <div class="alert alert-warning d-flex align-items-center gap-3 mb-4" role="alert">
+    <div class="flex-grow-1">
+      <strong>Deletion in progress.</strong>
+      This run is being removed in the background. Browsing data may be partially reduced until deletion completes.
+      {% if deletion_job %}
+        Phase: <strong>{{ deletion_job.phase|default:"queued" }}</strong>
+        &nbsp;·&nbsp; Rows deleted: <strong>{{ deletion_job.rows_deleted }}</strong>
+        &nbsp;·&nbsp; Last heartbeat: {{ deletion_job.last_heartbeat_at|date:"H:i:s"|default:"—" }}
+      {% endif %}
+    </div>
+  </div>
+{% elif pipeline_run.lifecycle_status == "deleted" %}
+  <div class="alert alert-secondary mb-4" role="alert">
+    <strong>This run has been deleted.</strong>
+    The pipeline run row is kept as a tombstone for audit purposes. Raw data, artifacts, and canonical rows have been removed.
+    {% if deletion_job and deletion_job.finished_at %}
+      Completed {{ deletion_job.finished_at|date:"Y-m-d H:i" }}.
+    {% endif %}
+  </div>
+{% elif pipeline_run.lifecycle_status == "delete_failed" %}
+  <div class="alert alert-danger d-flex align-items-start gap-3 mb-4" role="alert">
+    <div class="flex-grow-1">
+      <strong>Deletion failed.</strong>
+      The deletion job encountered an error and stopped. The run may be in a partially deleted state.
+      {% if deletion_job and deletion_job.error_message %}
+        <br><span class="text-secondary small">{{ deletion_job.error_message }}</span>
+      {% endif %}
+    </div>
+    {% if deletion_retry_url %}
+      <form method="post" action="{{ deletion_retry_url }}" class="flex-shrink-0">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-outline-danger">Retry deletion</button>
+      </form>
+    {% endif %}
+  </div>
+{% endif %}
+
 <section class="hero-panel py-4 py-lg-5 mb-4">
   <div class="row g-4 align-items-start">
     <div class="col-lg-8">
@@ -37,8 +76,13 @@
       </div>
       <div class="d-flex flex-wrap gap-2">
         <a class="btn btn-outline-primary" href="{% url 'browser:run-list' %}">Back to runs</a>
-        <a class="btn btn-brand" href="{{ accession_browser_url }}">Open current accessions</a>
+        {% if pipeline_run.lifecycle_status == "active" %}
+          <a class="btn btn-brand" href="{{ accession_browser_url }}">Open current accessions</a>
+        {% endif %}
         <a class="btn btn-outline-secondary" href="{{ imports_history_url }}">Import history</a>
+        {% if run_delete_url and pipeline_run.lifecycle_status == "active" %}
+          <a class="btn btn-outline-danger" href="{{ run_delete_url }}">Delete run…</a>
+        {% endif %}
       </div>
     </div>
 
@@ -355,6 +399,85 @@
     </article>
   </div>
 </section>
+
+{# --- Slice 12.2: Deletion job status panel --- #}
+{% if deletion_job %}
+<section class="row g-4 mb-4">
+  <div class="col-12">
+    <article class="card h-100 border-0 shadow-sm detail-card {% if deletion_job.status == 'failed' %}border-danger{% elif deletion_job.status == 'done' %}border-success{% endif %}">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+          <div>
+            <p class="eyebrow mb-2">Deletion job</p>
+            <h2 class="mb-0">
+              Job #{{ deletion_job.pk }}
+              &nbsp;
+              {% if deletion_job.status == "pending" %}
+                <span class="badge text-bg-warning">Pending</span>
+              {% elif deletion_job.status == "running" %}
+                <span class="badge text-bg-primary">Running</span>
+              {% elif deletion_job.status == "done" %}
+                <span class="badge text-bg-success">Done</span>
+              {% elif deletion_job.status == "failed" %}
+                <span class="badge text-bg-danger">Failed</span>
+              {% endif %}
+            </h2>
+          </div>
+          {% if deletion_retry_url %}
+            <form method="post" action="{{ deletion_retry_url }}" class="flex-shrink-0">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger">Retry deletion</button>
+            </form>
+          {% endif %}
+        </div>
+        <dl class="info-grid mb-0">
+          <dt>Phase</dt>
+          <dd>{{ deletion_job.phase|default:"—" }}</dd>
+          <dt>Rows deleted</dt>
+          <dd>{{ deletion_job.rows_deleted }}</dd>
+          <dt>Artifacts removed</dt>
+          <dd>{{ deletion_job.artifacts_deleted }}</dd>
+          {% if deletion_job.current_table %}
+            <dt>Current table</dt>
+            <dd><code>{{ deletion_job.current_table }}</code></dd>
+          {% endif %}
+          <dt>Created</dt>
+          <dd>{{ deletion_job.created_at|date:"Y-m-d H:i:s" }}</dd>
+          {% if deletion_job.started_at %}
+            <dt>Started</dt>
+            <dd>{{ deletion_job.started_at|date:"Y-m-d H:i:s" }}</dd>
+          {% endif %}
+          {% if deletion_job.finished_at %}
+            <dt>Finished</dt>
+            <dd>{{ deletion_job.finished_at|date:"Y-m-d H:i:s" }}</dd>
+          {% endif %}
+          {% if deletion_job.last_heartbeat_at %}
+            <dt>Last heartbeat</dt>
+            <dd>{{ deletion_job.last_heartbeat_at|date:"Y-m-d H:i:s" }}</dd>
+          {% endif %}
+          {% if deletion_job.retry_count %}
+            <dt>Retry count</dt>
+            <dd>{{ deletion_job.retry_count }}</dd>
+          {% endif %}
+          {% if deletion_job.reason %}
+            <dt>Reason</dt>
+            <dd>{{ deletion_job.reason }}</dd>
+          {% endif %}
+          {% if deletion_job.requested_by_label %}
+            <dt>Requested by</dt>
+            <dd>{{ deletion_job.requested_by_label }}</dd>
+          {% endif %}
+        </dl>
+        {% if deletion_job.error_message %}
+          <div class="alert alert-danger mt-3 mb-0">
+            <strong>Error:</strong> {{ deletion_job.error_message }}
+          </div>
+        {% endif %}
+      </div>
+    </article>
+  </div>
+</section>
+{% endif %}
 
 <section class="row g-4 mb-4">
   <div class="col-lg-6">
