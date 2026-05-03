@@ -56,7 +56,7 @@ contract v2.
 Use this when the PAASTA run is on your laptop or workstation and is not mounted
 inside the Docker stack.
 
-1. Zip the run folder. The zip can contain `publish/` at the top level or inside
+1. Zip the publish folder. The zip can contain `publish/` at the top level or inside
    one parent folder, but it must contain exactly one
    `publish/metadata/run_manifest.json`.
 2. Open **http://localhost:8000/imports/**.

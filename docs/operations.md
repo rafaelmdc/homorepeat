@@ -18,7 +18,9 @@ docker compose exec web python manage.py <command>
 python3 manage.py migrate
 ```
 
-**Import a published run:**
+**Import a published run (server-side path):**
+
+> **Normal path:** Upload a zipped run via the web UI at `/imports/`. The UI handles chunked upload, extraction, and import automatically. The command below is only needed when the publish root is already on the server (e.g. pipeline output written directly to the host).
 
 ```bash
 python3 manage.py import_run --publish-root /absolute/path/to/<run>/publish
@@ -26,13 +28,9 @@ python3 manage.py import_run --publish-root /absolute/path/to/<run>/publish
 
 The manifest at `metadata/run_manifest.json` must include `publish_contract_version: 2`. Required v2 files are `calls/repeat_calls.tsv`, `calls/run_params.tsv`, the TSVs under `tables/`, summaries under `summaries/`, and the manifest under `metadata/`.
 
-**Process the oldest queued import:**
-
-```bash
-python3 manage.py import_run --next-pending
-```
-
 **Rebuild canonical catalog metadata:**
+
+> These run automatically after every successful import and after every deletion job. Only needed manually after a schema change, a failed rollup, or a data correction.
 
 ```bash
 python3 manage.py backfill_canonical_catalog
@@ -41,6 +39,8 @@ python3 manage.py backfill_browser_metadata
 
 **Rebuild codon rollups:**
 
+> Also run automatically after every import and deletion. Only needed manually to recover from a failed rebuild or after a rollup logic change.
+
 ```bash
 python3 manage.py backfill_codon_composition_summaries
 python3 manage.py backfill_codon_composition_length_summaries
@@ -48,7 +48,7 @@ python3 manage.py backfill_codon_composition_length_summaries
 
 ## Import and Rollup Maintenance
 
-The canonical catalog sync rebuilds codon composition summaries, codon composition by length summaries, and canonical protein repeat-call counts.
+The canonical catalog sync and all codon rollups run automatically after every successful import and after every deletion job — no manual intervention is needed in normal operation. This section covers how to diagnose and fix a rollup if it ends up in a bad state.
 
 If codon share values in an unfiltered view do not match a filtered/branch view, rebuild the relevant rollup table and compare against live aggregation. Unfiltered views are the most likely to use rollups.
 
@@ -65,6 +65,32 @@ Stats bundles and taxonomy gutter payloads are cached using a hash of the valida
 Taxonomy gutter payloads also carry a local version constant in `apps/browser/stats/taxonomy_gutter.py`. Bump it when changing payload shape or alignment semantics.
 
 ## Upload and Import Operator Checklist
+
+### What the backend does
+
+**When you upload a zip at `/imports/`:**
+
+1. The browser splits the file into chunks and uploads each one. The server writes each chunk to disk and verifies its SHA-256 checksum before accepting it.
+2. When the last chunk arrives, the server assembles the full zip and dispatches an extraction task to the `uploads` Celery queue.
+3. The extraction worker validates the zip (rejects path traversal, symlinks, excessive size, invalid structure), extracts it to a scratch directory, and moves the validated publish root to `library/<run-id>/publish/` on the imports volume.
+4. The run appears as **Ready** with an **Import** button. Nothing has been written to the database yet.
+
+**When you click Import:**
+
+1. The server creates an `ImportBatch` record and dispatches an import task to the `imports` Celery queue.
+2. The import worker streams each TSV from the publish root into PostgreSQL staging tables using `COPY`, then joins them into the permanent browser tables in a single transaction.
+3. After row insertion, the worker syncs the canonical catalog (promoting or creating canonical genome/sequence/protein/repeat-call entries), rebuilds codon composition summaries, and updates browser metadata.
+4. The batch is marked **Completed** and the run is visible in the browser immediately.
+
+**When you retry a failed upload:**
+
+The server re-dispatches the extraction task using the already-uploaded chunks — no re-upload needed. Only valid if the zip bytes are intact (checksum not failed).
+
+**When you click Clear files:**
+
+The server removes the working directory (`uploads/<upload-id>/`) from the imports volume. Library data (`library/<run-id>/`) is never removed by this action.
+
+---
 
 ### Sizing `/data/imports`
 
@@ -123,18 +149,18 @@ The `celery-import-worker` handles only database writes (the `imports` queue) an
 
 ### Recovering Failed Uploads
 
-For a failed upload shown in `/imports/`:
+The UI at `/imports/` handles recovery directly — no commands needed. Open the failed upload and use the buttons shown under the Failed badge:
 
-1. Check the error detail shown under the Failed badge — it will say whether the failure was a checksum mismatch, a disk preflight rejection, a zip validation error, or a publish-contract error.
-2. If the failure is **transient** (disk temporarily full, worker crashed mid-extraction, zip valid and checksum not failed): click **Retry** to re-queue extraction without re-uploading.
-3. If the failure is **permanent** (SHA-256 checksum mismatch, corrupt zip, invalid publish contract): click **Clear files** to reclaim disk space, then re-upload a corrected zip.
-4. If neither button appears, working files are already gone — the database row is kept for audit purposes.
+- **Retry** — re-queues extraction without re-uploading. Use for transient failures: disk temporarily full, worker crashed mid-extraction, checksum not failed.
+- **Clear files** — removes working files to reclaim disk space. Use for permanent failures: SHA-256 checksum mismatch, corrupt zip, invalid publish contract. Re-upload a corrected zip afterwards.
+
+If neither button appears, working files are already gone — the database row is kept for audit purposes.
 
 ### Clearing Old Failed Working Files
 
-The cleanup task runs hourly via Celery Beat and removes working directories for uploads that have been in a failed state longer than `HOMOREPEAT_UPLOAD_FAILED_RETENTION_HOURS` (default: 7 days).
+Cleanup is automatic. Celery Beat runs the cleanup task hourly and removes working directories for uploads that have been failed longer than `HOMOREPEAT_UPLOAD_FAILED_RETENTION_HOURS` (default: 7 days). Library data (`library/<run-id>/`) is never touched — only the `uploads/<upload-id>/` working directory is removed.
 
-To clear failed working files immediately:
+To clear failed working files immediately (e.g. disk is critically full):
 
 ```bash
 docker compose exec web python manage.py shell -c "
@@ -146,8 +172,6 @@ for run in UploadedRun.objects.filter(status='failed'):
         print(f'Cleared {run.upload_id}')
 "
 ```
-
-Library data (`library/<run-id>/`) is never touched by cleanup — only the `uploads/<upload-id>/` working directory is removed.
 
 ### End-to-End Upload/Import Smoke Test
 
@@ -186,28 +210,39 @@ Expected routes:
 
 ## Run Deletion Operator Checklist
 
-Deleting a pipeline run is irreversible once row deletion begins. Follow this checklist in order.
+> **Normal path:** Staff users can delete a run directly from the run detail page in the browser. Click **Delete run…**, review the impact plan, enter an optional reason, and confirm. The UI handles everything — queueing, progress display, and retry — automatically. The management commands below are for scripted workflows, bulk operations, or diagnosing a stuck job from the server.
 
-### Overview
+Deleting a pipeline run is irreversible once row deletion begins.
 
-The deletion workflow is asynchronous and designed to be safe for a live production database. It never holds long locks that would stall other queries, and it never touches taxonomy or reference data shared with other runs. The run is hidden from browsing immediately when the job is queued; all other runs continue to serve normally throughout.
+### What the backend does
 
-**Deletion is slow by design.** A large run (tens of millions of rows) can take several minutes to over an hour depending on hardware. The reasons:
+**When you click Delete run…:**
 
-- **Canonical repair** rebuilds the browser's derived catalog by re-pointing rows to the best available predecessor run for each accession. This involves complex SQL across many tables and a full codon rollup rebuild.
-- **Row deletion uses small chunks** (a few thousand rows at a time) rather than a single bulk `DELETE`. This avoids long-held table locks, keeps autovacuum from falling behind, and lets other queries proceed between chunks.
-- **Each chunk updates indexes.** PostgreSQL must update every B-tree index on the table for every deleted row. A heavily-indexed table like `browser_repeatcall` takes proportionally longer per row than a simple table.
-- **`ANALYZE` runs at the end** on all affected tables so the query planner has accurate statistics immediately after deletion, rather than waiting for autovacuum to catch up.
+The server reads the current database state and returns a preview: how many rows will be deleted per table, which canonical entries are affected, which artifact roots will be removed, and any warnings. Nothing is modified.
 
-Phases in order:
+**When you confirm:**
 
-1. **canonical_repair** — browser catalog rows pointing at this run are promoted to the most recent active predecessor run (if one exists for the same accession) or deleted if none exists. DB-level `ON DELETE CASCADE` propagates removals through the canonical hierarchy automatically. Codon composition rollups are fully rebuilt.
-2. **artifact_cleanup** — files under `HOMOREPEAT_IMPORTS_ROOT/library/<run-id>/` are removed. Paths outside approved roots are skipped safely.
-3. **row_deletion** — run-owned rows are deleted in dependency order using chunked queries. Each chunk acquires only a short row-level lock, leaving the table available to concurrent reads throughout.
-4. **analyze** — `ANALYZE` is run on all affected tables to refresh query planner statistics.
-5. **finished** — the `PipelineRun` row is marked `lifecycle_status = deleted` (tombstone). Import batch and upload audit rows are retained for audit. Taxonomy and reference data are never touched.
+1. The run is locked and validated. Its `lifecycle_status` is set to `deleting` and the browser cache version is bumped — the run disappears from browsing immediately and cache entries are invalidated across all users.
+2. A `DeletionJob` record is created and the Celery task is dispatched to the `deletions` queue on commit.
+3. All other runs continue to serve normally from this point on.
+
+**The Celery worker then runs five phases in order:**
+
+1. **canonical_repair** — For every canonical genome/sequence/protein/repeat-call that was pointing at this run, the worker finds the most recent other active run that contains the same accession. If one exists, the canonical row is re-pointed to it (promoted). If none exists, the canonical row is deleted — and because all FK constraints in the canonical hierarchy use `ON DELETE CASCADE`, removing a canonical genome automatically removes its sequences, proteins, repeat calls, and codon usages in one DB operation. Finally, codon composition rollups are fully rebuilt.
+2. **artifact_cleanup** — The worker removes `library/<run-id>/` from the imports volume. Any path that falls outside the approved imports root is skipped safely rather than erroring.
+3. **row_deletion** — Run-owned rows (repeat calls, genomes, sequences, proteins, acquisition batches, etc.) are deleted in dependency order in small chunks. Each chunk holds only a short row-level lock so concurrent reads on other runs are never blocked. The heartbeat is updated after each table.
+4. **analyze** — `ANALYZE` is run on every affected table so the query planner has fresh statistics immediately, without waiting for autovacuum.
+5. **finished** — The `PipelineRun` row is tombstoned (`lifecycle_status = deleted`). Import batch and upload audit rows are retained with their FK set to NULL. Taxonomy and reference data are never touched.
+
+**Deletion is slow by design.** A large run (tens of millions of rows) can take several minutes to over an hour. Each chunk deletion must update every B-tree index on the table for every deleted row — a heavily-indexed table like `browser_repeatcall` takes proportionally longer per row. The chunked approach is intentional: it keeps lock times short and lets autovacuum keep pace.
+
+**When you click Retry on a failed job:**
+
+The job is reset to `pending`, the run lifecycle is reset to `deleting`, and the Celery task is re-dispatched. The worker restarts from phase 1. Every phase is idempotent — canonical repair re-checks current state, artifact deletion skips missing paths, and chunk deletion is a no-op for rows already gone.
 
 ### Step 1 — Dry-run: review the impact
+
+> **UI:** Clicking **Delete run…** on the run detail page automatically shows the full impact plan before you confirm. You only need the command below for scripted or automated workflows.
 
 ```bash
 python manage.py queue_delete_run --run-id <run-id>
@@ -219,20 +254,13 @@ If an active deletion job already exists (status `pending` or `running`), the pl
 
 ### Step 2 — Queue the deletion job
 
+> **UI:** Confirming on the impact plan page queues the job automatically. The command below is for scripted workflows or server-side imports.
+
 ```bash
 python manage.py queue_delete_run --run-id <run-id> --confirm
 ```
 
-Pass `--reason "..."` to record why the run is being deleted (stored on the job and shown in the UI).
-
-What happens synchronously before the command returns:
-
-- The run is locked and validated (`active` or `deleting` only; `deleted` and `delete_failed` are rejected).
-- A `DeletionJob` is created with `status = pending`.
-- `lifecycle_status` is set to `deleting` — the run is immediately hidden from normal browsing and its cache entries are invalidated.
-- The Celery task is dispatched on commit.
-
-The command prints the job ID — note it for monitoring.
+Pass `--reason "..."` to record why the run is being deleted (stored on the job and shown in the UI). The command prints the job ID — note it for monitoring.
 
 ```
 Deletion job queued (id=42, status=pending).
@@ -240,6 +268,8 @@ Deletion job queued (id=42, status=pending).
 ```
 
 ### Step 3 — Monitor progress
+
+> **UI:** The run detail page shows a live status panel with the current phase, row counters, and heartbeat. Refresh the page to update. Use the command below only when diagnosing a stuck job from the server.
 
 ```bash
 python manage.py deletion_status --job-id <job-id>
@@ -261,18 +291,11 @@ python manage.py retry_deletion_job --job-id <job-id> --confirm
 
 ### Step 4 — Handling failure
 
-If `deletion_status` shows `status: failed`, the error and a retry hint are printed:
-
-```
---- Error ---
-  IntegrityError: ...
-
-  To retry: python manage.py retry_deletion_job --job-id 42 --confirm
-```
+> **UI:** If the job fails, the run detail page shows an error summary and a **Retry** button. Click it to re-enqueue without any commands. Use the commands below only to inspect the raw error or retry from the server.
 
 Check the error before retrying. Transient failures (worker OOM, network blip, PostgreSQL restart) are safe to retry. Schema or data integrity errors are not — fix the underlying cause first or they will reproduce.
 
-**Dry-run (prints state, no changes):**
+**Dry-run (prints current state and error, no changes):**
 
 ```bash
 python manage.py retry_deletion_job --job-id <job-id>
@@ -283,8 +306,6 @@ python manage.py retry_deletion_job --job-id <job-id>
 ```bash
 python manage.py retry_deletion_job --job-id <job-id> --confirm
 ```
-
-This resets the job to `pending`, increments `retry_count`, clears error fields, resets the run lifecycle to `deleting`, and dispatches a new Celery task. Retry always restarts from phase 1. Every phase is idempotent: canonical repair re-checks current state, artifact deletion skips missing paths, and chunk deletion is a no-op for rows already gone.
 
 ### Irreversibility
 
