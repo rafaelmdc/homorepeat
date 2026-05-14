@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark" class=""><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <meta charset="utf-8">
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+  <title>PolyGlutamine in Deuterostomes</title>
+  <meta name="description" content="">
+  <meta name="keywords" content="">
+
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b0e12">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+
+  <style>
+    /* 1) Minimal dark palette so first paint isn't white */
+    :root[data-bs-theme="dark"]{
+      --bs-body-bg:#0b0e12; 
+      --bs-body-color:#e6e6e6;
+    }
+    html, body{
+      background-color:var(--bs-body-bg);
+      color:var(--bs-body-color);
+    }
+
+    /* 2) Kill common white flashes even without main.css */
+    #preloader{ background:#0b0e12 !important; }          /* or display:none to test */
+    .header.light-background{ background:transparent !important; }
+
+    /* Optional: no transitions during first paint */
+    html.preload *, html.preload *::before, html.preload *::after{ transition:none !important; }
+    html, body { height: 100%; }
+
+    body{
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .main{
+      flex: 1 0 auto;           /* main grows to fill leftover space */
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Footer stays after main, not floating up */
+    .footer{
+      margin-top: auto;
+    }
+  </style>
+  <script>
+    // SSR should set this, but as a fallback pick system preference immediately
+    (function(){
+      var saved = document.cookie.match(/(?:^|; )theme=(dark|light)/)?.[1];
+      var theme = saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-bs-theme', theme);
+      document.documentElement.classList.add('preload');
+      window.addEventListener('load', function(){ document.documentElement.classList.remove('preload'); }, {once:true});
+    })();
+  </script>
+
+  <!-- Favicons -->
+  <link href="https://rafael.duarte-correia.pt/static/assets/img/favicon.77ae1c996059.png" rel="icon">
+  <link href="https://rafael.duarte-correia.pt/static/assets/img/apple-touch-icon.b0ea42cafb95.png" rel="apple-touch-icon">
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/" rel="preconnect">
+  <link href="https://fonts.gstatic.com/" rel="preconnect" crossorigin="">
+  <link href="PolyGlutamine%20in%20Deuterostomes_files/css2.css" rel="stylesheet">
+
+  <!-- Vendor CSS Files -->
+  <link href="PolyGlutamine%20in%20Deuterostomes_files/bootstrap.min.f841732ea548.css" rel="stylesheet">
+  <link href="PolyGlutamine%20in%20Deuterostomes_files/bootstrap-icons.92ecf0b0936a.css" rel="stylesheet">
+  <link href="PolyGlutamine%20in%20Deuterostomes_files/aos.6bb554531803.css" rel="stylesheet">
+  <link href="PolyGlutamine%20in%20Deuterostomes_files/swiper-bundle.min.6408a7c2033e.css" rel="stylesheet">
+  <link href="PolyGlutamine%20in%20Deuterostomes_files/glightbox.min.9b438b29cef1.css" rel="stylesheet">
+
+  <script src="PolyGlutamine%20in%20Deuterostomes_files/typed.umd.f6b7b2057f67.js"></script>
+  <!-- Main CSS File -->
+  <link href="PolyGlutamine%20in%20Deuterostomes_files/main.2e6e29bf81e0.css" rel="stylesheet">
+
+  
+  
+</head>
+
+
+<body class="scrolled" data-aos-easing="ease-in-out" data-aos-duration="600" data-aos-delay="0">
+
+  <!-- ======= Header / Navbar ======= -->
+    <header id="header" class="header d-flex align-items-center light-background sticky-top" style="--header-height: 80px;">
+    <div class="container position-relative d-flex align-items-center justify-content-between">
+
+      <nav id="navmenu" class="navmenu">
+        <ul>
+
+          <!-- Home (Django view) -->
+          <li>
+            <a href="https://rafael.duarte-correia.pt/" class="">
+              Home
+            </a>
+          </li>
+
+          <!-- About (Django view) -->
+          <li>
+            <a href="https://rafael.duarte-correia.pt/about/" class="">
+              About
+            </a>
+          </li>
+
+          <!-- Resume (Django view) -->
+          <li>
+            <a href="https://rafael.duarte-correia.pt/resume/" class="">
+              Resume
+            </a>
+          </li>
+
+          <!-- Portfolio (Wagtail page) -->
+          <li>
+            <a href="https://rafael.duarte-correia.pt/portfolio/" class="active">
+              Portfolio
+            </a>
+          </li>
+
+          <!-- Blog (Wagtail page) -->
+          <li>
+            <a href="https://rafael.duarte-correia.pt/blog/" class="">
+              Blog
+            </a>
+          </li>
+
+          <!-- Contact (Django view) -->
+          <li>
+            <a href="https://rafael.duarte-correia.pt/contact/" class="">
+              Contact
+            </a>
+          </li>
+
+        </ul>
+      </nav>
+
+      <!-- Mobile nav toggle moved outside the <nav> to avoid it being clipped/hidden by the overlay -->
+      <i class="mobile-nav-toggle d-xl-none bi bi-list"></i>
+      
+    </div>
+  </header>
+
+
+  <!-- ======= Main Content ======= -->
+  <main class="main">
+    
+<div class="container py-5" style="max-width: 980px;">
+
+  <div class="mb-4">
+    <h1 class="mb-1">PolyGlutamine in Deuterostomes</h1>
+    <p class="text-muted mb-3">A pipeline + SQLite database for comparative polyQ analysis across animal genomes.</p>
+
+    
+      <div class="mb-4">
+        <img alt="A glutamine whiteboard representation" class="img-fluid rounded-4 border" height="927" src="PolyGlutamine%20in%20Deuterostomes_files/glutamine.width-1400.jpg" width="1400">
+      </div>
+    
+
+    
+
+    
+      <div class="d-flex flex-wrap gap-2 mb-4">
+        
+          <a class="badge text-bg-light border text-decoration-none" href="https://rafael.duarte-correia.pt/portfolio/tag/bioinformatics/">#bioinformatics</a>
+        
+          <a class="badge text-bg-light border text-decoration-none" href="https://rafael.duarte-correia.pt/portfolio/tag/pipeline/">#pipeline</a>
+        
+          <a class="badge text-bg-light border text-decoration-none" href="https://rafael.duarte-correia.pt/portfolio/tag/python/">#python</a>
+        
+          <a class="badge text-bg-light border text-decoration-none" href="https://rafael.duarte-correia.pt/portfolio/tag/sqlite/">#sqlite</a>
+        
+      </div>
+    
+  </div>
+
+  <div class="blog-content">
+    
+      <h2 class="mt-4 mb-3">Overview</h2>
+
+
+
+    
+      <p data-block-key="mhj2o">This project began as an evolutionary 
+study of polyglutamine (polyQ) tracts, but the main outcome is broader: a
+ reproducible pipeline and relational database for discovering and 
+analyzing <b>homorepeats (polyX)</b> across annotated animal genomes.</p><p data-block-key="7r64h">The
+ workflow retrieves genome/protein annotations, enriches them with 
+taxonomy, runs configurable detection strategies, stores tract- and 
+protein-level features in SQLite, and generates automated summaries and 
+figures for cross-taxa comparison. PolyQ is used as the primary 
+validation case study.</p>
+    
+      
+
+<div class="sf-callout sf-info">
+  
+    <div class="sf-callout-title">Key outcomes</div>
+  
+  <div class="sf-callout-body">
+    <ul><li data-block-key="gugsd"><b>End-to-end pipeline</b>: data retrieval → homorepeat detection → SQLite storage → automated analyses</li><li data-block-key="bvbav">Multi-strategy detection to reduce <b>definition bias</b> (strict / window / BLAST-based)</li><li data-block-key="6oep8">Figures and poster-ready outputs for <b>comparative genomics + evolutionary interpretation</b></li><li data-block-key="61qdf">Award winning Poster presentation at the 18th edition of IJUP.</li></ul>
+  </div>
+</div>
+
+    
+      
+
+
+<div class="sf-pdfs">
+  
+    <div class="sf-pdfs-title">PolyQ BSc Main Files</div>
+  
+  
+
+  
+  <div class="row g-3 justify-content-center">
+    
+      <div class="
+        col-12 col-md-6 col-lg-5
+        
+      ">
+        <div class="sf-pdf-card">
+          <div class="sf-pdf-name">IJUP_2025_posterpresentation</div>
+
+          <div class="d-flex flex-wrap gap-2 mt-2">
+            <a class="btn btn-sm btn-outline-light" href="https://rafael.duarte-correia.pt/documents/35/IJUP_2025_posterpresentation-_v6.pdf" download="" target="_blank" rel="noopener">
+              Download PDF
+            </a>
+
+            <a class="btn btn-sm btn-link text-decoration-none" href="https://rafael.duarte-correia.pt/documents/35/IJUP_2025_posterpresentation-_v6.pdf" target="_blank" rel="noopener">
+              View
+            </a>
+          </div>
+
+          
+            <div class="sf-pdf-note">18th edition IJUP Poster Presentation</div>
+          
+        </div>
+      </div>
+    
+      <div class="
+        col-12 col-md-6 col-lg-5
+        
+      ">
+        <div class="sf-pdf-card">
+          <div class="sf-pdf-name">Evolution_of_the_Polyglutamine_Tract</div>
+
+          <div class="d-flex flex-wrap gap-2 mt-2">
+            <a class="btn btn-sm btn-outline-light" href="https://rafael.duarte-correia.pt/documents/2/Evolution_of_the_Polyglutamine_Tract_in_the_Animal_Kingdom.pdf" download="" target="_blank" rel="noopener">
+              Download PDF
+            </a>
+
+            <a class="btn btn-sm btn-link text-decoration-none" href="https://rafael.duarte-correia.pt/documents/2/Evolution_of_the_Polyglutamine_Tract_in_the_Animal_Kingdom.pdf" target="_blank" rel="noopener">
+              View
+            </a>
+          </div>
+
+          
+            <div class="sf-pdf-note">Final internship project report for the BSc.</div>
+          
+        </div>
+      </div>
+    
+  </div>
+</div>
+
+    
+      <hr class="my-5 opacity-25">
+
+    
+      <h2 class="mt-4 mb-3">Project Context</h2>
+
+
+
+    
+      
+<h3 class="mt-4 mb-3">Why this project</h3>
+
+
+    
+      <p data-block-key="mhj2o">Homorepeats (polyX tracts) are common in
+ proteins and can influence structure, interaction behavior, regulation,
+ and evolutionary dynamics. But they’re hard to study at scale because 
+“finding repeats” is not a single problem—results depend strongly on <b>how you define a tract</b>.</p><p data-block-key="8pd18">A
+ strict definition (uninterrupted runs) is very reproducible, but it can
+ miss biologically plausible tracts that contain interruptions 
+(substitutions, small insertions, or imperfect repeat structure). More 
+permissive definitions can capture those interrupted regions, but they 
+can also inflate counts by pulling in generic low-complexity sequence.</p><p data-block-key="8bsb5">This
+ becomes a serious problem in comparative and evolutionary analyses. If 
+different datasets—or different tools within a workflow—use different 
+implicit rules (minimum length, allowed interruptions, window 
+thresholds, treatment of ambiguous residues), then cross-taxon 
+comparisons can become unstable: differences may reflect the detection 
+rules more than the biology. In other words, you can end up “measuring 
+the method” instead of the underlying evolutionary pattern.</p><p data-block-key="3cac5">This project addresses that by building a workflow where repeat detection is <b>explicit, configurable, and reproducible</b>.
+ Instead of committing to one definition, the pipeline supports multiple
+ detection strategies and makes the parameter choices part of the 
+output. That way, results can be compared fairly under the same rules, 
+and sensitivity to definition can be tested rather than ignored.</p><p data-block-key="cpeet">To keep everything traceable, outputs are stored in a relational database so each detected tract can be linked back to:</p><ul><li data-block-key="agn8j">the genome/protein sequence it came from<br></li><li data-block-key="6nc3i">the taxonomic context (species, lineage grouping)<br></li><li data-block-key="9doj">the detection strategy and the parameters used</li></ul><p data-block-key="653jv">This
+ design turns repeat discovery into something that can be audited and 
+reproducible. It also makes downstream analysis much cleaner: you can 
+query by taxon, filter by strategy, rerun analyses with different 
+thresholds, and keep all variants comparable without losing track of how
+ a given tract was defined.</p>
+    
+      
+
+<div class="sf-callout sf-note">
+  
+    <div class="sf-callout-title">Why polyQ in this project</div>
+  
+  <div class="sf-callout-body">
+    <p data-block-key="grg20">This project was developed during my 
+final-year BSc internship at the Phenotypic Evolition group in i3S – 
+Instituto de Investigação e Inovação em Saúde (supervised by Cristina 
+Vieira and Jorge Vieira), focused on building infrastructure to study 
+how homorepeat (polyX) tracts vary across lineages. Polyglutamine 
+(polyQ) is used as the primary case study because it aligned with the 
+internship’s neurodegeneration research context and target proteins; the
+ workflow itself is designed to generalize to other polyX repeats.</p>
+  </div>
+</div>
+
+    
+      <hr class="my-5 opacity-25">
+
+    
+      <h2 class="mt-4 mb-3">What I built</h2>
+
+
+
+    
+      <p data-block-key="mhj2o">I developed a database-backed workflow that converts genome/protein annotations into a structured dataset of <b>homorepeat tracts</b> and derived features. While the internship’s case study focused on <b>polyglutamine (polyQ)</b>, the core detection layer is configurable and can be applied to other <b>single–amino-acid repeats (polyX)</b> as well.</p><p data-block-key="6s72b">The
+ system was designed to support large-scale comparative analysis across 
+taxa: data are retrieved automatically, enriched with taxonomy, 
+processed through complementary repeat-detection strategies, and 
+appended into a relational SQLite database for reproducible querying and
+ downstream visualization.</p>
+    
+      
+
+<div class="sf-callout sf-info">
+  
+    <div class="sf-callout-title">Main Points</div>
+  
+  <div class="sf-callout-body">
+    <ul><li data-block-key="qw6fg"><b>Relational SQLite database</b> designed for repeat-centric genomics analysis (genomes ↔ sequences ↔ proteins ↔ repeat regions ↔ taxonomy).<br></li><li data-block-key="4rgcg"><b>Automated ingestion + processing pipeline</b>: retrieval from NCBI, metadata enrichment, detection, and database population.<br></li><li data-block-key="b5o5g"><b>Repeat detection module (“Find Poly”)</b>
+ implemented with three complementary strategies (strict / threshold 
+window / BLAST-based) to balance specificity and sensitivity.<br></li><li data-block-key="628vr"><b>Analysis + plotting scripts</b> generating summary distributions and comparative figures directly from database queries.</li></ul>
+  </div>
+</div>
+
+    
+      
+<h3 class="mt-4 mb-3">System workflow</h3>
+
+
+    
+      
+  <div style="height: 28px;"></div>
+
+
+    
+      
+
+
+  
+
+  <figure class="sf-figure
+    sf-style-plain
+    sf-radius-md
+    sf-shadow-md
+    
+    
+    
+    
+    sf-mw-sm
+  ">
+
+    
+
+      <img src="PolyGlutamine%20in%20Deuterostomes_files/pipelinefixed.width-1800.png" width="1644" height="1884" class="img-fluid" alt="" loading="lazy">
+
+    
+
+  </figure>
+
+
+    
+      
+  <div style="height: 28px;"></div>
+
+
+    
+      
+
+
+  <section class="my-4 p-3 p-md-4 rounded-4 border" style="background: rgba(255,255,255,0.03);">
+    
+      <p data-block-key="qzla9"><b>Input preparation</b></p><p data-block-key="2pfjs">The
+ pipeline starts by retrieving reference genome/protein data from NCBI. 
+Each dataset is screened for potential contaminants and standardized so 
+parsing is consistent across taxa. Taxonomy is appended to headers and 
+file naming so every detected tract remains traceable to its source 
+lineage.</p>
+    
+  </section>
+
+
+
+    
+      
+
+
+  <section class="my-4 p-3 p-md-4 rounded-4 border" style="background: rgba(255,255,255,0.03);">
+    
+      <p data-block-key="qzla9"><b>Repeat detection: “Find Poly”</b></p><p data-block-key="9c9p3"></p><p data-block-key="bhtfq">“Find
+ Poly” detects candidate polyX regions using three complementary 
+strategies, so definitions are explicit and results are comparable 
+across taxa.</p>
+    
+      
+
+<div class="sf-callout sf-info">
+  
+    <div class="sf-callout-title">Method 1 — Pure (strict)</div>
+  
+  <div class="sf-callout-body">
+    <p data-block-key="urj11">Detects high-purity homorepeat tracts: 
+uninterrupted runs (e.g., polyQ), plus near-pure tracts that contain a 
+single intervening residue within an otherwise continuous stretch. This 
+is the most conservative strategy and prioritizes specificity.</p>
+  </div>
+</div>
+
+    
+      
+
+<div class="sf-callout sf-info">
+  
+    <div class="sf-callout-title">Method 2 — Threshold (density / sliding window)</div>
+  
+  <div class="sf-callout-body">
+    <p data-block-key="urj11">Applies a sliding window rule that allows limited interruptions while maintaining repeat density. For example, a threshold like <b>Q 6/8</b>
+ requires at least six glutamines within a window of eight amino acids. 
+Detected regions are then extended while the density criterion continues
+ to hold.</p><p data-block-key="1vsl3"></p>
+  </div>
+</div>
+
+    
+      
+
+<div class="sf-callout sf-info">
+  
+    <div class="sf-callout-title">Method 3 — BLAST (seed + merge)</div>
+  
+  <div class="sf-callout-body">
+    <p data-block-key="urj11">Uses a defined-length homorepeat “seed” to
+ search for matches in the reference data. Hits are merged when they 
+overlap or fall within a proximity threshold, which scales with tract 
+length—helpful when repeats appear fragmented into nearby segments.</p>
+  </div>
+</div>
+
+    
+  </section>
+
+
+
+    
+      <p data-block-key="v2j7p">All detected regions are stored in a 
+SQLite database, linking each tract to its sequence/protein, taxonomy, 
+method, and parameters. Downstream scripts query the database to 
+generate reproducible summaries and comparative plots.</p>
+    
+      <hr class="my-5 opacity-25">
+
+    
+      
+
+<h4 class="mt-4 mb-3">Database design</h4>
+
+    
+      <p data-block-key="mhj2o">WRITE ABOUT DATABASE</p>
+    
+      
+
+
+  
+
+  <figure class="sf-figure
+    sf-style-plain
+    sf-radius-none
+    sf-shadow-sm
+    
+    
+    
+    
+    sf-mw-sm
+  ">
+
+    
+
+      <img src="PolyGlutamine%20in%20Deuterostomes_files/temporary.width-1800.png" width="255" height="197" class="img-fluid" alt="" loading="lazy">
+
+    
+
+  </figure>
+
+
+    
+      <h2 class="mt-4 mb-3">Key results</h2>
+
+
+
+    
+      <p data-block-key="mhj2o">In the full report, <b>697 genomes</b> representing <b>351 deuterostome families</b> were analyzed, producing large but method-dependent sets of matches (<b>70,010 pure</b>, <b>122,916 threshold</b>, <b>91,173 BLAST</b>).
+ This confirmed that detection strategy substantially changes which 
+polyQ tracts are recovered and therefore affects downstream evolutionary
+ interpretation.</p><p data-block-key="5ccva">Many relationships were analyzed from this data, with the strongest (by far) recurring signal was that <b>polyQ length and glutamine codon usage (%CAG vs %CAA) are linked</b>, and that this relationship varies systematically across taxonomic groups.</p><p data-block-key="ep2v7"></p>
+    
+      
+
+<h4 class="mt-4 mb-3">Codon usage patterns separate major taxonomic groups</h4>
+
+    
+      <p data-block-key="rw5en">A sign-test heatmap analysis of codon-length relationships showed that <b>average CAG percentage across polyQ sizes can distinguish taxonomic groups</b>,
+ with clearer separation between many basal lineages and mammalian 
+groups. Possibly indicating a framework for separating lineages based on
+ these codon differences, however further research is required.</p>
+    
+      
+
+
+  
+
+  <figure class="sf-figure
+    sf-style-plain
+    sf-radius-lg
+    sf-shadow-md
+    
+    
+    
+    
+    sf-mw-sm
+  ">
+
+    
+
+      <img src="PolyGlutamine%20in%20Deuterostomes_files/Screenshot_20260227_125142.width-1800.png" width="867" height="867" class="img-fluid" alt="" loading="lazy">
+
+    
+
+  </figure>
+
+
+    
+      <p data-block-key="rw5en">DESCRIBE THE IMAGE</p>
+    
+      
+
+<h4 class="mt-4 mb-3">Longer polyQ tracts are more prevalent in higher-order taxa</h4>
+
+    
+      <p data-block-key="rw5en"><b>longer polyQ tracts become more prevalent in higher-order deuterostomes</b>,
+ particularly mammals (and also birds in several comparisons). This 
+pattern is visible across methods, although each method emphasizes 
+different tract architectures.</p><p data-block-key="7nthp"><b>BLAST-based approach tends to recover longer and less pure / more interrupted tracts</b>, while the <b>pure method is more specific for short, highly continuous tracts</b>.
+ The threshold method sits between these extremes, capturing slightly 
+longer tracts with limited additional noise. Correctly identifying the 
+best</p>
+    
+      
+
+
+  
+
+  <figure class="sf-figure
+    sf-style-plain
+    sf-radius-lg
+    sf-shadow-sm
+    
+    
+    
+    
+    sf-mw-sm
+  ">
+
+    
+
+      <img src="PolyGlutamine%20in%20Deuterostomes_files/temporary.width-1800.png" width="255" height="197" class="img-fluid" alt="" loading="lazy">
+
+    
+
+  </figure>
+
+
+    
+      
+
+<div class="sf-callout sf-note">
+  
+  <div class="sf-callout-body">
+    <p data-block-key="zwxor">Higher-order taxa may not only accumulate 
+longer repeats, but may also tolerate or retain more structurally 
+complex (interrupted) polyQ architectures — though BLAST hits require 
+careful interpretation due to very probable false positives, and require
+ future careful tuning, to find the best "true" polyQ's.</p>
+  </div>
+</div>
+
+    
+      
+
+<h4 class="mt-4 mb-3">PolyQ length and %CAG are strongly correlated (lineage-specific trends)</h4>
+
+    
+      <p data-block-key="rw5en">A major analytical result was the repeated association between <b>polyQ tract length</b> and <b>CAG codon usage</b>,
+ identified through regression analyses (including Huber regression). 
+Across many macro-groups, this was the most informative feature pair for
+ capturing biologically meaningful differences.</p><p data-block-key="64r8m">Some groups display a <b>negative trend</b> (decreasing %CAG with increasing polyQ length, as to be expected if it's solely a stochastic process), while others show a <b>shallow parabolic pattern</b>,
+ suggesting different repeat-expansion/stabilization dynamics across 
+taxa. The strength of the relationship also changes depending on the 
+maximum polyQ length interval and the detection method used.</p>
+    
+      
+
+
+  
+
+  <figure class="sf-figure
+    sf-style-plain
+    sf-radius-lg
+    sf-shadow-sm
+    
+    
+    
+    
+    sf-mw-sm
+  ">
+
+    
+
+      <img src="PolyGlutamine%20in%20Deuterostomes_files/Screenshot_20260305_092746.width-1800.png" width="866" height="519" class="img-fluid" alt="" loading="lazy">
+
+    
+
+  </figure>
+
+
+    
+      
+
+<div class="sf-callout sf-note">
+  
+  <div class="sf-callout-body">
+    <p data-block-key="zwxor">Codon composition dynamics (CAG vs CAA) 
+may reflect different lineage-specific strategies balancing repeat 
+expansion, instability, and tolerance of longer polyQ tracts.</p>
+  </div>
+</div>
+
+    
+      
+
+<h4 class="mt-4 mb-3">Practical outcome: a reusable framework for comparative homorepeat analysis</h4>
+
+    
+      <p data-block-key="rw5en">Beyond the biological findings, the 
+project delivered a reusable computational workflow and database 
+framework for high-throughput polyQ analysis. The poster emphasizes that
+ the pipeline can support large-scale, low-effort analyses and can be 
+adapted to other homorepeat types, while the article demonstrates this 
+through automated extraction, storage, and visualization across multiple
+ taxonomic levels and detection criteria.</p>
+    
+      <h2 class="mt-4 mb-3">Possible Next steps</h2>
+
+
+
+    
+      
+<h3 class="mt-4 mb-3">Integrate richer functional and structural annotations</h3>
+
+
+    
+      <p data-block-key="rw5en">Future versions of the database can be 
+strengthened by linking polyQ tracts to protein-level annotations, 
+including domain architecture, subcellular localization, disorder 
+predictions, and functional categories. Adding this layer would make it 
+possible to ask not only <i>where</i> polyQ tracts occur across taxa, but also <i>in what biological contexts</i> they are maintained, expanded, or interrupted.</p><p data-block-key="eosq5">This
+ would also help connect evolutionary patterns in codon composition and 
+tract length to potential functional constraints, including protein 
+interaction interfaces, regulatory proteins, and lineage-specific 
+enrichment of repeat-containing proteins.</p>
+    
+      
+<h3 class="mt-4 mb-3">Improve taxonomic and phylogenetic resolution</h3>
+
+
+    
+      <p data-block-key="rw5en">The current analyses highlight strong 
+macro-group patterns, but future work can increase resolution at the 
+species levels. A more explicit phylogenetic framework would help 
+distinguish broad lineage trends from clade-specific events and support 
+more rigorous evolutionary interpretation of repeat expansion and codon 
+usage shifts.</p>
+    
+      
+<h3 class="mt-4 mb-3">Refine detection and benchmarking strategies</h3>
+
+
+    
+      <p data-block-key="rw5en">From a informatics point of view, 
+because the project already showed that polyQ detection depends strongly
+ on method choice (pure, threshold/window, and BLAST-based approaches), 
+an important next step is systematic benchmarking. This includes 
+defining confidence tiers, validating interrupted tracts more carefully,
+ and quantifying trade-offs between sensitivity and specificity across 
+methods.</p><p data-block-key="4v3tl">A standardized benchmarking 
+framework would make downstream comparisons more robust and improve 
+confidence when interpreting biological differences between taxa.</p>
+    
+      
+<h3 class="mt-4 mb-3">Extend statistical modeling of codon–length dynamics</h3>
+
+
+    
+      <p data-block-key="rw5en">The observed relationship between polyQ 
+length and codon composition (%CAG vs %CAA) is one of the most promising
+ findings of the project. Future analyses can expand this by testing 
+additional robust models, evaluating non-linear behaviors across taxa, 
+and incorporating covariates such as genome composition, proteome 
+composition, or taxonomic grouping.</p><p data-block-key="aq61i">This 
+would help clarify whether the different regression patterns observed 
+across lineages reflect shared evolutionary mechanisms, lineage-specific
+ constraints, or differences in repeat detection and sampling.</p>
+    
+      <hr class="my-5 opacity-25">
+
+    
+      <h2 class="mt-4 mb-3">Final Remarks</h2>
+
+
+
+    
+      <p data-block-key="052xd">This project began as an effort to study
+ polyglutamine tracts across deuterostomes, but it ultimately became 
+both an evolutionary analysis and a reusable computational framework for
+ comparative repeat biology. By combining large-scale sequence 
+screening, structured data storage, and cross-taxon statistical 
+modeling, it revealed consistent links between polyQ length, codon 
+composition, and lineage-specific patterns while also highlighting the 
+importance of method choice in repeat detection (as we expected). More 
+importantly, it established a foundation that can be extended to new 
+repeat types, richer functional annotations, and broader phylogenetic 
+questions. In that sense, the most valuable outcome is not only the 
+results presented here, but the platform it creates for possible future 
+discovery.</p>
+    
+  </div>
+
+</div>
+
+  </main>
+
+  <!-- ======= Footer ======= -->
+  <footer id="footer" class="footer">
+    <div class="container">
+      <div class="social-links d-flex justify-content-center gap-3">
+        <a href="https://github.com/rafaelmdc" target="_blank" rel="noopener" aria-label="GitHub">
+          <i class="bi bi-github"></i>
+        </a>
+        <a href="https://www.linkedin.com/in/rafael-alexandre-correia-2b8a33213/" target="_blank" rel="noopener" aria-label="LinkedIn">
+          <i class="bi bi-linkedin"></i>
+        </a>
+        <a href="mailto:rafaelmdcorreia@gmail.com" aria-label="Email">
+          <i class="bi bi-envelope"></i>
+        </a>
+      </div>
+
+      <div class="text-center small text-body-secondary mt-3">
+        © 2026 Rafael Correia · Built with Django + Wagtail
+      </div>
+    </div>
+    <div class="text-center small text-body-secondary mt-2">
+      Always happy to talk about research, code, or collaboration!
+    </div>
+  </footer>
+
+  <!-- Scroll Top -->
+  <a href="#" id="scroll-top" class="scroll-top d-flex align-items-center justify-content-center active">
+    <i class="bi bi-arrow-up-short"></i>
+  </a>
+
+  
+  <!-- Preloader -->
+  
+
+  <!-- Vendor JS Files -->
+  <script src="PolyGlutamine%20in%20Deuterostomes_files/bootstrap.bundle.min.3d7a1a7068d7.js"></script>
+  <script src="PolyGlutamine%20in%20Deuterostomes_files/validate.7d2bca442116.js"></script>
+  <script src="PolyGlutamine%20in%20Deuterostomes_files/aos.aa20b6e0418d.js"></script>
+  <script src="PolyGlutamine%20in%20Deuterostomes_files/typed.umd.f6b7b2057f67.js"></script>
+  <script src="PolyGlutamine%20in%20Deuterostomes_files/noframework.waypoints.8c601d5f892e.js"></script>
+  <script src="PolyGlutamine%20in%20Deuterostomes_files/purecounter_vanilla.9b0a554854ab.js"></script>
+  <script src="PolyGlutamine%20in%20Deuterostomes_files/swiper-bundle.min.a3ab681be68a.js"></script>
+  <script src="PolyGlutamine%20in%20Deuterostomes_files/imagesloaded.pkgd.min.919bcd36ba45.js"></script>
+  <script src="PolyGlutamine%20in%20Deuterostomes_files/isotope.pkgd.min.2afcff647ed2.js"></script>
+  <script src="PolyGlutamine%20in%20Deuterostomes_files/glightbox.min.5ed34b339caa.js"></script>
+
+  <!-- Main JS File -->
+  <script src="PolyGlutamine%20in%20Deuterostomes_files/main.439919a0d2db.js"></script>
+
+  
+  
+
+
+</body></html>
