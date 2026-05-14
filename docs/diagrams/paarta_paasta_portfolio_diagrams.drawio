@@ -209,4 +209,145 @@
       </root>
     </mxGraphModel>
   </diagram>
+  <diagram id="paarta-browser-system" name="PAARTA browser system">
+    <mxGraphModel dx="1420" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="pb-bg" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F4F7F9;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="0" y="0" width="1800" height="1000" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-title" value="PAARTA browser system" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=34;fontStyle=1;fontColor=#142027;fontFamily=Raleway;" vertex="1" parent="1">
+          <mxGeometry x="70" y="56" width="760" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-subtitle" value="Django serves the browser; five specialised Celery workers consume Redis-queued tasks and persist results to PostgreSQL." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=16;fontColor=#4C6470;fontFamily=Roboto;" vertex="1" parent="1">
+          <mxGeometry x="72" y="106" width="1200" height="32" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-line" value="" style="shape=line;html=1;strokeColor=#1387C1;strokeWidth=4;" vertex="1" parent="1">
+          <mxGeometry x="72" y="148" width="190" height="10" as="geometry"/>
+        </mxCell>
+
+        <!-- Browser / Client -->
+        <mxCell id="pb-browser" value="Browser / Client" style="swimlane;whiteSpace=wrap;html=1;startSize=38;rounded=1;arcSize=6;fillColor=#EEF3F6;strokeColor=#B9C8D0;fontColor=#142027;fontSize=15;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
+          <mxGeometry x="55" y="170" width="205" height="540" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-b1" value="Chunked upload&#xa;fetch() — start / chunk / complete&#xa;SHA-256 per chunk" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B9C8D0;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-browser">
+          <mxGeometry x="15" y="52" width="175" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-b2" value="Import polling&#xa;page reload every 5 s&#xa;while PENDING / RUNNING" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B9C8D0;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-browser">
+          <mxGeometry x="15" y="144" width="175" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-b3" value="Async status checks&#xa;/payload-builds/{id}/status/&#xa;/download-builds/{id}/status/" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B9C8D0;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-browser">
+          <mxGeometry x="15" y="236" width="175" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-b4" value="Browse + export&#xa;repeat calls, genomes,&#xa;proteins, taxa, TSV / FASTA" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B9C8D0;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-browser">
+          <mxGeometry x="15" y="328" width="175" height="72" as="geometry"/>
+        </mxCell>
+
+        <!-- Django / Gunicorn -->
+        <mxCell id="pb-django" value="Django · Gunicorn (4 workers)" style="swimlane;whiteSpace=wrap;html=1;startSize=38;rounded=1;arcSize=6;fillColor=#EAF8F1;strokeColor=#7ECDA5;fontColor=#142027;fontSize=15;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
+          <mxGeometry x="315" y="170" width="380" height="540" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-d1" value="Import views&#xa;upload: start, chunk, complete, retry&#xa;import batch enqueue, run delete" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9FD8BA;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-django">
+          <mxGeometry x="20" y="50" width="340" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-d2" value="Browser views&#xa;repeat browser, stats bundles, canonical catalog&#xa;payload + download build status endpoints" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9FD8BA;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-django">
+          <mxGeometry x="20" y="138" width="340" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-d3" value="Task dispatch · .delay()&#xa;enqueues to Redis DB 0 broker&#xa;imports / uploads / payload_graph / downloads / deletions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF5E6;strokeColor=#E6C78F;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-django">
+          <mxGeometry x="20" y="226" width="340" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-d4" value="Cache layer · django-redis DB 1&#xa;stats bundle reads, query cache" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF5E6;strokeColor=#E6C78F;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-django">
+          <mxGeometry x="20" y="314" width="340" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-d5" value="ORM · Django models → PostgreSQL&#xa;ImportBatch, UploadedRun, PipelineRun,&#xa;Genome, Protein, RepeatCall, PayloadBuild…" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F4F1EA;strokeColor=#D2B883;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-django">
+          <mxGeometry x="20" y="390" width="340" height="72" as="geometry"/>
+        </mxCell>
+
+        <!-- Redis -->
+        <mxCell id="pb-redis" value="Redis 7" style="swimlane;whiteSpace=wrap;html=1;startSize=38;rounded=1;arcSize=6;fillColor=#FFF5E6;strokeColor=#E1B56F;fontColor=#142027;fontSize=15;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
+          <mxGeometry x="750" y="170" width="285" height="540" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-r0" value="DB 0 · Celery Broker&#xa;&#xa;Queue → Worker&#xa;imports → import-worker&#xa;uploads → upload-worker&#xa;payload_graph → graph-worker&#xa;downloads → download-worker&#xa;deletions → deletion-worker" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E6C78F;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;align=left;spacingLeft=12;" vertex="1" parent="pb-redis">
+          <mxGeometry x="20" y="52" width="245" height="218" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-r1" value="DB 1 · Cache Backend&#xa;&#xa;Pre-warmed stats bundles&#xa;Django query cache&#xa;(django-redis · 12 h visibility)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E6C78F;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;align=left;spacingLeft=12;" vertex="1" parent="pb-redis">
+          <mxGeometry x="20" y="295" width="245" height="148" as="geometry"/>
+        </mxCell>
+
+        <!-- Celery Workers -->
+        <mxCell id="pb-workers" value="Celery Workers" style="swimlane;whiteSpace=wrap;html=1;startSize=38;rounded=1;arcSize=6;fillColor=#EAF5FB;strokeColor=#7CBBDD;fontColor=#142027;fontSize=15;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="170" width="500" height="540" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-w1" value="celery-import-worker · imports queue · concurrency 2&#xa;run_import_batch — validate + persist run, trigger post-import warmup fan-out" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A9CFE4;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-workers">
+          <mxGeometry x="20" y="50" width="460" height="62" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-w2" value="celery-upload-worker · uploads queue · concurrency 2&#xa;extract_uploaded_run — unzip, validate contract, mark READY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A9CFE4;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-workers">
+          <mxGeometry x="20" y="122" width="460" height="62" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-w3" value="celery-graph-worker · payload_graph · autoscale 1–4&#xa;warm_stats_bundle — build stats payload, write result to Redis DB 1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A9CFE4;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-workers">
+          <mxGeometry x="20" y="194" width="460" height="62" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-w4" value="celery-download-worker · downloads queue · concurrency 2&#xa;build TSV / FASTA artifacts on disk, expire stale download builds" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A9CFE4;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-workers">
+          <mxGeometry x="20" y="266" width="460" height="62" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-w5" value="celery-deletion-worker · deletions queue · concurrency 1 (sequential)&#xa;delete_pipeline_run_job — cascade-delete run rows, bump CatalogVersion" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A9CFE4;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-workers">
+          <mxGeometry x="20" y="338" width="460" height="62" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-beat" value="celery-beat · Scheduler&#xa;reset_stale_import_batches (5 min) · cleanup_stale_uploaded_runs (1 h) · expire_stale_download_builds (6 h)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EEF3F6;strokeColor=#9DB0B9;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-workers">
+          <mxGeometry x="20" y="418" width="460" height="68" as="geometry"/>
+        </mxCell>
+
+        <!-- PostgreSQL -->
+        <mxCell id="pb-pg" value="PostgreSQL 16" style="swimlane;whiteSpace=wrap;html=1;startSize=34;rounded=1;arcSize=6;fillColor=#F4F1EA;strokeColor=#D2B883;fontColor=#142027;fontSize=15;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
+          <mxGeometry x="315" y="775" width="1275" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-pg1" value="imports app: ImportBatch · UploadedRun · DeletionJob · CatalogVersion" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2B883;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-pg">
+          <mxGeometry x="20" y="40" width="575" height="46" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-pg2" value="browser app: PipelineRun · Genome · Protein · RepeatCall · Taxon · PayloadBuild · DownloadBuild · Canonical* · AccessionCallCount" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2B883;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-pg">
+          <mxGeometry x="615" y="40" width="640" height="46" as="geometry"/>
+        </mxCell>
+
+        <!-- Flower -->
+        <mxCell id="pb-flower" value="Flower&#xa;/admin/flower/&#xa;Celery monitoring UI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9DB0B9;fontColor=#405965;fontSize=13;fontFamily=Roboto;arcSize=10;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="55" y="775" width="200" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- Deployment note -->
+        <mxCell id="pb-note" value="All services run as Docker containers (compose.yaml): web (Gunicorn), 5 Celery workers, celery-beat, redis (data volume), postgres (data volume), migrate (init), flower." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9DB0B9;dashed=1;fontColor=#405965;fontSize=14;fontFamily=Roboto;arcSize=10;spacing=12;" vertex="1" parent="1">
+          <mxGeometry x="315" y="910" width="1275" height="54" as="geometry"/>
+        </mxCell>
+
+        <!-- Arrows -->
+        <mxCell id="pb-a1" value="HTTP / JSON" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#4C6470;fontColor=#4C6470;fontSize=12;fontFamily=Roboto;" edge="1" parent="1" source="pb-browser" target="pb-django">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-a2" value=".delay()" style="endArrow=block;html=1;rounded=0;strokeWidth=2.5;strokeColor=#E1B56F;fontColor=#E1B56F;fontSize=12;fontFamily=Roboto;" edge="1" parent="1" source="pb-d3" target="pb-r0">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-a3" value="cache r/w" style="endArrow=open;startArrow=open;html=1;rounded=0;strokeWidth=2;strokeColor=#E1B56F;dashed=1;fontColor=#E1B56F;fontSize=12;fontFamily=Roboto;" edge="1" parent="1" source="pb-d4" target="pb-r1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-a4" value="task delivery" style="endArrow=block;html=1;rounded=0;strokeWidth=2.5;strokeColor=#1387C1;fontColor=#1387C1;fontSize=12;fontFamily=Roboto;" edge="1" parent="1" source="pb-r0" target="pb-workers">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-a5" value="warm cache" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#E1B56F;fontColor=#E1B56F;fontSize=12;fontFamily=Roboto;" edge="1" parent="1" source="pb-w3" target="pb-r1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-a6" value="schedule" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#9DB0B9;dashed=1;fontColor=#9DB0B9;fontSize=12;fontFamily=Roboto;" edge="1" parent="1" source="pb-beat" target="pb-r0">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-a7" value="ORM" style="endArrow=open;startArrow=open;html=1;rounded=0;strokeWidth=2.5;strokeColor=#D2B883;fontColor=#D2B883;fontSize=12;fontFamily=Roboto;" edge="1" parent="1" source="pb-django" target="pb-pg">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-a8" value="ORM" style="endArrow=open;startArrow=open;html=1;rounded=0;strokeWidth=2.5;strokeColor=#D2B883;fontColor=#D2B883;fontSize=12;fontFamily=Roboto;" edge="1" parent="1" source="pb-workers" target="pb-pg">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-a9" value="monitor" style="endArrow=open;html=1;rounded=0;strokeWidth=2;strokeColor=#9DB0B9;dashed=1;fontColor=#9DB0B9;fontSize=12;fontFamily=Roboto;" edge="1" parent="1" source="pb-flower" target="pb-workers">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
 </mxfile>
