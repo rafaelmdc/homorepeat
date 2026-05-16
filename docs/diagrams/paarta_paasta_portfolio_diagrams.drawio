@@ -1,352 +1,308 @@
-<mxfile host="app.diagrams.net" modified="2026-05-12T00:00:00.000Z" agent="Codex" version="24.7.17" type="device">
+<mxfile host="app.diagrams.net" modified="2026-05-16T00:00:00.000Z" agent="Codex" version="24.7.17" type="device">
   <diagram id="system-architecture" name="System architecture">
-    <mxGraphModel dx="1420" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="980" math="0" shadow="0">
+    <mxGraphModel dx="1420" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="780" math="0" shadow="0">
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
-        <mxCell id="sa-bg" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F4F7F9;strokeColor=none;" vertex="1" parent="1">
-          <mxGeometry x="0" y="0" width="1600" height="980" as="geometry"/>
+        <mxCell id="sa-title" value="System architecture" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=22;fontStyle=1;fontColor=#1A1A1A;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="70" y="50" width="800" height="32" as="geometry"/>
         </mxCell>
-        <mxCell id="sa-title" value="PAARTA + PAASTA system architecture" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=34;fontStyle=1;fontColor=#142027;fontFamily=Raleway;" vertex="1" parent="1">
-          <mxGeometry x="70" y="56" width="760" height="48" as="geometry"/>
+        <mxCell id="sa-subtitle" value="A versioned data contract decouples the detection pipeline from the web atlas." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=13;fontColor=#555555;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="70" y="84" width="1000" height="24" as="geometry"/>
         </mxCell>
-        <mxCell id="sa-subtitle" value="A versioned pipeline contract separates repeat discovery from the web atlas that serves, filters, and summarizes the data." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=16;fontColor=#4C6470;fontFamily=Roboto;" vertex="1" parent="1">
-          <mxGeometry x="72" y="106" width="980" height="32" as="geometry"/>
+
+        <mxCell id="sa-input" value="Genome assemblies&#xa;(NCBI accessions)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=13;fontStyle=1;fontFamily=Helvetica;strokeWidth=1.2;" vertex="1" parent="1">
+          <mxGeometry x="80" y="340" width="180" height="80" as="geometry"/>
         </mxCell>
-        <mxCell id="sa-line" value="" style="shape=line;html=1;strokeColor=#1387C1;strokeWidth=4;" vertex="1" parent="1">
-          <mxGeometry x="72" y="148" width="190" height="10" as="geometry"/>
+
+        <mxCell id="sa-paasta" value="PAASTA — detection pipeline" style="swimlane;whiteSpace=wrap;html=1;startSize=32;rounded=0;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=13;fontStyle=1;fontFamily=Helvetica;strokeWidth=1.2;swimlaneFillColor=#FAFAFA;" vertex="1" parent="1">
+          <mxGeometry x="330" y="180" width="360" height="420" as="geometry"/>
         </mxCell>
-        <mxCell id="sa-input" value="Input&#xa;NCBI assembly accessions&#xa;GCF_..., GCA_..." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B9C8D0;fontColor=#142027;fontSize=15;fontStyle=1;fontFamily=Roboto;arcSize=10;spacing=12;shadow=0;" vertex="1" parent="1">
-          <mxGeometry x="70" y="430" width="210" height="100" as="geometry"/>
+        <mxCell id="sa-p1" value="Workflow orchestration" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="sa-paasta">
+          <mxGeometry x="40" y="60" width="280" height="60" as="geometry"/>
         </mxCell>
-        <mxCell id="sa-paasta-container" value="PAASTA - producing pipeline" style="swimlane;whiteSpace=wrap;html=1;startSize=38;rounded=1;arcSize=6;fillColor=#EAF5FB;strokeColor=#7CBBDD;fontColor=#142027;fontSize=15;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
-          <mxGeometry x="350" y="210" width="430" height="500" as="geometry"/>
+        <mxCell id="sa-p2" value="Sequence acquisition&#xa;and normalization" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="sa-paasta">
+          <mxGeometry x="40" y="140" width="280" height="60" as="geometry"/>
         </mxCell>
-        <mxCell id="sa-p1" value="Nextflow orchestration&#xa;batch fan-out, Docker profile, resume" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A9CFE4;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=10;" vertex="1" parent="sa-paasta-container">
-          <mxGeometry x="35" y="70" width="360" height="70" as="geometry"/>
+        <mxCell id="sa-p3" value="Repeat detection&#xa;(three definitions)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="sa-paasta">
+          <mxGeometry x="40" y="220" width="280" height="60" as="geometry"/>
         </mxCell>
-        <mxCell id="sa-p2" value="Acquisition + normalization&#xa;NCBI package, taxonomy, CDS records" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A9CFE4;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=10;" vertex="1" parent="sa-paasta-container">
-          <mxGeometry x="35" y="165" width="360" height="70" as="geometry"/>
+        <mxCell id="sa-p4" value="Codon-level validation" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="sa-paasta">
+          <mxGeometry x="40" y="300" width="280" height="60" as="geometry"/>
         </mxCell>
-        <mxCell id="sa-p3" value="Translation + repeat detection&#xa;pure, threshold, seed-extend" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A9CFE4;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=10;" vertex="1" parent="sa-paasta-container">
-          <mxGeometry x="35" y="260" width="360" height="70" as="geometry"/>
+
+        <mxCell id="sa-contract" value="Versioned data contract" style="swimlane;whiteSpace=wrap;html=1;startSize=32;rounded=0;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=13;fontStyle=1;fontFamily=Helvetica;strokeWidth=1.2;swimlaneFillColor=#F2F2F2;" vertex="1" parent="1">
+          <mxGeometry x="750" y="220" width="240" height="340" as="geometry"/>
         </mxCell>
-        <mxCell id="sa-p4" value="Codon finalization&#xa;exact CDS-slice translation check" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A9CFE4;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=10;" vertex="1" parent="sa-paasta-container">
-          <mxGeometry x="35" y="355" width="360" height="70" as="geometry"/>
+        <mxCell id="sa-c1" value="Repeat calls" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="sa-contract">
+          <mxGeometry x="30" y="55" width="180" height="44" as="geometry"/>
         </mxCell>
-        <mxCell id="sa-contract-container" value="publish/ contract v2" style="swimlane;whiteSpace=wrap;html=1;startSize=38;rounded=1;arcSize=6;fillColor=#FFF5E6;strokeColor=#E1B56F;fontColor=#142027;fontSize=15;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
-          <mxGeometry x="850" y="260" width="260" height="400" as="geometry"/>
+        <mxCell id="sa-c2" value="Reference tables" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="sa-contract">
+          <mxGeometry x="30" y="115" width="180" height="44" as="geometry"/>
         </mxCell>
-        <mxCell id="sa-c1" value="calls/&#xa;repeat_calls.tsv&#xa;run_params.tsv" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E6C78F;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="sa-contract-container">
-          <mxGeometry x="25" y="70" width="210" height="72" as="geometry"/>
+        <mxCell id="sa-c3" value="Run manifest&#xa;and parameters" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="sa-contract">
+          <mxGeometry x="30" y="175" width="180" height="54" as="geometry"/>
         </mxCell>
-        <mxCell id="sa-c2" value="tables/&#xa;genomes, taxonomy, proteins, codon usage, context, warnings" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E6C78F;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="sa-contract-container">
-          <mxGeometry x="25" y="165" width="210" height="88" as="geometry"/>
+        <mxCell id="sa-c4" value="Provenance metadata" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="sa-contract">
+          <mxGeometry x="30" y="245" width="180" height="44" as="geometry"/>
         </mxCell>
-        <mxCell id="sa-c3" value="metadata + summaries&#xa;run_manifest.json&#xa;status_summary.json" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E6C78F;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="sa-contract-container">
-          <mxGeometry x="25" y="275" width="210" height="78" as="geometry"/>
+
+        <mxCell id="sa-paarta" value="PAARTA — web atlas" style="swimlane;whiteSpace=wrap;html=1;startSize=32;rounded=0;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=13;fontStyle=1;fontFamily=Helvetica;strokeWidth=1.2;swimlaneFillColor=#FAFAFA;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="180" width="280" height="420" as="geometry"/>
         </mxCell>
-        <mxCell id="sa-paarta-container" value="PAARTA - web atlas" style="swimlane;whiteSpace=wrap;html=1;startSize=38;rounded=1;arcSize=6;fillColor=#EAF8F1;strokeColor=#7ECDA5;fontColor=#142027;fontSize=15;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
-          <mxGeometry x="1180" y="210" width="350" height="500" as="geometry"/>
+        <mxCell id="sa-a1" value="Ingestion and validation" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="sa-paarta">
+          <mxGeometry x="30" y="60" width="220" height="60" as="geometry"/>
         </mxCell>
-        <mxCell id="sa-a1" value="Import queue + validator&#xa;mounted or zipped runs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9FD8BA;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=10;" vertex="1" parent="sa-paarta-container">
-          <mxGeometry x="30" y="70" width="290" height="70" as="geometry"/>
+        <mxCell id="sa-a2" value="Per-run archive" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="sa-paarta">
+          <mxGeometry x="30" y="140" width="220" height="60" as="geometry"/>
         </mxCell>
-        <mxCell id="sa-a2" value="Raw import layer&#xa;per-run historical observations" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9FD8BA;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=10;" vertex="1" parent="sa-paarta-container">
-          <mxGeometry x="30" y="160" width="290" height="70" as="geometry"/>
+        <mxCell id="sa-a3" value="Canonical catalog" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="sa-paarta">
+          <mxGeometry x="30" y="220" width="220" height="60" as="geometry"/>
         </mxCell>
-        <mxCell id="sa-a3" value="Canonical catalog&#xa;genomes, proteins, repeats, codons" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9FD8BA;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=10;" vertex="1" parent="sa-paarta-container">
-          <mxGeometry x="30" y="250" width="290" height="70" as="geometry"/>
+        <mxCell id="sa-a4" value="Query, statistics, export" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="sa-paarta">
+          <mxGeometry x="30" y="300" width="220" height="60" as="geometry"/>
         </mxCell>
-        <mxCell id="sa-a4" value="Browser + statistics + exports&#xa;tables, ECharts, TSV/FASTA" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9FD8BA;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=10;" vertex="1" parent="sa-paarta-container">
-          <mxGeometry x="30" y="340" width="290" height="80" as="geometry"/>
+
+        <mxCell id="sa-arrow-1" style="endArrow=classicThin;html=1;rounded=0;strokeWidth=1.4;strokeColor=#1A1A1A;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="sa-input" target="sa-paasta"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="sa-arrow-2" style="endArrow=classicThin;html=1;rounded=0;strokeWidth=1.4;strokeColor=#1A1A1A;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="sa-paasta" target="sa-contract"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="sa-arrow-3" style="endArrow=classicThin;html=1;rounded=0;strokeWidth=1.4;strokeColor=#1A1A1A;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="sa-contract" target="sa-paarta"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="sa-label-produce" value="produce" style="text;html=1;align=center;verticalAlign=middle;fontSize=11;fontStyle=2;fontColor=#555555;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="690" y="370" width="60" height="20" as="geometry"/>
         </mxCell>
-        <mxCell id="sa-provenance" value="Provenance travels with the observation: run id, import batch, accession status, method, residue, parameters, codon-validation state." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9DB0B9;dashed=1;fontColor=#405965;fontSize=14;fontFamily=Roboto;arcSize=10;spacing=12;" vertex="1" parent="1">
-          <mxGeometry x="470" y="795" width="850" height="72" as="geometry"/>
+        <mxCell id="sa-label-consume" value="consume" style="text;html=1;align=center;verticalAlign=middle;fontSize=11;fontStyle=2;fontColor=#555555;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="990" y="370" width="60" height="20" as="geometry"/>
         </mxCell>
-        <mxCell id="sa-arrow-1" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#4C6470;" edge="1" parent="1" source="sa-input" target="sa-paasta-container"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="sa-arrow-2" style="endArrow=block;html=1;rounded=0;strokeWidth=2.5;strokeColor=#1387C1;" edge="1" parent="1" source="sa-paasta-container" target="sa-contract-container"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="sa-arrow-3" style="endArrow=block;html=1;rounded=0;strokeWidth=2.5;strokeColor=#1387C1;" edge="1" parent="1" source="sa-contract-container" target="sa-paarta-container"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="sa-arrow-4" style="endArrow=open;html=1;rounded=0;strokeWidth=2;strokeColor=#7D919B;dashed=1;" edge="1" parent="1" source="sa-contract-container" target="sa-provenance"><mxGeometry relative="1" as="geometry"/></mxCell>
       </root>
     </mxGraphModel>
   </diagram>
-  <diagram id="paasta-workflow" name="PAASTA workflow DAG">
-    <mxGraphModel dx="1420" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="980" math="0" shadow="0">
+
+  <diagram id="paasta-workflow" name="PAASTA workflow">
+    <mxGraphModel dx="1420" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="780" math="0" shadow="0">
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
-        <mxCell id="pw-bg" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F4F7F9;strokeColor=none;" vertex="1" parent="1">
-          <mxGeometry x="0" y="0" width="1700" height="980" as="geometry"/>
+        <mxCell id="pw-title" value="Detection pipeline" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=22;fontStyle=1;fontColor=#1A1A1A;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="70" y="50" width="700" height="32" as="geometry"/>
         </mxCell>
-        <mxCell id="pw-title" value="PAASTA workflow DAG" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=34;fontStyle=1;fontColor=#142027;fontFamily=Raleway;" vertex="1" parent="1">
-          <mxGeometry x="80" y="56" width="620" height="48" as="geometry"/>
+        <mxCell id="pw-subtitle" value="Sequential acquisition stages feed a parallel detection stage; results converge into the published contract." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=13;fontColor=#555555;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="70" y="84" width="1100" height="24" as="geometry"/>
         </mxCell>
-        <mxCell id="pw-subtitle" value="The pipeline fans out by batch, residue, and detection method, then reduces results into a compact publish contract." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=16;fontColor=#4C6470;fontFamily=Roboto;" vertex="1" parent="1">
-          <mxGeometry x="82" y="106" width="980" height="32" as="geometry"/>
+
+        <mxCell id="pw-prep" value="Data retrieval and preparation" style="swimlane;whiteSpace=wrap;html=1;startSize=32;rounded=0;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=13;fontStyle=1;fontFamily=Helvetica;strokeWidth=1.2;swimlaneFillColor=#FAFAFA;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="180" width="940" height="150" as="geometry"/>
         </mxCell>
-        <mxCell id="pw-line" value="" style="shape=line;html=1;strokeColor=#1387C1;strokeWidth=4;" vertex="1" parent="1">
-          <mxGeometry x="82" y="148" width="190" height="10" as="geometry"/>
+        <mxCell id="pw-accessions" value="Input&#xa;accessions, residues,&#xa;parameters" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;strokeWidth=1.2;" vertex="1" parent="1">
+          <mxGeometry x="80" y="220" width="180" height="80" as="geometry"/>
         </mxCell>
-        <mxCell id="pw-input-lane" value="Setup and acquisition" style="swimlane;whiteSpace=wrap;html=1;startSize=34;rounded=1;arcSize=5;fillColor=#EEF3F6;strokeColor=#B9C8D0;fontColor=#142027;fontSize=15;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
-          <mxGeometry x="55" y="215" width="1295" height="205" as="geometry"/>
+        <mxCell id="pw-plan" value="Planning&#xa;deduplicate, partition&#xa;into batches" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;strokeWidth=1.2;" vertex="1" parent="1">
+          <mxGeometry x="320" y="220" width="180" height="80" as="geometry"/>
         </mxCell>
-        <mxCell id="pw-step1" value="1" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#1387C1;strokeColor=#1387C1;fontColor=#FFFFFF;fontSize=16;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
-          <mxGeometry x="92" y="246" width="34" height="34" as="geometry"/>
+        <mxCell id="pw-acquire" value="Acquisition&#xa;retrieve genomes,&#xa;extract CDS, taxonomy" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;strokeWidth=1.2;" vertex="1" parent="1">
+          <mxGeometry x="560" y="220" width="180" height="80" as="geometry"/>
         </mxCell>
-        <mxCell id="pw-step2" value="2" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#1387C1;strokeColor=#1387C1;fontColor=#FFFFFF;fontSize=16;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
-          <mxGeometry x="392" y="246" width="34" height="34" as="geometry"/>
+        <mxCell id="pw-translate" value="Translation&#xa;CDS to protein,&#xa;retain longest isoform" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;strokeWidth=1.2;" vertex="1" parent="1">
+          <mxGeometry x="800" y="220" width="180" height="80" as="geometry"/>
         </mxCell>
-        <mxCell id="pw-step3" value="3" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#1387C1;strokeColor=#1387C1;fontColor=#FFFFFF;fontSize=16;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
-          <mxGeometry x="703" y="246" width="34" height="34" as="geometry"/>
+
+        <mxCell id="pw-detect" value="Repeat detection&#xa;parallel over (batch × residue × method)" style="swimlane;whiteSpace=wrap;html=1;startSize=32;rounded=0;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=12;fontStyle=1;fontFamily=Helvetica;strokeWidth=1.2;swimlaneFillColor=#FAFAFA;" vertex="1" parent="1">
+          <mxGeometry x="240" y="380" width="740" height="170" as="geometry"/>
         </mxCell>
-        <mxCell id="pw-step4" value="4" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#1387C1;strokeColor=#1387C1;fontColor=#FFFFFF;fontSize=16;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
-          <mxGeometry x="1033" y="246" width="34" height="34" as="geometry"/>
+        <mxCell id="pw-pure" value="Pure runs" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="pw-detect">
+          <mxGeometry x="40" y="60" width="200" height="70" as="geometry"/>
         </mxCell>
-        <mxCell id="pw-accessions" value="Input validation&#xa;accession file, residues, taxonomy policy, publish mode" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B9C8D0;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=10;" vertex="1" parent="1">
-          <mxGeometry x="80" y="290" width="240" height="92" as="geometry"/>
+        <mxCell id="pw-threshold" value="Threshold window" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="pw-detect">
+          <mxGeometry x="270" y="60" width="200" height="70" as="geometry"/>
         </mxCell>
-        <mxCell id="pw-plan" value="Planning&#xa;dedupe, resolve, deterministic batches" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#90C5DF;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=10;" vertex="1" parent="1">
-          <mxGeometry x="380" y="290" width="250" height="92" as="geometry"/>
+        <mxCell id="pw-seed" value="Seed-and-extend" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="pw-detect">
+          <mxGeometry x="500" y="60" width="200" height="70" as="geometry"/>
         </mxCell>
-        <mxCell id="pw-acquire" value="Acquisition&#xa;download NCBI package, normalize CDS, materialize taxonomy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#90C5DF;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=10;" vertex="1" parent="1">
-          <mxGeometry x="690" y="290" width="280" height="92" as="geometry"/>
+
+        <mxCell id="pw-finalize" value="Codon validation&#xa;back-map to CDS, retranslate,&#xa;compute codon usage or flag" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;strokeWidth=1.2;" vertex="1" parent="1">
+          <mxGeometry x="430" y="620" width="260" height="80" as="geometry"/>
         </mxCell>
-        <mxCell id="pw-translate" value="Translation&#xa;conservative CDS translation and longest retained protein" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#90C5DF;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=10;" vertex="1" parent="1">
-          <mxGeometry x="1020" y="290" width="300" height="92" as="geometry"/>
+        <mxCell id="pw-output" value="Published contract" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=12;fontStyle=1;fontFamily=Helvetica;strokeWidth=1.2;" vertex="1" parent="1">
+          <mxGeometry x="800" y="620" width="200" height="80" as="geometry"/>
         </mxCell>
-        <mxCell id="pw-detect-lane" value="Detection fan-out: batch x repeat residue x method" style="swimlane;whiteSpace=wrap;html=1;startSize=38;rounded=1;arcSize=5;fillColor=#EAF5FB;strokeColor=#90C5DF;fontColor=#142027;fontSize=15;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
-          <mxGeometry x="280" y="470" width="980" height="210" as="geometry"/>
-        </mxCell>
-        <mxCell id="pw-pure" value="PURE&#xa;uninterrupted target-residue runs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#90C5DF;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=10;" vertex="1" parent="pw-detect-lane">
-          <mxGeometry x="70" y="85" width="250" height="78" as="geometry"/>
-        </mxCell>
-        <mxCell id="pw-threshold" value="THRESHOLD&#xa;density window, e.g. Q6/8" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#90C5DF;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=10;" vertex="1" parent="pw-detect-lane">
-          <mxGeometry x="365" y="85" width="250" height="78" as="geometry"/>
-        </mxCell>
-        <mxCell id="pw-seed" value="SEED-EXTEND&#xa;strict seed core + looser extension" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#90C5DF;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=10;" vertex="1" parent="pw-detect-lane">
-          <mxGeometry x="660" y="85" width="250" height="78" as="geometry"/>
-        </mxCell>
-        <mxCell id="pw-final-lane" value="Finalization and publication" style="swimlane;whiteSpace=wrap;html=1;startSize=34;rounded=1;arcSize=5;fillColor=#F4F1EA;strokeColor=#D2B883;fontColor=#142027;fontSize=15;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
-          <mxGeometry x="520" y="725" width="1070" height="170" as="geometry"/>
-        </mxCell>
-        <mxCell id="pw-finalize" value="Codon finalization&#xa;coordinates -> CDS slice -> translation check -> codon usage or warning" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF5E6;strokeColor=#E1B56F;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=10;" vertex="1" parent="1">
-          <mxGeometry x="595" y="760" width="430" height="92" as="geometry"/>
-        </mxCell>
-        <mxCell id="pw-output" value="publish/ contract&#xa;repeat calls, params, genomes, taxonomy, proteins, codon usage, context, warnings, status, manifest" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EAF8F1;strokeColor=#7ECDA5;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=10;" vertex="1" parent="1">
-          <mxGeometry x="1160" y="760" width="390" height="92" as="geometry"/>
-        </mxCell>
-        <mxCell id="pw-a1" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#4C6470;" edge="1" parent="1" source="pw-accessions" target="pw-plan"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="pw-a2" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#4C6470;" edge="1" parent="1" source="pw-plan" target="pw-acquire"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="pw-a3" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#4C6470;" edge="1" parent="1" source="pw-acquire" target="pw-translate"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="pw-a4" style="endArrow=block;html=1;rounded=0;strokeWidth=2.5;strokeColor=#1387C1;" edge="1" parent="1" source="pw-translate" target="pw-detect-lane"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="pw-a5" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#4C6470;" edge="1" parent="1" source="pw-detect-lane" target="pw-finalize"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="pw-a6" style="endArrow=block;html=1;rounded=0;strokeWidth=2.5;strokeColor=#1387C1;" edge="1" parent="1" source="pw-finalize" target="pw-output"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="pw-a1" style="endArrow=classicThin;html=1;rounded=0;strokeWidth=1.3;strokeColor=#1A1A1A;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="pw-accessions" target="pw-plan"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="pw-a2" style="endArrow=classicThin;html=1;rounded=0;strokeWidth=1.3;strokeColor=#1A1A1A;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="pw-plan" target="pw-acquire"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="pw-a3" style="endArrow=classicThin;html=1;rounded=0;strokeWidth=1.3;strokeColor=#1A1A1A;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="pw-acquire" target="pw-translate"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="pw-a4" style="endArrow=classicThin;html=1;rounded=0;strokeWidth=1.3;strokeColor=#1A1A1A;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="pw-translate" target="pw-detect"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="pw-a5" style="endArrow=classicThin;html=1;rounded=0;strokeWidth=1.3;strokeColor=#1A1A1A;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="pw-detect" target="pw-finalize"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="pw-a6" style="endArrow=classicThin;html=1;rounded=0;strokeWidth=1.3;strokeColor=#1A1A1A;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="pw-finalize" target="pw-output"><mxGeometry relative="1" as="geometry"/></mxCell>
       </root>
     </mxGraphModel>
   </diagram>
-  <diagram id="repeat-codon-validation" name="Repeat methods and codon validation">
-    <mxGraphModel dx="1420" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="980" math="0" shadow="0">
+
+  <diagram id="repeat-codon-validation" name="Methods and validation">
+    <mxGraphModel dx="1420" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="780" math="0" shadow="0">
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
-        <mxCell id="rc-bg" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F4F7F9;strokeColor=none;" vertex="1" parent="1">
-          <mxGeometry x="0" y="0" width="1600" height="980" as="geometry"/>
+        <mxCell id="rc-title" value="Repeat definitions and codon validation" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=22;fontStyle=1;fontColor=#1A1A1A;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="70" y="50" width="900" height="32" as="geometry"/>
         </mxCell>
-        <mxCell id="rc-title" value="Repeat definitions and codon validation" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=34;fontStyle=1;fontColor=#142027;fontFamily=Raleway;" vertex="1" parent="1">
-          <mxGeometry x="70" y="56" width="760" height="48" as="geometry"/>
+        <mxCell id="rc-subtitle" value="Different definitions recover different tracts; codon composition is reported only after nucleotide-level confirmation." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=13;fontColor=#555555;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="70" y="84" width="1100" height="24" as="geometry"/>
         </mxCell>
-        <mxCell id="rc-subtitle" value="Different repeat definitions can recover different tracts; codon composition is only calculated from exact nucleotide validation." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=16;fontColor=#4C6470;fontFamily=Roboto;" vertex="1" parent="1">
-          <mxGeometry x="72" y="106" width="1080" height="32" as="geometry"/>
+
+        <mxCell id="rc-panel-a" value="(a) Method comparison on a protein region" style="swimlane;whiteSpace=wrap;html=1;startSize=32;rounded=0;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=13;fontStyle=1;fontFamily=Helvetica;strokeWidth=1.2;swimlaneFillColor=#FAFAFA;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="70" y="160" width="860" height="500" as="geometry"/>
         </mxCell>
-        <mxCell id="rc-line" value="" style="shape=line;html=1;strokeColor=#1387C1;strokeWidth=4;" vertex="1" parent="1">
-          <mxGeometry x="72" y="148" width="190" height="10" as="geometry"/>
+        <mxCell id="rc-sequence" value="A A &lt;b&gt;Q Q Q Q Q&lt;/b&gt; N &lt;b&gt;Q Q&lt;/b&gt; A &lt;b&gt;Q Q Q Q Q Q&lt;/b&gt; S A" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=18;fontFamily=Courier New;" vertex="1" parent="rc-panel-a">
+          <mxGeometry x="60" y="65" width="740" height="60" as="geometry"/>
         </mxCell>
-        <mxCell id="rc-method-container" value="A. Method comparison on one protein region" style="swimlane;whiteSpace=wrap;html=1;startSize=38;rounded=1;arcSize=5;fillColor=#EAF5FB;strokeColor=#90C5DF;fontColor=#142027;fontSize=15;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
-          <mxGeometry x="70" y="220" width="900" height="540" as="geometry"/>
+
+        <mxCell id="rc-pure-label" value="Pure" style="text;html=1;align=right;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#1A1A1A;fontFamily=Helvetica;" vertex="1" parent="rc-panel-a">
+          <mxGeometry x="20" y="170" width="100" height="30" as="geometry"/>
         </mxCell>
-        <mxCell id="rc-sequence" value="A A &lt;font color=&quot;#1387C1&quot;&gt;Q Q Q Q Q&lt;/font&gt; N &lt;font color=&quot;#1387C1&quot;&gt;Q Q&lt;/font&gt; A &lt;font color=&quot;#1387C1&quot;&gt;Q Q Q Q Q Q&lt;/font&gt; S A" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B9C8D0;fontColor=#142027;fontSize=20;fontFamily=Courier New;fontStyle=1;arcSize=8;spacing=14;" vertex="1" parent="rc-method-container">
-          <mxGeometry x="60" y="80" width="780" height="76" as="geometry"/>
+        <mxCell id="rc-pure-bar" value="" style="rounded=0;fillColor=#1A1A1A;strokeColor=#1A1A1A;" vertex="1" parent="rc-panel-a">
+          <mxGeometry x="135" y="175" width="190" height="20" as="geometry"/>
         </mxCell>
-        <mxCell id="rc-pure-bar" value="pure: strict uninterrupted runs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7CBBDD;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="rc-method-container">
-          <mxGeometry x="150" y="205" width="240" height="54" as="geometry"/>
+        <mxCell id="rc-pure-desc" value="uninterrupted runs of the target residue" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontStyle=2;fontColor=#555555;fontFamily=Helvetica;" vertex="1" parent="rc-panel-a">
+          <mxGeometry x="340" y="170" width="320" height="30" as="geometry"/>
         </mxCell>
-        <mxCell id="rc-threshold-bar" value="threshold: repeat-rich window" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7CBBDD;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="rc-method-container">
-          <mxGeometry x="260" y="290" width="360" height="54" as="geometry"/>
+
+        <mxCell id="rc-thresh-label" value="Threshold" style="text;html=1;align=right;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#1A1A1A;fontFamily=Helvetica;" vertex="1" parent="rc-panel-a">
+          <mxGeometry x="20" y="235" width="100" height="30" as="geometry"/>
         </mxCell>
-        <mxCell id="rc-seed-bar" value="seed-extend: stricter core + interrupted extension" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7CBBDD;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="rc-method-container">
-          <mxGeometry x="185" y="375" width="570" height="54" as="geometry"/>
+        <mxCell id="rc-thresh-bar" value="" style="rounded=0;fillColor=#666666;strokeColor=#666666;" vertex="1" parent="rc-panel-a">
+          <mxGeometry x="240" y="240" width="280" height="20" as="geometry"/>
         </mxCell>
-        <mxCell id="rc-method-note" value="PAARTA keeps method and parameter provenance attached to every call, so biological comparisons can be filtered by repeat definition." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9DB0B9;dashed=1;fontColor=#405965;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=10;" vertex="1" parent="rc-method-container">
-          <mxGeometry x="95" y="465" width="710" height="48" as="geometry"/>
+        <mxCell id="rc-thresh-desc" value="density window above a residue threshold" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontStyle=2;fontColor=#555555;fontFamily=Helvetica;" vertex="1" parent="rc-panel-a">
+          <mxGeometry x="540" y="235" width="320" height="30" as="geometry"/>
         </mxCell>
-        <mxCell id="rc-validation-container" value="B. Codon validation path" style="swimlane;whiteSpace=wrap;html=1;startSize=38;rounded=1;arcSize=5;fillColor=#FFF5E6;strokeColor=#E1B56F;fontColor=#142027;fontSize=15;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
-          <mxGeometry x="1040" y="220" width="480" height="540" as="geometry"/>
+
+        <mxCell id="rc-seed-label" value="Seed-and-extend" style="text;html=1;align=right;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#1A1A1A;fontFamily=Helvetica;" vertex="1" parent="rc-panel-a">
+          <mxGeometry x="20" y="300" width="100" height="30" as="geometry"/>
         </mxCell>
-        <mxCell id="rc-call" value="repeat call&#xa;AA coordinates" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E6C78F;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=10;" vertex="1" parent="rc-validation-container">
-          <mxGeometry x="135" y="70" width="210" height="66" as="geometry"/>
+        <mxCell id="rc-seed-bar" value="" style="rounded=0;fillColor=#999999;strokeColor=#999999;" vertex="1" parent="rc-panel-a">
+          <mxGeometry x="165" y="305" width="430" height="20" as="geometry"/>
         </mxCell>
-        <mxCell id="rc-cds" value="CDS nucleotide slice&#xa;coordinate-derived" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E6C78F;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=10;" vertex="1" parent="rc-validation-container">
-          <mxGeometry x="135" y="165" width="210" height="66" as="geometry"/>
+        <mxCell id="rc-seed-desc" value="strict seed core, permissive extension" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontStyle=2;fontColor=#555555;fontFamily=Helvetica;" vertex="1" parent="rc-panel-a">
+          <mxGeometry x="610" y="300" width="320" height="30" as="geometry"/>
         </mxCell>
-        <mxCell id="rc-translate" value="translate slice&#xa;recorded translation table" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E6C78F;fontColor=#142027;fontSize=14;fontFamily=Roboto;arcSize=8;spacing=10;" vertex="1" parent="rc-validation-container">
-          <mxGeometry x="135" y="260" width="210" height="66" as="geometry"/>
+
+        <mxCell id="rc-note" value="Each call retains its detection method and parameters, so downstream analyses can be stratified by definition." style="text;html=1;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#555555;fontFamily=Helvetica;" vertex="1" parent="rc-panel-a">
+          <mxGeometry x="40" y="400" width="780" height="50" as="geometry"/>
         </mxCell>
-        <mxCell id="rc-decision" value="exact AA match?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E1B56F;fontColor=#142027;fontSize=14;fontFamily=Roboto;spacing=8;" vertex="1" parent="rc-validation-container">
-          <mxGeometry x="140" y="365" width="200" height="86" as="geometry"/>
+
+        <mxCell id="rc-panel-b" value="(b) Codon-level validation" style="swimlane;whiteSpace=wrap;html=1;startSize=32;rounded=0;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=13;fontStyle=1;fontFamily=Helvetica;strokeWidth=1.2;swimlaneFillColor=#FAFAFA;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="970" y="160" width="460" height="500" as="geometry"/>
         </mxCell>
-        <mxCell id="rc-pass" value="PASS&#xa;codon sequence + codon usage rows" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EAF8F1;strokeColor=#7ECDA5;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="rc-validation-container">
-          <mxGeometry x="40" y="470" width="180" height="62" as="geometry"/>
+        <mxCell id="rc-call" value="Repeat call&#xa;(amino-acid coordinates)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;strokeWidth=1.2;" vertex="1" parent="rc-panel-b">
+          <mxGeometry x="130" y="60" width="200" height="60" as="geometry"/>
         </mxCell>
-        <mxCell id="rc-fail" value="FAIL&#xa;retain AA call, record warning, exclude from codon shares" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEDEE;strokeColor=#DFA0A7;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="rc-validation-container">
-          <mxGeometry x="260" y="465" width="185" height="72" as="geometry"/>
+        <mxCell id="rc-cds" value="Map to CDS nucleotides" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;strokeWidth=1.2;" vertex="1" parent="rc-panel-b">
+          <mxGeometry x="130" y="150" width="200" height="50" as="geometry"/>
         </mxCell>
-        <mxCell id="rc-a1" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#4C6470;" edge="1" parent="rc-validation-container" source="rc-call" target="rc-cds"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="rc-a2" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#4C6470;" edge="1" parent="rc-validation-container" source="rc-cds" target="rc-translate"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="rc-a3" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#4C6470;" edge="1" parent="rc-validation-container" source="rc-translate" target="rc-decision"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="rc-a4" value="yes" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#279A63;fontColor=#279A63;fontStyle=1;" edge="1" parent="rc-validation-container" source="rc-decision" target="rc-pass"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="rc-a5" value="no" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#C95A64;fontColor=#C95A64;fontStyle=1;" edge="1" parent="rc-validation-container" source="rc-decision" target="rc-fail"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="rc-translate" value="Re-translate" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;strokeWidth=1.2;" vertex="1" parent="rc-panel-b">
+          <mxGeometry x="130" y="230" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="rc-decision" value="Matches original?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;strokeWidth=1.2;" vertex="1" parent="rc-panel-b">
+          <mxGeometry x="140" y="310" width="180" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="rc-pass" value="Validated&#xa;codon usage recorded" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;strokeWidth=1.2;" vertex="1" parent="rc-panel-b">
+          <mxGeometry x="20" y="410" width="180" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="rc-fail" value="Flagged&#xa;call retained, excluded&#xa;from codon statistics" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=12;fontStyle=3;fontFamily=Helvetica;strokeWidth=1.2;dashed=1;" vertex="1" parent="rc-panel-b">
+          <mxGeometry x="250" y="410" width="190" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="rc-a1" style="endArrow=classicThin;html=1;rounded=0;strokeWidth=1.3;strokeColor=#1A1A1A;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="rc-panel-b" source="rc-call" target="rc-cds"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="rc-a2" style="endArrow=classicThin;html=1;rounded=0;strokeWidth=1.3;strokeColor=#1A1A1A;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="rc-panel-b" source="rc-cds" target="rc-translate"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="rc-a3" style="endArrow=classicThin;html=1;rounded=0;strokeWidth=1.3;strokeColor=#1A1A1A;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="rc-panel-b" source="rc-translate" target="rc-decision"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="rc-a4" value="yes" style="endArrow=classicThin;html=1;rounded=0;strokeWidth=1.3;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=11;exitX=0;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="rc-panel-b" source="rc-decision" target="rc-pass"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="rc-a5" value="no" style="endArrow=classicThin;html=1;rounded=0;strokeWidth=1.3;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=11;exitX=1;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="rc-panel-b" source="rc-decision" target="rc-fail"><mxGeometry relative="1" as="geometry"/></mxCell>
       </root>
     </mxGraphModel>
   </diagram>
-  <diagram id="paarta-browser-system" name="PAARTA browser system">
-    <mxGraphModel dx="1420" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1000" math="0" shadow="0">
+
+  <diagram id="paarta-browser-system" name="Web atlas architecture">
+    <mxGraphModel dx="1420" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="900" math="0" shadow="0">
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
-        <mxCell id="pb-bg" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F4F7F9;strokeColor=none;" vertex="1" parent="1">
-          <mxGeometry x="0" y="0" width="1800" height="1000" as="geometry"/>
+        <mxCell id="pb-title" value="Web atlas architecture" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=22;fontStyle=1;fontColor=#1A1A1A;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="70" y="50" width="700" height="32" as="geometry"/>
         </mxCell>
-        <mxCell id="pb-title" value="PAARTA browser system" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=34;fontStyle=1;fontColor=#142027;fontFamily=Raleway;" vertex="1" parent="1">
-          <mxGeometry x="70" y="56" width="760" height="48" as="geometry"/>
-        </mxCell>
-        <mxCell id="pb-subtitle" value="Django serves the browser; five specialised Celery workers consume Redis-queued tasks and persist results to PostgreSQL." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=16;fontColor=#4C6470;fontFamily=Roboto;" vertex="1" parent="1">
-          <mxGeometry x="72" y="106" width="1200" height="32" as="geometry"/>
-        </mxCell>
-        <mxCell id="pb-line" value="" style="shape=line;html=1;strokeColor=#1387C1;strokeWidth=4;" vertex="1" parent="1">
-          <mxGeometry x="72" y="148" width="190" height="10" as="geometry"/>
+        <mxCell id="pb-subtitle" value="A standard web application separates synchronous browsing from asynchronous, long-running tasks dispatched through a message broker." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=13;fontColor=#555555;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="70" y="84" width="1200" height="24" as="geometry"/>
         </mxCell>
 
-        <!-- Browser / Client -->
-        <mxCell id="pb-browser" value="Browser / Client" style="swimlane;whiteSpace=wrap;html=1;startSize=38;rounded=1;arcSize=6;fillColor=#EEF3F6;strokeColor=#B9C8D0;fontColor=#142027;fontSize=15;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
-          <mxGeometry x="55" y="170" width="205" height="540" as="geometry"/>
+        <mxCell id="pb-client" value="Client" style="swimlane;whiteSpace=wrap;html=1;startSize=30;rounded=0;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=13;fontStyle=1;fontFamily=Helvetica;strokeWidth=1.2;swimlaneFillColor=#FAFAFA;" vertex="1" parent="1">
+          <mxGeometry x="70" y="160" width="220" height="260" as="geometry"/>
         </mxCell>
-        <mxCell id="pb-b1" value="Chunked upload&#xa;fetch() — start / chunk / complete&#xa;SHA-256 per chunk" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B9C8D0;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-browser">
-          <mxGeometry x="15" y="52" width="175" height="72" as="geometry"/>
+        <mxCell id="pb-c1" value="Browser&#xa;catalog views, exports" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="pb-client">
+          <mxGeometry x="20" y="50" width="180" height="60" as="geometry"/>
         </mxCell>
-        <mxCell id="pb-b2" value="Import polling&#xa;page reload every 5 s&#xa;while PENDING / RUNNING" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B9C8D0;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-browser">
-          <mxGeometry x="15" y="144" width="175" height="72" as="geometry"/>
-        </mxCell>
-        <mxCell id="pb-b3" value="Async status checks&#xa;/payload-builds/{id}/status/&#xa;/download-builds/{id}/status/" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B9C8D0;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-browser">
-          <mxGeometry x="15" y="236" width="175" height="72" as="geometry"/>
-        </mxCell>
-        <mxCell id="pb-b4" value="Browse + export&#xa;repeat calls, genomes,&#xa;proteins, taxa, TSV / FASTA" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B9C8D0;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-browser">
-          <mxGeometry x="15" y="328" width="175" height="72" as="geometry"/>
+        <mxCell id="pb-c2" value="Upload + polling&#xa;chunked uploads,&#xa;job status checks" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="pb-client">
+          <mxGeometry x="20" y="130" width="180" height="80" as="geometry"/>
         </mxCell>
 
-        <!-- Django / Gunicorn -->
-        <mxCell id="pb-django" value="Django · Gunicorn (4 workers)" style="swimlane;whiteSpace=wrap;html=1;startSize=38;rounded=1;arcSize=6;fillColor=#EAF8F1;strokeColor=#7ECDA5;fontColor=#142027;fontSize=15;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
-          <mxGeometry x="315" y="170" width="380" height="540" as="geometry"/>
+        <mxCell id="pb-app" value="Application server&#xa;Django · Gunicorn" style="swimlane;whiteSpace=wrap;html=1;startSize=44;rounded=0;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=13;fontStyle=1;fontFamily=Helvetica;strokeWidth=1.2;swimlaneFillColor=#FAFAFA;" vertex="1" parent="1">
+          <mxGeometry x="370" y="160" width="320" height="260" as="geometry"/>
         </mxCell>
-        <mxCell id="pb-d1" value="Import views&#xa;upload: start, chunk, complete, retry&#xa;import batch enqueue, run delete" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9FD8BA;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-django">
-          <mxGeometry x="20" y="50" width="340" height="72" as="geometry"/>
+        <mxCell id="pb-app1" value="HTTP API&#xa;catalog, statistics, exports" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="pb-app">
+          <mxGeometry x="20" y="60" width="280" height="55" as="geometry"/>
         </mxCell>
-        <mxCell id="pb-d2" value="Browser views&#xa;repeat browser, stats bundles, canonical catalog&#xa;payload + download build status endpoints" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9FD8BA;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-django">
-          <mxGeometry x="20" y="138" width="340" height="72" as="geometry"/>
+        <mxCell id="pb-app2" value="Ingestion endpoints&#xa;upload, import, delete" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="pb-app">
+          <mxGeometry x="20" y="130" width="280" height="55" as="geometry"/>
         </mxCell>
-        <mxCell id="pb-d3" value="Task dispatch · .delay()&#xa;enqueues to Redis DB 0 broker&#xa;imports / uploads / payload_graph / downloads / deletions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF5E6;strokeColor=#E6C78F;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-django">
-          <mxGeometry x="20" y="226" width="340" height="72" as="geometry"/>
-        </mxCell>
-        <mxCell id="pb-d4" value="Cache layer · django-redis DB 1&#xa;stats bundle reads, query cache" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF5E6;strokeColor=#E6C78F;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-django">
-          <mxGeometry x="20" y="314" width="340" height="60" as="geometry"/>
-        </mxCell>
-        <mxCell id="pb-d5" value="ORM · Django models → PostgreSQL&#xa;ImportBatch, UploadedRun, PipelineRun,&#xa;Genome, Protein, RepeatCall, PayloadBuild…" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F4F1EA;strokeColor=#D2B883;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-django">
-          <mxGeometry x="20" y="390" width="340" height="72" as="geometry"/>
+        <mxCell id="pb-app3" value="Task dispatcher (Celery)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="pb-app">
+          <mxGeometry x="20" y="200" width="280" height="40" as="geometry"/>
         </mxCell>
 
-        <!-- Redis -->
-        <mxCell id="pb-redis" value="Redis 7" style="swimlane;whiteSpace=wrap;html=1;startSize=38;rounded=1;arcSize=6;fillColor=#FFF5E6;strokeColor=#E1B56F;fontColor=#142027;fontSize=15;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
-          <mxGeometry x="750" y="170" width="285" height="540" as="geometry"/>
+        <mxCell id="pb-broker" value="Broker / cache&#xa;Redis" style="swimlane;whiteSpace=wrap;html=1;startSize=44;rounded=0;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=13;fontStyle=1;fontFamily=Helvetica;strokeWidth=1.2;swimlaneFillColor=#FAFAFA;" vertex="1" parent="1">
+          <mxGeometry x="770" y="160" width="240" height="260" as="geometry"/>
         </mxCell>
-        <mxCell id="pb-r0" value="DB 0 · Celery Broker&#xa;&#xa;Queue → Worker&#xa;imports → import-worker&#xa;uploads → upload-worker&#xa;payload_graph → graph-worker&#xa;downloads → download-worker&#xa;deletions → deletion-worker" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E6C78F;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;align=left;spacingLeft=12;" vertex="1" parent="pb-redis">
-          <mxGeometry x="20" y="52" width="245" height="218" as="geometry"/>
+        <mxCell id="pb-br1" value="Job queues&#xa;(Celery broker)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="pb-broker">
+          <mxGeometry x="20" y="60" width="200" height="75" as="geometry"/>
         </mxCell>
-        <mxCell id="pb-r1" value="DB 1 · Cache Backend&#xa;&#xa;Pre-warmed stats bundles&#xa;Django query cache&#xa;(django-redis · 12 h visibility)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E6C78F;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;align=left;spacingLeft=12;" vertex="1" parent="pb-redis">
-          <mxGeometry x="20" y="295" width="245" height="148" as="geometry"/>
-        </mxCell>
-
-        <!-- Celery Workers -->
-        <mxCell id="pb-workers" value="Celery Workers" style="swimlane;whiteSpace=wrap;html=1;startSize=38;rounded=1;arcSize=6;fillColor=#EAF5FB;strokeColor=#7CBBDD;fontColor=#142027;fontSize=15;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
-          <mxGeometry x="1090" y="170" width="500" height="540" as="geometry"/>
-        </mxCell>
-        <mxCell id="pb-w1" value="celery-import-worker · imports queue · concurrency 2&#xa;run_import_batch — validate + persist run, trigger post-import warmup fan-out" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A9CFE4;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-workers">
-          <mxGeometry x="20" y="50" width="460" height="62" as="geometry"/>
-        </mxCell>
-        <mxCell id="pb-w2" value="celery-upload-worker · uploads queue · concurrency 2&#xa;extract_uploaded_run — unzip, validate contract, mark READY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A9CFE4;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-workers">
-          <mxGeometry x="20" y="122" width="460" height="62" as="geometry"/>
-        </mxCell>
-        <mxCell id="pb-w3" value="celery-graph-worker · payload_graph · autoscale 1–4&#xa;warm_stats_bundle — build stats payload, write result to Redis DB 1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A9CFE4;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-workers">
-          <mxGeometry x="20" y="194" width="460" height="62" as="geometry"/>
-        </mxCell>
-        <mxCell id="pb-w4" value="celery-download-worker · downloads queue · concurrency 2&#xa;build TSV / FASTA artifacts on disk, expire stale download builds" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A9CFE4;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-workers">
-          <mxGeometry x="20" y="266" width="460" height="62" as="geometry"/>
-        </mxCell>
-        <mxCell id="pb-w5" value="celery-deletion-worker · deletions queue · concurrency 1 (sequential)&#xa;delete_pipeline_run_job — cascade-delete run rows, bump CatalogVersion" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A9CFE4;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-workers">
-          <mxGeometry x="20" y="338" width="460" height="62" as="geometry"/>
-        </mxCell>
-        <mxCell id="pb-beat" value="celery-beat · Scheduler&#xa;reset_stale_import_batches (5 min) · cleanup_stale_uploaded_runs (1 h) · expire_stale_download_builds (6 h)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EEF3F6;strokeColor=#9DB0B9;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-workers">
-          <mxGeometry x="20" y="418" width="460" height="68" as="geometry"/>
+        <mxCell id="pb-br2" value="Result cache&#xa;pre-computed statistics" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="pb-broker">
+          <mxGeometry x="20" y="150" width="200" height="75" as="geometry"/>
         </mxCell>
 
-        <!-- PostgreSQL -->
-        <mxCell id="pb-pg" value="PostgreSQL 16" style="swimlane;whiteSpace=wrap;html=1;startSize=34;rounded=1;arcSize=6;fillColor=#F4F1EA;strokeColor=#D2B883;fontColor=#142027;fontSize=15;fontStyle=1;fontFamily=Poppins;" vertex="1" parent="1">
-          <mxGeometry x="315" y="775" width="1275" height="120" as="geometry"/>
+        <mxCell id="pb-workers" value="Worker pool&#xa;Celery workers" style="swimlane;whiteSpace=wrap;html=1;startSize=44;rounded=0;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=13;fontStyle=1;fontFamily=Helvetica;strokeWidth=1.2;swimlaneFillColor=#FAFAFA;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="160" width="340" height="380" as="geometry"/>
         </mxCell>
-        <mxCell id="pb-pg1" value="imports app: ImportBatch · UploadedRun · DeletionJob · CatalogVersion" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2B883;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-pg">
-          <mxGeometry x="20" y="40" width="575" height="46" as="geometry"/>
+        <mxCell id="pb-w1" value="Import worker&#xa;validate and persist runs" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="pb-workers">
+          <mxGeometry x="20" y="60" width="300" height="50" as="geometry"/>
         </mxCell>
-        <mxCell id="pb-pg2" value="browser app: PipelineRun · Genome · Protein · RepeatCall · Taxon · PayloadBuild · DownloadBuild · Canonical* · AccessionCallCount" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2B883;fontColor=#142027;fontSize=13;fontFamily=Roboto;arcSize=8;spacing=8;" vertex="1" parent="pb-pg">
-          <mxGeometry x="615" y="40" width="640" height="46" as="geometry"/>
+        <mxCell id="pb-w2" value="Upload worker&#xa;unpack and verify archives" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="pb-workers">
+          <mxGeometry x="20" y="120" width="300" height="50" as="geometry"/>
         </mxCell>
-
-        <!-- Flower -->
-        <mxCell id="pb-flower" value="Flower&#xa;/admin/flower/&#xa;Celery monitoring UI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9DB0B9;fontColor=#405965;fontSize=13;fontFamily=Roboto;arcSize=10;spacing=8;" vertex="1" parent="1">
-          <mxGeometry x="55" y="775" width="200" height="80" as="geometry"/>
+        <mxCell id="pb-w3" value="Statistics worker&#xa;pre-compute aggregates" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="pb-workers">
+          <mxGeometry x="20" y="180" width="300" height="50" as="geometry"/>
         </mxCell>
-
-        <!-- Deployment note -->
-        <mxCell id="pb-note" value="All services run as Docker containers (compose.yaml): web (Gunicorn), 5 Celery workers, celery-beat, redis (data volume), postgres (data volume), migrate (init), flower." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9DB0B9;dashed=1;fontColor=#405965;fontSize=14;fontFamily=Roboto;arcSize=10;spacing=12;" vertex="1" parent="1">
-          <mxGeometry x="315" y="910" width="1275" height="54" as="geometry"/>
+        <mxCell id="pb-w4" value="Export worker&#xa;build downloadable archives" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="pb-workers">
+          <mxGeometry x="20" y="240" width="300" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="pb-w5" value="Deletion worker&#xa;cascade-remove runs" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="pb-workers">
+          <mxGeometry x="20" y="300" width="300" height="50" as="geometry"/>
         </mxCell>
 
-        <!-- Arrows -->
-        <mxCell id="pb-a1" value="HTTP / JSON" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#4C6470;fontColor=#4C6470;fontSize=12;fontFamily=Roboto;" edge="1" parent="1" source="pb-browser" target="pb-django">
-          <mxGeometry relative="1" as="geometry"/>
+        <mxCell id="pb-scheduler" value="Scheduler (Celery beat)&#xa;periodic maintenance tasks" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;strokeWidth=1.2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="580" width="340" height="60" as="geometry"/>
         </mxCell>
-        <mxCell id="pb-a2" value=".delay()" style="endArrow=block;html=1;rounded=0;strokeWidth=2.5;strokeColor=#E1B56F;fontColor=#E1B56F;fontSize=12;fontFamily=Roboto;" edge="1" parent="1" source="pb-d3" target="pb-r0">
-          <mxGeometry relative="1" as="geometry"/>
+
+        <mxCell id="pb-db" value="Relational database&#xa;PostgreSQL" style="swimlane;whiteSpace=wrap;html=1;startSize=44;rounded=0;fillColor=#FFFFFF;strokeColor=#1A1A1A;fontColor=#1A1A1A;fontSize=13;fontStyle=1;fontFamily=Helvetica;strokeWidth=1.2;swimlaneFillColor=#F2F2F2;" vertex="1" parent="1">
+          <mxGeometry x="370" y="580" width="640" height="130" as="geometry"/>
         </mxCell>
-        <mxCell id="pb-a3" value="cache r/w" style="endArrow=open;startArrow=open;html=1;rounded=0;strokeWidth=2;strokeColor=#E1B56F;dashed=1;fontColor=#E1B56F;fontSize=12;fontFamily=Roboto;" edge="1" parent="1" source="pb-d4" target="pb-r1">
-          <mxGeometry relative="1" as="geometry"/>
+        <mxCell id="pb-db1" value="Ingestion state&#xa;import batches, uploads, deletion jobs" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="pb-db">
+          <mxGeometry x="20" y="58" width="290" height="60" as="geometry"/>
         </mxCell>
-        <mxCell id="pb-a4" value="task delivery" style="endArrow=block;html=1;rounded=0;strokeWidth=2.5;strokeColor=#1387C1;fontColor=#1387C1;fontSize=12;fontFamily=Roboto;" edge="1" parent="1" source="pb-r0" target="pb-workers">
-          <mxGeometry relative="1" as="geometry"/>
+        <mxCell id="pb-db2" value="Canonical catalog&#xa;genomes, proteins, repeats, taxonomy" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#666666;fontColor=#1A1A1A;fontSize=12;fontFamily=Helvetica;" vertex="1" parent="pb-db">
+          <mxGeometry x="330" y="58" width="290" height="60" as="geometry"/>
         </mxCell>
-        <mxCell id="pb-a5" value="warm cache" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#E1B56F;fontColor=#E1B56F;fontSize=12;fontFamily=Roboto;" edge="1" parent="1" source="pb-w3" target="pb-r1">
-          <mxGeometry relative="1" as="geometry"/>
-        </mxCell>
-        <mxCell id="pb-a6" value="schedule" style="endArrow=block;html=1;rounded=0;strokeWidth=2;strokeColor=#9DB0B9;dashed=1;fontColor=#9DB0B9;fontSize=12;fontFamily=Roboto;" edge="1" parent="1" source="pb-beat" target="pb-r0">
-          <mxGeometry relative="1" as="geometry"/>
-        </mxCell>
-        <mxCell id="pb-a7" value="ORM" style="endArrow=open;startArrow=open;html=1;rounded=0;strokeWidth=2.5;strokeColor=#D2B883;fontColor=#D2B883;fontSize=12;fontFamily=Roboto;" edge="1" parent="1" source="pb-django" target="pb-pg">
-          <mxGeometry relative="1" as="geometry"/>
-        </mxCell>
-        <mxCell id="pb-a8" value="ORM" style="endArrow=open;startArrow=open;html=1;rounded=0;strokeWidth=2.5;strokeColor=#D2B883;fontColor=#D2B883;fontSize=12;fontFamily=Roboto;" edge="1" parent="1" source="pb-workers" target="pb-pg">
-          <mxGeometry relative="1" as="geometry"/>
-        </mxCell>
-        <mxCell id="pb-a9" value="monitor" style="endArrow=open;html=1;rounded=0;strokeWidth=2;strokeColor=#9DB0B9;dashed=1;fontColor=#9DB0B9;fontSize=12;fontFamily=Roboto;" edge="1" parent="1" source="pb-flower" target="pb-workers">
-          <mxGeometry relative="1" as="geometry"/>
-        </mxCell>
+
+        <mxCell id="pb-a1" value="HTTP" style="endArrow=classicThin;startArrow=classicThin;html=1;rounded=0;strokeWidth=1.3;strokeColor=#1A1A1A;fontColor=#555555;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="pb-client" target="pb-app"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="pb-a2" value="enqueue" style="endArrow=classicThin;html=1;rounded=0;strokeWidth=1.3;strokeColor=#1A1A1A;fontColor=#555555;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="pb-app3" target="pb-br1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="pb-a3" value="dispatch" style="endArrow=classicThin;html=1;rounded=0;strokeWidth=1.3;strokeColor=#1A1A1A;fontColor=#555555;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="pb-br1" target="pb-workers"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="pb-a4" value="read / write" style="endArrow=classicThin;startArrow=classicThin;html=1;rounded=0;strokeWidth=1.3;strokeColor=#1A1A1A;fontColor=#555555;fontSize=11;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="pb-app" target="pb-db"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="pb-a5" value="read / write" style="endArrow=classicThin;startArrow=classicThin;html=1;rounded=0;strokeWidth=1.3;strokeColor=#1A1A1A;fontColor=#555555;fontSize=11;exitX=0;exitY=1;entryX=1;entryY=0;" edge="1" parent="1" source="pb-workers" target="pb-db"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="pb-a6" value="cache" style="endArrow=classicThin;startArrow=classicThin;html=1;rounded=0;strokeWidth=1.3;strokeColor=#1A1A1A;fontColor=#555555;fontSize=11;dashed=1;exitX=1;exitY=0.75;entryX=0;entryY=0.6;" edge="1" parent="1" source="pb-app" target="pb-br2"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="pb-a7" value="schedule" style="endArrow=classicThin;html=1;rounded=0;strokeWidth=1.3;strokeColor=#1A1A1A;fontColor=#555555;fontSize=11;dashed=1;" edge="1" parent="1" source="pb-scheduler" target="pb-br1"><mxGeometry relative="1" as="geometry"/></mxCell>
       </root>
     </mxGraphModel>
   </diagram>
